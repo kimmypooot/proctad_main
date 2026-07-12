@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'examination_id', 'examination_school_id', 'exam_room_id', 'member_id', 'role', 'field_office_id',
@@ -89,6 +90,17 @@ class ExamAssignment extends Model
     public function attendances(): HasMany
     {
         return $this->hasMany(ExamAssignmentAttendance::class);
+    }
+
+    /**
+     * This assignment's own submitted Post-Examination Evaluation, if any.
+     * No uniqueness is enforced on Evaluation.exam_assignment_id, so
+     * latestOfMany() picks the most recent submission deterministically
+     * rather than an arbitrary row.
+     */
+    public function evaluation(): HasOne
+    {
+        return $this->hasOne(Evaluation::class, 'exam_assignment_id')->latestOfMany();
     }
 
     public function isCoverageRole(): bool

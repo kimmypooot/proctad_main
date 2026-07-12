@@ -9,9 +9,9 @@ use App\Models\ExamAssignmentAttendance;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
 use App\Models\Member;
-use App\Models\NepAssignment;
-use App\Models\NepAttendance;
-use App\Models\NonExamPersonnel;
+use App\Models\OepAssignment;
+use App\Models\OepAttendance;
+use App\Models\OtherExaminationPersonnel;
 use App\Models\Training;
 use App\Models\TrainingAssignment;
 use App\Models\User;
@@ -36,32 +36,36 @@ class ScannerController extends Controller
         $venueId = $request->integer('examination_school_id') ?: null;
 
         $result = null;
-        $nepResult = null;
+        $oepResult = null;
         $notFound = false;
         $attendance = null;
         $venues = [];
 
-        if ($raw['type'] === 'nep') {
-            $nep = NonExamPersonnel::with('fieldOffice:id,name,code')
-                ->where('nep_id', $raw['code'])
+        if ($raw['type'] === 'oep') {
+            $oep = OtherExaminationPersonnel::with('fieldOffice:id,name,code')
+                ->where('oep_id', $raw['code'])
                 ->when($user->role === UserRole::FoAdmin,
                     fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->first();
 
-            $nepResult = $nep ? [
-                'id' => $nep->id,
-                'nep_id' => $nep->nep_id,
-                'name' => $nep->name,
-                'personnel_type_label' => $nep->personnel_type->label(),
-                'field_office' => $nep->fieldOffice?->name,
-                'is_active' => $nep->is_active,
+            $oepResult = $oep ? [
+                'id' => $oep->id,
+                'oep_id' => $oep->oep_id,
+                'name' => $oep->name,
+                'personnel_type_label' => $oep->personnel_type->label(),
+                'field_office' => $oep->fieldOffice?->name,
+                'is_active' => $oep->is_active,
             ] : null;
-            $notFound = $nep === null;
+            $notFound = $oep === null;
 
-            if ($nep && $venueId) {
-                $attendance = $this->confirmNepAttendance($nep, $venueId, $user);
-            } elseif ($nep && $examinationId) {
+            if ($oep && $venueId) {
+                $attendance = $this->confirmOepAttendance($oep, $venueId, $user);
+            } elseif ($oep && $examinationId) {
                 $attendance = ['outcome' => 'venue_required'];
+            }
+
+            if ($oepResult && $attendance) {
+                $oepResult['venue'] = $attendance['venue'] ?? null;
             }
         } elseif ($raw['code'] !== '') {
             $member = Member::with('fieldOffice:id,name,code')
@@ -88,6 +92,14 @@ class ScannerController extends Controller
             } elseif ($member && $trainingId) {
                 $attendance = $this->confirmTrainingAttendance($member, $trainingId, $user);
             }
+
+            // Surface the assignment's venue/room/designation on the identity
+            // card too, not just inside the transient attendance-outcome banner.
+            if ($result && $attendance) {
+                $result['venue'] = $attendance['venue'] ?? null;
+                $result['room'] = $attendance['room'] ?? null;
+                $result['designation'] = $attendance['designation'] ?? null;
+            }
         }
 
         if ($examinationId) {
@@ -103,7 +115,7 @@ class ScannerController extends Controller
             'trainingId' => $trainingId,
             'examinationSchoolId' => $venueId,
             'result' => $result,
-            'nepResult' => $nepResult,
+            'oepResult' => $oepResult,
             'notFound' => $notFound,
             'attendance' => $attendance,
             'venues' => $venues,
@@ -114,9 +126,9 @@ class ScannerController extends Controller
 
     /**
      * Bulk manual attendance fallback — mirrors legacy's searchable multi-select
-     * modal for members (and, at a selected venue, non-exam personnel) whose QR
-     * won't scan. Silently skips anyone already marked present rather than
-     * failing the whole batch.
+     * modal for members (and, at a selected venue, other examination
+     * personnel) whose QR won't scan. Silently skips anyone already marked
+     * present rather than failing the whole batch.
      */
     public function bulkMarkAttendance(Request $request): RedirectResponse
     {
@@ -128,17 +140,17 @@ class ScannerController extends Controller
             'examination_id' => ['required_if:type,exam', 'nullable', 'integer', 'exists:examinations,id'],
             'member_ids' => ['nullable', 'array'],
             'member_ids.*' => ['integer'],
-            'nep_assignment_ids' => ['nullable', 'array'],
-            'nep_assignment_ids.*' => ['integer', 'exists:nep_assignments,id'],
+            'oep_assignment_ids' => ['nullable', 'array'],
+            'oep_assignment_ids.*' => ['integer', 'exists:oep_assignments,id'],
             'covered_attendance_ids' => ['nullable', 'array'],
             'covered_attendance_ids.*' => ['string', 'regex:/^\d+:\d+$/'],
         ]);
 
         $memberIds = $validated['member_ids'] ?? [];
-        $nepAssignmentIds = $validated['nep_assignment_ids'] ?? [];
+        $oepAssignmentIds = $validated['oep_assignment_ids'] ?? [];
         $coveredAttendanceIds = $validated['covered_attendance_ids'] ?? [];
 
-        abort_if(! $memberIds && ! $nepAssignmentIds && ! $coveredAttendanceIds, 422, 'Select at least one person to mark present.');
+        abort_if(! $memberIds && ! $oepAssignmentIds && ! $coveredAttendanceIds, 422, 'Select at least one person to mark present.');
 
         $markedCount = 0;
 
@@ -165,13 +177,13 @@ class ScannerController extends Controller
             $markedCount += $assignments->count();
         }
 
-        if ($nepAssignmentIds) {
-            $nepAssignments = NepAssignment::whereIn('id', $nepAssignmentIds)->with('personnel')->get();
+        if ($oepAssignmentIds) {
+            $oepAssignments = OepAssignment::whereIn('id', $oepAssignmentIds)->with('personnel')->get();
 
-            foreach ($nepAssignments as $assignment) {
+            foreach ($oepAssignments as $assignment) {
                 Gate::authorize('update', $assignment);
 
-                $exists = NepAttendance::where('non_exam_personnel_id', $assignment->non_exam_personnel_id)
+                $exists = OepAttendance::where('other_examination_personnel_id', $assignment->other_examination_personnel_id)
                     ->where('examination_school_id', $assignment->examination_school_id)
                     ->exists();
 
@@ -179,8 +191,8 @@ class ScannerController extends Controller
                     continue;
                 }
 
-                NepAttendance::create([
-                    'non_exam_personnel_id' => $assignment->non_exam_personnel_id,
+                OepAttendance::create([
+                    'other_examination_personnel_id' => $assignment->other_examination_personnel_id,
                     'examination_school_id' => $assignment->examination_school_id,
                     'status' => 'present',
                     'scan_method' => 'manual',
@@ -241,9 +253,10 @@ class ScannerController extends Controller
      * not-yet-present roster for the manual fallback) for the selected
      * training or examination context — mirrors legacy's stats strip and
      * "Recent Attendance" table on the training QR scanner page. In exam
-     * mode with a venue selected, non-exam personnel assigned to that venue
-     * are folded into the same summary/roster (their attendance is tracked
-     * per venue, not per whole examination — see NepAssignmentController).
+     * mode with a venue selected, other examination personnel assigned to
+     * that venue are folded into the same summary/roster (their attendance
+     * is tracked per venue, not per whole examination — see
+     * OepAssignmentController).
      */
     private function attendanceSummary(?int $examinationId, ?int $trainingId, ?int $venueId, User $user): ?array
     {
@@ -253,7 +266,11 @@ class ScannerController extends Controller
                 ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->get();
         } elseif ($examinationId) {
-            $assignments = ExamAssignment::with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
+            $assignments = ExamAssignment::with([
+                'member:id,proctad_id,first_name,middle_name,last_name,suffix',
+                'examinationSchool.school',
+                'room',
+            ])
                 ->where('examination_id', $examinationId)
                 ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->get();
@@ -267,12 +284,19 @@ class ScannerController extends Controller
             'id' => "member:{$a->id}",
             'name' => $a->member?->name,
             'code' => $a->member?->proctad_id,
+            'venue' => $examinationId ? $a->examinationSchool?->school?->name : null,
+            'room' => $examinationId ? $a->room?->room_number : null,
+            'designation' => $examinationId ? $a->room?->designation : null,
             'confirmed_at_raw' => $a->attendance_confirmed_at,
         ]);
         $roster = $absent->values()
             ->map(fn ($a) => [
                 'value' => "member:{$a->member_id}",
                 'label' => "{$a->member?->name} ({$a->member?->proctad_id})",
+                'code' => $a->member?->proctad_id,
+                'venue' => $examinationId ? $a->examinationSchool?->school?->name : null,
+                'room' => $examinationId ? $a->room?->room_number : null,
+                'designation' => $examinationId ? $a->room?->designation : null,
             ]);
 
         $total = $assignments->count();
@@ -280,32 +304,39 @@ class ScannerController extends Controller
         $absentCount = $absent->count();
 
         if ($examinationId && $venueId) {
-            $nepAssignments = NepAssignment::where('examination_school_id', $venueId)
-                ->with('personnel:id,nep_id,first_name,middle_name,last_name,suffix')
-                ->get();
-            $nepAttendance = NepAttendance::where('examination_school_id', $venueId)
-                ->get()
-                ->keyBy('non_exam_personnel_id');
+            $venueName = ExaminationSchool::with('school')->find($venueId)?->school?->name;
 
-            [$nepPresent, $nepAbsent] = $nepAssignments->partition(
-                fn (NepAssignment $a) => $nepAttendance->has($a->non_exam_personnel_id),
+            $oepAssignments = OepAssignment::where('examination_school_id', $venueId)
+                ->with('personnel:id,oep_id,first_name,middle_name,last_name,suffix')
+                ->get();
+            $oepAttendance = OepAttendance::where('examination_school_id', $venueId)
+                ->get()
+                ->keyBy('other_examination_personnel_id');
+
+            [$oepPresent, $oepAbsent] = $oepAssignments->partition(
+                fn (OepAssignment $a) => $oepAttendance->has($a->other_examination_personnel_id),
             );
 
-            $total += $nepAssignments->count();
-            $presentCount += $nepPresent->count();
-            $absentCount += $nepAbsent->count();
+            $total += $oepAssignments->count();
+            $presentCount += $oepPresent->count();
+            $absentCount += $oepAbsent->count();
 
-            $recent = $recent->concat($nepPresent->map(fn (NepAssignment $a) => [
-                'id' => "nep:{$a->id}",
+            $recent = $recent->concat($oepPresent->map(fn (OepAssignment $a) => [
+                'id' => "oep:{$a->id}",
                 'name' => $a->personnel?->name,
-                'code' => $a->personnel?->nep_id,
-                'confirmed_at_raw' => $nepAttendance->get($a->non_exam_personnel_id)->scanned_at,
+                'code' => $a->personnel?->oep_id,
+                'venue' => $venueName,
+                'room' => null,
+                'confirmed_at_raw' => $oepAttendance->get($a->other_examination_personnel_id)->scanned_at,
             ]));
 
             $roster = $roster
-                ->concat($nepAbsent->values()->map(fn (NepAssignment $a) => [
-                    'value' => "nep:{$a->id}",
-                    'label' => "{$a->personnel?->name} ({$a->personnel?->nep_id}) · Non-Exam Personnel",
+                ->concat($oepAbsent->values()->map(fn (OepAssignment $a) => [
+                    'value' => "oep:{$a->id}",
+                    'label' => "{$a->personnel?->name} ({$a->personnel?->oep_id}) · Other Examination Personnel",
+                    'code' => $a->personnel?->oep_id,
+                    'venue' => $venueName,
+                    'room' => null,
                 ]));
 
             // REC/LEC/CE-for-Investigation assignments that list this venue as a
@@ -334,6 +365,8 @@ class ScannerController extends Controller
                 'id' => "covered:{$a->id}:{$venueId}",
                 'name' => $a->member?->name,
                 'code' => $a->member?->proctad_id,
+                'venue' => $venueName,
+                'room' => null,
                 'confirmed_at_raw' => $coverageAttendance->get($a->id)->scanned_at,
             ]));
 
@@ -341,6 +374,9 @@ class ScannerController extends Controller
                 ->concat($coverageAbsent->values()->map(fn (ExamAssignment $a) => [
                     'value' => "covered:{$a->id}:{$venueId}",
                     'label' => "{$a->member?->name} ({$a->member?->proctad_id}) · Covered School ({$a->role->label()})",
+                    'code' => $a->member?->proctad_id,
+                    'venue' => $venueName,
+                    'room' => null,
                 ]));
         }
 
@@ -375,6 +411,7 @@ class ScannerController extends Controller
     {
         $assignment = ExamAssignment::where('examination_id', $examinationId)
             ->where('member_id', $member->id)
+            ->with(['examinationSchool.school', 'room'])
             ->first();
 
         if (! $assignment) {
@@ -386,7 +423,12 @@ class ScannerController extends Controller
         }
 
         if ($assignment->isCoverageRole() && ! $venueId && ! $assignment->attendance_confirmed_at) {
-            return ['outcome' => 'venue_required'];
+            return [
+                'outcome' => 'venue_required',
+                'venue' => $assignment->examinationSchool?->school?->name,
+                'room' => $assignment->room?->room_number,
+                'designation' => $assignment->room?->designation,
+            ];
         }
 
         if ($assignment->attendance_confirmed_at) {
@@ -394,6 +436,9 @@ class ScannerController extends Controller
                 'outcome' => 'already_confirmed',
                 'confirmed_at' => $assignment->attendance_confirmed_at->format('M d, Y H:i'),
                 'role_label' => $assignment->role->label(),
+                'venue' => $assignment->examinationSchool?->school?->name,
+                'room' => $assignment->room?->room_number,
+                'designation' => $assignment->room?->designation,
             ];
         }
 
@@ -409,6 +454,9 @@ class ScannerController extends Controller
             'outcome' => 'confirmed',
             'confirmed_at' => $assignment->attendance_confirmed_at->format('M d, Y H:i'),
             'role_label' => $assignment->role->label(),
+            'venue' => $assignment->examinationSchool?->school?->name,
+            'room' => $assignment->room?->room_number,
+            'designation' => $assignment->room?->designation,
             'certificate' => $certificate->wasRecentlyCreated
                 ? $certificate->type->label().' queued for Management approval'
                 : null,
@@ -428,6 +476,8 @@ class ScannerController extends Controller
             return ['outcome' => 'not_assigned'];
         }
 
+        $coveredVenueName = ExaminationSchool::with('school')->find($venueId)?->school?->name;
+
         $existing = ExamAssignmentAttendance::where('exam_assignment_id', $assignment->id)
             ->where('examination_school_id', $venueId)
             ->first();
@@ -437,6 +487,7 @@ class ScannerController extends Controller
                 'outcome' => 'already_confirmed',
                 'confirmed_at' => $existing->scanned_at->format('M d, Y H:i'),
                 'role_label' => $assignment->role->label(),
+                'venue' => $coveredVenueName,
             ];
         }
 
@@ -453,6 +504,7 @@ class ScannerController extends Controller
             'outcome' => 'confirmed',
             'confirmed_at' => $attendance->scanned_at->format('M d, Y H:i'),
             'role_label' => $assignment->role->label().' — covered school',
+            'venue' => $coveredVenueName,
         ];
     }
 
@@ -495,32 +547,38 @@ class ScannerController extends Controller
     }
 
     /**
-     * Non-exam personnel attendance at a specific venue (NEP attendance is
-     * tracked per examination_school, not per examination — see NepAssignmentController).
+     * Other examination personnel attendance at a specific venue (OEP
+     * attendance is tracked per examination_school, not per examination —
+     * see OepAssignmentController).
      */
-    private function confirmNepAttendance(NonExamPersonnel $nep, int $venueId, User $user): array
+    private function confirmOepAttendance(OtherExaminationPersonnel $oep, int $venueId, User $user): array
     {
-        $assignment = NepAssignment::where('examination_school_id', $venueId)
-            ->where('non_exam_personnel_id', $nep->id)
+        $assignment = OepAssignment::where('examination_school_id', $venueId)
+            ->where('other_examination_personnel_id', $oep->id)
             ->first();
 
         if (! $assignment) {
             return ['outcome' => 'not_assigned'];
         }
 
-        $existing = NepAttendance::where('examination_school_id', $venueId)
-            ->where('non_exam_personnel_id', $nep->id)
+        // OEP attendance is always venue-scoped (no room concept) — the venue
+        // is whichever one the operator has selected in the scanner.
+        $venueName = ExaminationSchool::with('school')->find($venueId)?->school?->name;
+
+        $existing = OepAttendance::where('examination_school_id', $venueId)
+            ->where('other_examination_personnel_id', $oep->id)
             ->first();
 
         if ($existing) {
             return [
                 'outcome' => 'already_confirmed',
                 'confirmed_at' => $existing->scanned_at->format('M d, Y H:i'),
+                'venue' => $venueName,
             ];
         }
 
-        $attendance = NepAttendance::create([
-            'non_exam_personnel_id' => $nep->id,
+        $attendance = OepAttendance::create([
+            'other_examination_personnel_id' => $oep->id,
             'examination_school_id' => $venueId,
             'status' => 'present',
             'scan_method' => 'qr',
@@ -531,6 +589,7 @@ class ScannerController extends Controller
         return [
             'outcome' => 'confirmed',
             'confirmed_at' => $attendance->scanned_at->format('M d, Y H:i'),
+            'venue' => $venueName,
         ];
     }
 
@@ -556,11 +615,11 @@ class ScannerController extends Controller
     }
 
     /**
-     * Accept the raw PROCTAD ID, the full verification URL, an "NEP:{id}" QR
+     * Accept the raw PROCTAD ID, the full verification URL, an "OEP:{id}" QR
      * payload, or the inconsistent legacy formats still on printed QR stock
      * (e.g. "7|attendance", "PROCTAD-2026-XXXXX|attendance").
      *
-     * @return array{type: 'member'|'nep', code: string}
+     * @return array{type: 'member'|'oep', code: string}
      */
     private function normalize(string $code): array
     {
@@ -570,8 +629,8 @@ class ScannerController extends Controller
             return ['type' => 'member', 'code' => strtoupper(trim(Str::afterLast($code, '/verify/'), " /\t\n\r"))];
         }
 
-        if (Str::startsWith(strtoupper($code), 'NEP:')) {
-            return ['type' => 'nep', 'code' => strtoupper(trim(Str::after($code, ':')))];
+        if (Str::startsWith(strtoupper($code), 'OEP:')) {
+            return ['type' => 'oep', 'code' => strtoupper(trim(Str::after($code, ':')))];
         }
 
         // Legacy scanners appended "|attendance" (and similar suffixes) to the
@@ -579,8 +638,8 @@ class ScannerController extends Controller
         $code = Str::before($code, '|');
         $code = strtoupper(trim($code, " /\t\n\r"));
 
-        return Str::startsWith($code, 'NEP-')
-            ? ['type' => 'nep', 'code' => $code]
+        return Str::startsWith($code, 'OEP-')
+            ? ['type' => 'oep', 'code' => $code]
             : ['type' => 'member', 'code' => $code];
     }
 }

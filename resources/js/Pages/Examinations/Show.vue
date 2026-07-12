@@ -20,7 +20,7 @@ const props = defineProps({
     assignableMembers: { type: Array, required: true },
     venues: { type: Array, required: true },
     availableSchools: { type: Array, required: true },
-    availableNep: { type: Array, required: true },
+    availableOep: { type: Array, required: true },
     roles: { type: Array, required: true },
     ratings: { type: Array, required: true },
     can: { type: Object, required: true },
@@ -137,7 +137,7 @@ const jumpTo = (key) => (currentStep.value = key);
             :examination="examination"
             :venues="venues"
             :available-schools="availableSchools"
-            :available-nep="availableNep"
+            :available-oep="availableOep"
             :can="can"
             @advance="currentStep = 'assign'"
             @assign-venue="assignVenue"

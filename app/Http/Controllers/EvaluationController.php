@@ -1,0 +1,210 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Enums\ExamRole;
+use App\Models\Evaluation;
+use App\Models\ExamAssignment;
+use App\Models\Examination;
+use App\Services\SupervisionHierarchyResolver;
+use App\Support\EvaluationCriteria;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class EvaluationController extends Controller
+{
+    /** Designations this evaluation form covers. */
+    private const DESIGNATIONS = [
+        ExamRole::ChiefExaminer,
+        ExamRole::SupervisingExaminer,
+        ExamRole::Proctor,
+        ExamRole::RoomExaminer,
+    ];
+
+    /**
+     * Public page — no login required. The respondent picks the examination,
+     * then searches for and selects their own assignment record; everything
+     * else (designation, room, hierarchy) is derived server-side from there.
+     */
+    public function create(): Response
+    {
+        return Inertia::render('Evaluations/Create', [
+            'examinations' => Examination::query()
+                ->orderByDesc('exam_date')
+                ->limit(50)
+                ->get(['id', 'title', 'exam_date'])
+                ->map(fn (Examination $exam) => [
+                    'id' => $exam->id,
+                    'title' => $exam->title,
+                    'exam_date' => $exam->exam_date->format('F j, Y'),
+                ]),
+            'criteria' => EvaluationCriteria::toArray(),
+        ]);
+    }
+
+    /**
+     * Typeahead: assignments for the given examination matching a name or
+     * PROCTAD ID, restricted to those whose attendance was confirmed that
+     * exam day — an unconfirmed or reassigned person can't self-select.
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'examination_id' => ['required', 'integer', 'exists:examinations,id'],
+            'q' => ['required', 'string', 'min:1', 'max:100'],
+        ]);
+
+        $term = $validated['q'];
+
+        $assignments = ExamAssignment::query()
+            ->where('examination_id', $validated['examination_id'])
+            ->whereIn('role', array_column(self::DESIGNATIONS, 'value'))
+            ->whereNotNull('attendance_confirmed_at')
+            ->whereHas('member', function ($query) use ($term) {
+                $query->where('first_name', 'like', "%{$term}%")
+                    ->orWhere('last_name', 'like', "%{$term}%")
+                    ->orWhere('proctad_id', 'like', "%{$term}%");
+            })
+            ->with(['member', 'room', 'examinationSchool.school'])
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'results' => $assignments->map(fn (ExamAssignment $a) => [
+                'id' => $a->id,
+                'name' => $a->member->name,
+                'proctad_id' => $a->member->proctad_id,
+                'role_label' => $this->designationLabel($a->role),
+                'room_no' => $a->room?->room_number,
+                'school_name' => $a->examinationSchool?->school?->name,
+            ]),
+        ]);
+    }
+
+    /**
+     * Resolve the full evaluation context for a selected assignment:
+     * designation, testing center, school, room, and — for a Supervising
+     * Examiner — the Room Examiners/Proctors positionally inferred as theirs
+     * (see SupervisionHierarchyResolver for the caveats on that inference).
+     */
+    public function resolve(ExamAssignment $assignment, SupervisionHierarchyResolver $resolver): JsonResponse
+    {
+        abort_unless(
+            in_array($assignment->role, self::DESIGNATIONS, true) && $assignment->attendance_confirmed_at !== null,
+            404,
+        );
+
+        $assignment->loadMissing('member', 'room', 'examinationSchool.school', 'fieldOffice');
+
+        $subordinates = $assignment->role === ExamRole::SupervisingExaminer
+            ? $resolver->subordinatesFor($assignment)
+            : collect();
+
+        return response()->json([
+            'exam_assignment_id' => $assignment->id,
+            'respondent_name' => $assignment->member->name,
+            'designation' => [
+                'value' => $assignment->role->value,
+                'label' => $this->designationLabel($assignment->role),
+            ],
+            'field_office' => $assignment->fieldOffice ? ['id' => $assignment->fieldOffice->id, 'name' => $assignment->fieldOffice->name] : null,
+            'school' => $assignment->examinationSchool?->school
+                ? ['id' => $assignment->examinationSchool->school->id, 'name' => $assignment->examinationSchool->school->name]
+                : null,
+            'room_no' => $assignment->room?->room_number,
+            'subordinates' => $subordinates->values()->map(fn (ExamAssignment $s) => [
+                'exam_assignment_id' => $s->id,
+                'room_no' => $s->room?->room_number,
+                'ratee_name' => $s->member->name,
+            ]),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'examination_id' => ['required', 'integer', 'exists:examinations,id'],
+            'exam_assignment_id' => ['required', 'integer', 'exists:exam_assignments,id'],
+        ]);
+
+        /** @var ExamAssignment $assignment */
+        $assignment = ExamAssignment::with('member', 'examinationSchool')
+            ->findOrFail($validated['exam_assignment_id']);
+
+        abort_unless(in_array($assignment->role, self::DESIGNATIONS, true), 422, 'This assignment is not eligible for evaluation.');
+
+        $designation = $assignment->role->value;
+
+        $rules = [];
+
+        if ($designation === ExamRole::SupervisingExaminer->value) {
+            $rules += [
+                'room_ratings' => ['required', 'array', 'min:1'],
+                'room_ratings.*.exam_assignment_id' => ['nullable', 'integer', 'exists:exam_assignments,id'],
+                'room_ratings.*.room_no' => ['required', 'string', 'max:50'],
+                'room_ratings.*.ratee_name' => ['required', 'string', 'max:255'],
+                'room_ratings.*.punctuality' => ['required', 'array', 'size:'.count(EvaluationCriteria::PUNCTUALITY)],
+                'room_ratings.*.punctuality.*' => ['required', 'integer', 'between:1,5'],
+                'room_ratings.*.decorum' => ['required', 'array', 'size:'.count(EvaluationCriteria::DECORUM)],
+                'room_ratings.*.decorum.*' => ['required', 'integer', 'between:1,5'],
+                'room_ratings.*.procedures' => ['required', 'array', 'size:'.count(EvaluationCriteria::PROCEDURES)],
+                'room_ratings.*.procedures.*' => ['required', 'integer', 'between:1,5'],
+                'room_ratings.*.comment' => ['nullable', 'string', 'max:2000'],
+                'room_readiness' => ['required', 'array', 'size:'.count(EvaluationCriteria::ROOM_READINESS)],
+                'room_readiness.*' => ['boolean'],
+            ] + $this->examinationAdministrationRules();
+        } elseif (in_array($designation, [ExamRole::Proctor->value, ExamRole::RoomExaminer->value], true)) {
+            $rules += [
+                'room_readiness' => ['required', 'array', 'size:'.count(EvaluationCriteria::ROOM_READINESS)],
+                'room_readiness.*' => ['boolean'],
+                'exam_preparation' => ['required', 'array', 'size:'.count(EvaluationCriteria::EXAM_PREPARATION)],
+                'exam_preparation.*' => ['required', 'integer', 'between:1,5'],
+            ];
+        } elseif ($designation === ExamRole::ChiefExaminer->value) {
+            $rules += $this->examinationAdministrationRules();
+        }
+
+        $validated = array_merge($validated, $request->validate($rules));
+
+        Evaluation::create($validated + [
+            'respondent_name' => $assignment->member->name,
+            'designation' => $designation,
+            'field_office_id' => $assignment->field_office_id,
+            'school_id' => $assignment->examinationSchool?->school_id,
+        ]);
+
+        return back()->with('success', 'Thank you — your evaluation has been submitted.');
+    }
+
+    private function designationLabel(ExamRole $role): string
+    {
+        return $role === ExamRole::Proctor ? 'Room Proctor' : $role->label();
+    }
+
+    private function examinationAdministrationRules(): array
+    {
+        return [
+            'venue_readiness' => ['required', 'array', 'size:'.count(EvaluationCriteria::VENUE_READINESS)],
+            'venue_readiness.*' => ['required', 'integer', 'between:1,5'],
+            'venue_comment' => ['nullable', 'string', 'max:2000'],
+            'committee_coordination' => ['required', 'array', 'size:'.count(EvaluationCriteria::COMMITTEE_COORDINATION)],
+            'committee_coordination.*' => ['required', 'integer', 'between:1,5'],
+            'committee_comment' => ['nullable', 'string', 'max:2000'],
+            'conduct_of_exam' => ['required', 'array', 'size:'.count(EvaluationCriteria::CONDUCT_OF_EXAM)],
+            'conduct_of_exam.*' => ['required', 'integer', 'between:1,5'],
+            'conduct_comment' => ['nullable', 'string', 'max:2000'],
+            'examinee_experience' => ['required', 'array', 'size:'.count(EvaluationCriteria::EXAMINEE_EXPERIENCE)],
+            'examinee_experience.*' => ['required', 'integer', 'between:1,5'],
+            'examinee_comment' => ['nullable', 'string', 'max:2000'],
+            'overall_rating' => ['required', 'integer', 'between:1,5'],
+            'what_worked' => ['nullable', 'string', 'max:2000'],
+            'challenges' => ['nullable', 'string', 'max:2000'],
+            'improvements' => ['nullable', 'string', 'max:2000'],
+            'suggestions' => ['nullable', 'string', 'max:2000'],
+        ];
+    }
+}

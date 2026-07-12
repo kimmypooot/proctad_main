@@ -23,15 +23,19 @@ class ExamAssignmentOverrideTest extends TestCase
     public function test_force_reassign_changes_role_and_venue_preserving_status(): void
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $office = FieldOffice::factory()->create();
         $exam = Examination::factory()->create(['exam_date' => now()->addWeek()]);
+        $member = \App\Models\Member::factory()->create(['field_office_id' => $office->id]);
         $assignment = ExamAssignment::factory()->create([
             'examination_id' => $exam->id,
+            'member_id' => $member->id,
             'role' => ExamRole::Proctor,
             'status' => AssignmentStatus::Confirmed,
         ]);
         $room = ExamRoom::factory()->create();
         $assignment->update(['exam_room_id' => $room->id]);
-        $newVenue = ExaminationSchool::factory()->create(['examination_id' => $exam->id]);
+        $newSchool = \App\Models\School::factory()->create(['field_office_id' => $office->id]);
+        $newVenue = ExaminationSchool::factory()->create(['examination_id' => $exam->id, 'school_id' => $newSchool->id]);
 
         $this->actingAs($admin)->post("/assignments/{$assignment->id}/force-reassign", [
             'role' => 'room_examiner',

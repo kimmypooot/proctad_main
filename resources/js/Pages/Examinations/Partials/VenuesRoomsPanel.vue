@@ -14,7 +14,7 @@ const props = defineProps({
     examination: { type: Object, required: true },
     venues: { type: Array, required: true },
     availableSchools: { type: Array, required: true },
-    availableNep: { type: Array, required: true },
+    availableOep: { type: Array, required: true },
     can: { type: Object, required: true },
 });
 
@@ -62,41 +62,41 @@ const confirmRemoveVenue = () => removeVenueForm.delete(`/venues/${removingVenue
     onSuccess: () => (removingVenue.value = null),
 });
 
-/* --- NEP assignments (kept below each card, as before) --- */
-const nepFormFor = ref(null);
-const nepForm = useForm({ non_exam_personnel_id: '' });
-const openNepForm = (venue) => {
-    nepFormFor.value = venue;
-    nepForm.reset();
-    nepForm.clearErrors();
+/* --- OEP assignments (kept below each card, as before) --- */
+const oepFormFor = ref(null);
+const oepForm = useForm({ other_examination_personnel_id: '' });
+const openOepForm = (venue) => {
+    oepFormFor.value = venue;
+    oepForm.reset();
+    oepForm.clearErrors();
 };
-const addNep = () => nepForm.post(`/venues/${nepFormFor.value.id}/nep-assignments`, {
+const addOep = () => oepForm.post(`/venues/${oepFormFor.value.id}/oep-assignments`, {
     preserveScroll: true,
-    onSuccess: () => (nepFormFor.value = null),
+    onSuccess: () => (oepFormFor.value = null),
 });
 
-const removingNep = ref(null);
-const removeNepForm = useForm({});
-const confirmRemoveNep = () => removeNepForm.delete(`/nep-assignments/${removingNep.value.id}`, {
+const removingOep = ref(null);
+const removeOepForm = useForm({});
+const confirmRemoveOep = () => removeOepForm.delete(`/oep-assignments/${removingOep.value.id}`, {
     preserveScroll: true,
-    onSuccess: () => (removingNep.value = null),
+    onSuccess: () => (removingOep.value = null),
 });
 
 const attendanceForm = useForm({});
-const toggleNepAttendance = (nepAssignment) => attendanceForm
-    .transform(() => ({ present: !nepAssignment.present }))
-    .patch(`/nep-assignments/${nepAssignment.id}/attendance`, { preserveScroll: true });
+const toggleOepAttendance = (oepAssignment) => attendanceForm
+    .transform(() => ({ present: !oepAssignment.present }))
+    .patch(`/oep-assignments/${oepAssignment.id}/attendance`, { preserveScroll: true });
 
-const NEP_GROUP_ORDER = ['Testing Committee', 'Support Personnel'];
-const groupNepAssignments = (assignments) => {
+const OEP_GROUP_ORDER = ['Testing Committee', 'Support Personnel'];
+const groupOepAssignments = (assignments) => {
     const groups = {};
     for (const assignment of assignments) {
         const label = assignment.role_group_label ?? 'Other';
         (groups[label] ??= []).push(assignment);
     }
     const orderedLabels = [
-        ...NEP_GROUP_ORDER.filter((label) => groups[label]),
-        ...Object.keys(groups).filter((label) => !NEP_GROUP_ORDER.includes(label)),
+        ...OEP_GROUP_ORDER.filter((label) => groups[label]),
+        ...Object.keys(groups).filter((label) => !OEP_GROUP_ORDER.includes(label)),
     ];
     return orderedLabels.map((label) => ({ label, items: groups[label] }));
 };
@@ -164,22 +164,22 @@ const groupNepAssignments = (assignments) => {
                     <BaseBadge :variant="progressVariant(venue)" size="xs">{{ venue.staffing.assigned.supervising_examiner }} Supervisor(s)</BaseBadge>
                 </div>
 
-                <div v-if="venue.nep_assignments.length" class="mt-4 border-t border-slate-100 pt-3">
-                    <p class="text-[0.7rem] font-medium uppercase tracking-wide text-slate-400">Non-Exam Personnel</p>
-                    <div v-for="group in groupNepAssignments(venue.nep_assignments)" :key="group.label" class="mt-2">
+                <div v-if="venue.oep_assignments.length" class="mt-4 border-t border-slate-100 pt-3">
+                    <p class="text-[0.7rem] font-medium uppercase tracking-wide text-slate-400">Other Examination Personnel</p>
+                    <div v-for="group in groupOepAssignments(venue.oep_assignments)" :key="group.label" class="mt-2">
                         <p class="text-[0.65rem] font-semibold text-slate-500">{{ group.label }}</p>
                         <div class="mt-1 flex flex-wrap gap-1.5">
                             <span
-                                v-for="nepAssignment in group.items"
-                                :key="nepAssignment.id"
+                                v-for="oepAssignment in group.items"
+                                :key="oepAssignment.id"
                                 class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-                                :class="nepAssignment.present ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'"
+                                :class="oepAssignment.present ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'"
                             >
-                                <button type="button" class="inline-flex items-center gap-1" @click="toggleNepAttendance(nepAssignment)">
-                                    <AppIcon v-if="nepAssignment.present" name="check-circle" class="h-3 w-3" />
-                                    {{ nepAssignment.name }}
+                                <button type="button" class="inline-flex items-center gap-1" @click="toggleOepAttendance(oepAssignment)">
+                                    <AppIcon v-if="oepAssignment.present" name="check-circle" class="h-3 w-3" />
+                                    {{ oepAssignment.name }}
                                 </button>
-                                <button type="button" class="text-accent-500 hover:text-accent-700" @click="removingNep = nepAssignment">
+                                <button type="button" class="text-accent-500 hover:text-accent-700" @click="removingOep = oepAssignment">
                                     <AppIcon name="x-mark" class="h-3 w-3" />
                                 </button>
                             </span>
@@ -195,7 +195,7 @@ const groupNepAssignments = (assignments) => {
                     <BaseButton variant="primary" size="sm" @click="emit('assign-venue', venue.id)">
                         Assign PROCTAD
                     </BaseButton>
-                    <BaseButton v-if="can.manageNep" variant="link" @click="openNepForm(venue)">
+                    <BaseButton v-if="can.manageOep" variant="link" @click="openOepForm(venue)">
                         <AppIcon name="plus" class="h-3.5 w-3.5" /> Add Personnel
                     </BaseButton>
                 </div>
@@ -257,42 +257,42 @@ const groupNepAssignments = (assignments) => {
             </template>
         </BaseModal>
 
-        <!-- Add NEP modal -->
-        <BaseModal :show="!!nepFormFor" title="Add Non-Exam Personnel" @close="nepFormFor = null">
-            <form id="nep-form" class="space-y-4" novalidate @submit.prevent="addNep">
-                <p class="text-sm text-slate-600">School: <strong>{{ nepFormFor?.school_name }}</strong></p>
+        <!-- Add OEP modal -->
+        <BaseModal :show="!!oepFormFor" title="Add Other Examination Personnel" @close="oepFormFor = null">
+            <form id="oep-form" class="space-y-4" novalidate @submit.prevent="addOep">
+                <p class="text-sm text-slate-600">School: <strong>{{ oepFormFor?.school_name }}</strong></p>
                 <SelectInput
-                    v-model="nepForm.non_exam_personnel_id"
+                    v-model="oepForm.other_examination_personnel_id"
                     label="Person"
                     required
                     placeholder="Select a person"
-                    :options="availableNep"
-                    :error="nepForm.errors.non_exam_personnel_id"
+                    :options="availableOep"
+                    :error="oepForm.errors.other_examination_personnel_id"
                 />
             </form>
             <template #footer>
-                <BaseButton variant="outline" size="sm" @click="nepFormFor = null">Cancel</BaseButton>
+                <BaseButton variant="outline" size="sm" @click="oepFormFor = null">Cancel</BaseButton>
                 <BaseButton
                     type="submit"
-                    form="nep-form"
+                    form="oep-form"
                     variant="primary"
                     size="sm"
-                    :loading="nepForm.processing"
-                    :disabled="nepForm.processing"
+                    :loading="oepForm.processing"
+                    :disabled="oepForm.processing"
                 >
                     Add
                 </BaseButton>
             </template>
         </BaseModal>
 
-        <!-- Remove NEP confirm -->
-        <BaseModal :show="!!removingNep" title="Remove personnel" @close="removingNep = null">
+        <!-- Remove OEP confirm -->
+        <BaseModal :show="!!removingOep" title="Remove personnel" @close="removingOep = null">
             <p class="text-sm leading-relaxed text-slate-600">
-                Remove <strong>{{ removingNep?.name }}</strong> from this school?
+                Remove <strong>{{ removingOep?.name }}</strong> from this school?
             </p>
             <template #footer>
-                <BaseButton variant="outline" size="sm" @click="removingNep = null">Cancel</BaseButton>
-                <BaseButton variant="accent" size="sm" :loading="removeNepForm.processing" @click="confirmRemoveNep">
+                <BaseButton variant="outline" size="sm" @click="removingOep = null">Cancel</BaseButton>
+                <BaseButton variant="accent" size="sm" :loading="removeOepForm.processing" @click="confirmRemoveOep">
                     Remove
                 </BaseButton>
             </template>

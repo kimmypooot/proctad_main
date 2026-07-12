@@ -3,13 +3,13 @@
 namespace App\Services;
 
 use App\Models\Member;
-use App\Models\NonExamPersonnel;
+use App\Models\OtherExaminationPersonnel;
 use App\Support\BrandedQrCode;
 use Illuminate\Support\Facades\Storage;
 use setasign\Fpdi\Fpdi;
 
 /**
- * Printable PROCTAD/NEP ID cards on the official F-ID-Template.jpg /
+ * Printable PROCTAD/OEP ID cards on the official F-ID-Template.jpg /
  * B-ID-Template.jpg art — geometry, fonts, and print layout mirror legacy's
  * api/user/download-id.php (single) and api/superadmin/download-nep-id.php
  * (bulk, which fixed a back-page slot bug present in the older
@@ -40,14 +40,14 @@ class IdCardPdfService
         return $this->renderBulk(collect($members)->map(fn (Member $m) => $this->memberData($m)));
     }
 
-    public function renderNep(NonExamPersonnel $nep): string
+    public function renderOep(OtherExaminationPersonnel $oep): string
     {
-        return $this->renderSingle($this->nepData($nep));
+        return $this->renderSingle($this->oepData($oep));
     }
 
-    public function renderNepsBulk(iterable $neps): string
+    public function renderOepsBulk(iterable $oeps): string
     {
-        return $this->renderBulk(collect($neps)->map(fn (NonExamPersonnel $n) => $this->nepData($n)));
+        return $this->renderBulk(collect($oeps)->map(fn (OtherExaminationPersonnel $o) => $this->oepData($o)));
     }
 
     /**
@@ -73,7 +73,7 @@ class IdCardPdfService
     /**
      * 2x2 grid per page for fronts, then one aggregated back page whose
      * filled slots are mirrored left/right to align after a duplex flip —
-     * matches legacy's corrected (NEP) bulk logic.
+     * matches legacy's corrected (OEP) bulk logic.
      */
     private function renderBulk($cards): string
     {
@@ -236,22 +236,22 @@ class IdCardPdfService
         ];
     }
 
-    private function nepData(NonExamPersonnel $nep): array
+    private function oepData(OtherExaminationPersonnel $oep): array
     {
-        $nep->loadMissing('fieldOffice:id,name,code');
-        $name = $this->latin1(mb_strtoupper($nep->name));
+        $oep->loadMissing('fieldOffice:id,name,code');
+        $name = $this->latin1(mb_strtoupper($oep->name));
 
         return [
-            'role' => mb_strtoupper($nep->personnel_type->label()),
-            'id_label' => $nep->nep_id,
+            'role' => mb_strtoupper($oep->personnel_type->label()),
+            'id_label' => $oep->oep_id,
             'name' => $name,
-            'initials' => mb_strtoupper(mb_substr($nep->first_name, 0, 1).mb_substr($nep->last_name, 0, 1)),
-            'photo_path' => $nep->photo_path && Storage::disk('local')->exists($nep->photo_path)
-                ? Storage::disk('local')->path($nep->photo_path)
+            'initials' => mb_strtoupper(mb_substr($oep->first_name, 0, 1).mb_substr($oep->last_name, 0, 1)),
+            'photo_path' => $oep->photo_path && Storage::disk('local')->exists($oep->photo_path)
+                ? Storage::disk('local')->path($oep->photo_path)
                 : null,
-            'qr_value' => "NEP:{$nep->nep_id}",
-            // Non-Exam Personnel are not part of the PROCTAD corps — their QR
-            // shouldn't carry the ProCTAD program logo.
+            'qr_value' => "OEP:{$oep->oep_id}",
+            // Other Examination Personnel are not part of the PROCTAD corps —
+            // their QR shouldn't carry the ProCTAD program logo.
             'qr_logo' => false,
         ];
     }

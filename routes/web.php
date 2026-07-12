@@ -16,6 +16,8 @@ use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DuplicateMembersController;
 use App\Http\Controllers\EmailTemplateController;
+use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\EvaluationMonitoringController;
 use App\Http\Controllers\ExamAssignmentController;
 use App\Http\Controllers\ExaminationController;
 use App\Http\Controllers\ExaminationReportController;
@@ -26,9 +28,9 @@ use App\Http\Controllers\LetterheadController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberRequirementController;
 use App\Http\Controllers\MyProctadController;
-use App\Http\Controllers\NepAssignmentController;
-use App\Http\Controllers\NonExamPersonnelController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OepAssignmentController;
+use App\Http\Controllers\OtherExaminationPersonnelController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\SettingController;
@@ -69,6 +71,13 @@ Route::get('/assignments/{assignment}/confirm', [AssignmentConfirmationControlle
 Route::post('/assignments/{assignment}/confirm', [AssignmentConfirmationController::class, 'store'])
     ->middleware('signed')
     ->name('assignments.confirm.store');
+
+// Post-Examination Evaluation: public form, no login — respondent searches for
+// their own assignment; designation/room/hierarchy are derived server-side.
+Route::get('/evaluation', [EvaluationController::class, 'create'])->name('evaluations.create');
+Route::get('/evaluation/search', [EvaluationController::class, 'search'])->name('evaluations.search');
+Route::get('/evaluation/assignments/{assignment}', [EvaluationController::class, 'resolve'])->name('evaluations.resolve');
+Route::post('/evaluation', [EvaluationController::class, 'store'])->name('evaluations.store');
 
 /*
 |--------------------------------------------------------------------------
@@ -173,20 +182,23 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::get('/reports/export/training-attendance', [ReportController::class, 'exportTrainingAttendance'])
             ->name('reports.export.training-attendance');
 
+        Route::get('/evaluation-monitoring', [EvaluationMonitoringController::class, 'index'])->name('evaluation-monitoring.index');
+        Route::get('/evaluation-monitoring/{evaluation}', [EvaluationMonitoringController::class, 'show'])->name('evaluation-monitoring.show');
+
         Route::resource('signatories', SignatoryController::class)->only('index', 'store', 'update', 'destroy');
         Route::resource('schools', SchoolController::class)->only('index', 'store', 'update', 'destroy');
 
-        Route::resource('non-exam-personnel', NonExamPersonnelController::class);
-        Route::get('/non-exam-personnel/{nonExamPersonnel}/photo', [NonExamPersonnelController::class, 'photo'])
-            ->name('non-exam-personnel.photo');
-        Route::get('/non-exam-personnel/{nonExamPersonnel}/id-card/download', [NonExamPersonnelController::class, 'downloadIdCard'])
-            ->name('non-exam-personnel.id-card.download');
-        Route::post('/venues/{venue}/nep-assignments', [NepAssignmentController::class, 'store'])
-            ->name('venues.nep-assignments.store');
-        Route::delete('/nep-assignments/{assignment}', [NepAssignmentController::class, 'destroy'])
-            ->name('nep-assignments.destroy');
-        Route::patch('/nep-assignments/{assignment}/attendance', [NepAssignmentController::class, 'markAttendance'])
-            ->name('nep-assignments.attendance');
+        Route::resource('other-examination-personnel', OtherExaminationPersonnelController::class);
+        Route::get('/other-examination-personnel/{otherExaminationPersonnel}/photo', [OtherExaminationPersonnelController::class, 'photo'])
+            ->name('other-examination-personnel.photo');
+        Route::get('/other-examination-personnel/{otherExaminationPersonnel}/id-card/download', [OtherExaminationPersonnelController::class, 'downloadIdCard'])
+            ->name('other-examination-personnel.id-card.download');
+        Route::post('/venues/{venue}/oep-assignments', [OepAssignmentController::class, 'store'])
+            ->name('venues.oep-assignments.store');
+        Route::delete('/oep-assignments/{assignment}', [OepAssignmentController::class, 'destroy'])
+            ->name('oep-assignments.destroy');
+        Route::patch('/oep-assignments/{assignment}/attendance', [OepAssignmentController::class, 'markAttendance'])
+            ->name('oep-assignments.attendance');
 
         Route::resource('examinations', ExaminationController::class)
             ->only('index', 'store', 'show', 'update', 'destroy');

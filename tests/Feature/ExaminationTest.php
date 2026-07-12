@@ -123,4 +123,70 @@ class ExaminationTest extends TestCase
                 ->where('roles.0.group_label', 'Regional Examination Committee (REC)')
             );
     }
+
+    public function test_show_venue_staffing_includes_room_assignees_from_a_different_field_office(): void
+    {
+        $venueOffice = FieldOffice::create(['name' => 'Eastern Visayas', 'code' => 'EV']);
+        $assigneeOffice = FieldOffice::create(['name' => 'Northern Samar', 'code' => 'NS']);
+        $exam = Examination::factory()->create();
+        $school = School::factory()->create(['field_office_id' => $venueOffice->id]);
+        $venue = ExaminationSchool::factory()->create(['examination_id' => $exam->id, 'school_id' => $school->id]);
+        $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id, 'room_number' => 'Room-001']);
+
+        // Proctor belongs to a different field office than the venue they're
+        // staffing — a legitimate cross-office assignment. The venue-owning
+        // FO admin must still see them in the room breakdown/staffing, since
+        // venue access is already correctly gated by the venue's own office.
+        $proctor = Member::factory()->create(['field_office_id' => $assigneeOffice->id, 'first_name' => 'Tyler', 'middle_name' => null, 'suffix' => null, 'last_name' => 'Torphy']);
+        ExamAssignment::factory()->create([
+            'examination_id' => $exam->id,
+            'examination_school_id' => $venue->id,
+            'exam_room_id' => $room->id,
+            'member_id' => $proctor->id,
+            'field_office_id' => $assigneeOffice->id,
+            'role' => 'proctor',
+            'status' => 'pending',
+        ]);
+
+        $venueAdmin = $this->staff(UserRole::FoAdmin, $venueOffice);
+
+        $this->actingAs($venueAdmin)
+            ->get("/examinations/{$exam->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('venues.0.room_breakdown.0.proctor', 'TYLER TORPHY')
+                ->where('venues.0.staffing.assigned.proctor', 1));
+    }
+
+    public function test_show_venue_staffing_excludes_declined_and_unplaced_assignments(): void
+    {
+        $exam = Examination::factory()->create();
+        $school = School::factory()->create();
+        $venue = ExaminationSchool::factory()->create(['examination_id' => $exam->id, 'school_id' => $school->id]);
+        $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
+
+        // Placed + confirmed — counts.
+        ExamAssignment::factory()->create([
+            'examination_id' => $exam->id,
+            'examination_school_id' => $venue->id,
+            'exam_room_id' => $room->id,
+            'role' => 'proctor',
+            'status' => 'confirmed',
+        ]);
+        // Placed but declined — must not inflate the "assigned" count (matches Manage Rooms).
+        ExamAssignment::factory()->create([
+            'examination_id' => $exam->id,
+            'examination_school_id' => $venue->id,
+            'exam_room_id' => $room->id,
+            'role' => 'room_examiner',
+            'status' => 'declined',
+        ]);
+
+        $this->actingAs($this->staff(UserRole::EsdAdmin))
+            ->get("/examinations/{$exam->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('venues.0.staffing.assigned.proctor', 1)
+                ->where('venues.0.staffing.assigned.room_examiner', 0)
+                ->where('venues.0.staffing.assigned_total', 1)
+            );
+    }
 }

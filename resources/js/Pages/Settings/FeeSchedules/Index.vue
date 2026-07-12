@@ -56,7 +56,7 @@ const save = (row) => {
     <DashboardLayout>
         <DashboardPageHeader
             title="Fee Management"
-            subtitle="Configure honorarium rates per examination role and non-exam personnel type. These rates are the single source used to compute Payroll and Payroll Posting reports."
+            subtitle="Configure honorarium rates per examination role and other examination personnel type. These rates are the single source used to compute Payroll and Payroll Posting reports."
         />
 
         <div class="mt-6 space-y-8">

@@ -119,7 +119,7 @@ const navByRole = {
             section: 'Management',
             items: [
                 { label: 'PROCTAD Members', icon: 'users', href: '/members' },
-                { label: 'Non-Exam Personnel', icon: 'user-group', href: '/non-exam-personnel' },
+                { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
             ],
         },
         {
@@ -147,6 +147,7 @@ const navByRole = {
             section: 'Reports',
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
+                { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
             ],
         },
     ],
@@ -181,6 +182,7 @@ const navByRole = {
             section: 'Reports',
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
+                { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
             ],
         },
     ],
@@ -201,6 +203,7 @@ const navByRole = {
             section: 'Reports',
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
+                { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
             ],
         },
         {
@@ -221,7 +224,7 @@ const navByRole = {
             section: 'Registry',
             items: [
                 { label: 'PROCTAD Registry', icon: 'users', href: '/members' },
-                { label: 'Non-Exam Personnel', icon: 'user-group', href: '/non-exam-personnel' },
+                { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
             ],
         },
         {
@@ -261,6 +264,7 @@ const navByRole = {
             section: 'Reports',
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
+                { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
             ],
         },
     ],
@@ -283,7 +287,7 @@ navByRole.super_admin = [
         section: 'Registry',
         items: [
             { label: 'PROCTAD Registry', icon: 'users', href: '/members' },
-            { label: 'Non-Exam Personnel', icon: 'user-group', href: '/non-exam-personnel' },
+            { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
         ],
     },
     {
@@ -328,6 +332,7 @@ navByRole.super_admin = [
         section: 'Reports',
         items: [
             { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
+            { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
             { label: 'Duplicate Members', icon: 'user-group', href: '/reports/duplicate-members' },
         ],
     },
@@ -402,16 +407,14 @@ const logout = () => {
                     <AppLogo v-if="isDesktop && sidebarCollapsed" variant="light" compact />
                     <AppLogo v-else variant="light" />
                 </Link>
-                <Tooltip text="Close sidebar" class="lg:hidden">
-                    <button
-                        type="button"
-                        class="rounded-lg p-1 text-brand-200 hover:text-white"
-                        aria-label="Close sidebar"
-                        @click="closeMobileSidebar"
-                    >
-                        <AppIcon name="x-mark" class="h-5 w-5" />
-                    </button>
-                </Tooltip>
+                <button
+                    type="button"
+                    class="rounded-lg p-1 text-brand-200 hover:text-white lg:hidden"
+                    aria-label="Close sidebar"
+                    @click="closeMobileSidebar"
+                >
+                    <AppIcon name="x-mark" class="h-5 w-5" />
+                </button>
             </div>
 
             <nav
@@ -485,7 +488,7 @@ const logout = () => {
         >
             <!-- Topbar -->
             <header class="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
-                <Tooltip :text="isDesktop ? (sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar') : (sidebarOpen ? 'Close menu' : 'Open menu')">
+                <Tooltip v-if="isDesktop" :text="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
                     <button
                         type="button"
                         class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
@@ -495,6 +498,15 @@ const logout = () => {
                         <AppIcon name="menu" class="h-5 w-5 transition-transform duration-200" :class="(sidebarOpen || sidebarCollapsed) && 'rotate-90'" />
                     </button>
                 </Tooltip>
+                <button
+                    v-else
+                    type="button"
+                    class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                    :aria-label="sidebarOpen ? 'Close menu' : 'Open menu'"
+                    @click="toggleSidebar"
+                >
+                    <AppIcon name="menu" class="h-5 w-5 transition-transform duration-200" :class="(sidebarOpen || sidebarCollapsed) && 'rotate-90'" />
+                </button>
 
                 <div class="flex items-center gap-4">
                     <div class="relative">

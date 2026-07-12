@@ -9,6 +9,8 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps({
     text: { type: String, required: true },
     position: { type: String, default: 'bottom', validator: (v) => ['top', 'bottom'].includes(v) },
+    /** Set for longer explanatory text — wraps within a max-width instead of forcing one line. */
+    wrap: { type: Boolean, default: false },
 });
 
 // Positioned via Teleport + fixed coordinates (rather than an absolutely
@@ -52,8 +54,8 @@ const hide = () => {
         <span
             v-if="visible"
             role="tooltip"
-            class="pointer-events-none fixed z-50 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white shadow-lg"
-            :class="position === 'top' && '-translate-y-full'"
+            class="pointer-events-none fixed z-50 -translate-x-1/2 rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white shadow-lg"
+            :class="[position === 'top' && '-translate-y-full', wrap ? 'max-w-64 whitespace-normal text-left leading-relaxed' : 'whitespace-nowrap']"
             :style="{ top: `${coords.top}px`, left: `${coords.left}px` }"
         >
             {{ text }}

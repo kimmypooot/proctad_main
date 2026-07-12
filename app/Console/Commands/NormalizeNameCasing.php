@@ -3,11 +3,11 @@
 namespace App\Console\Commands;
 
 use App\Models\Member;
-use App\Models\NonExamPersonnel;
+use App\Models\OtherExaminationPersonnel;
 use Illuminate\Console\Command;
 
 /**
- * One-off backfill: Member/NonExamPersonnel now uppercase first/middle/last
+ * One-off backfill: Member/OtherExaminationPersonnel now uppercase first/middle/last
  * name and suffix automatically on write (see their name-attribute mutators),
  * but that only affects new writes going forward — this normalizes existing
  * records still stored in mixed case.
@@ -16,7 +16,7 @@ class NormalizeNameCasing extends Command
 {
     protected $signature = 'proctad:normalize-name-casing';
 
-    protected $description = 'Uppercase existing member and NEP name fields to match the automatic-uppercase mutators';
+    protected $description = 'Uppercase existing member and OEP name fields to match the automatic-uppercase mutators';
 
     public function handle(): int
     {
@@ -34,21 +34,21 @@ class NormalizeNameCasing extends Command
             }
         });
 
-        $nepCount = 0;
-        NonExamPersonnel::withTrashed()->chunkById(200, function ($people) use (&$nepCount) {
-            foreach ($people as $nep) {
-                $nep->first_name = $nep->first_name;
-                $nep->middle_name = $nep->middle_name;
-                $nep->last_name = $nep->last_name;
-                $nep->suffix = $nep->suffix;
-                if ($nep->isDirty()) {
-                    $nep->save();
-                    $nepCount++;
+        $oepCount = 0;
+        OtherExaminationPersonnel::withTrashed()->chunkById(200, function ($people) use (&$oepCount) {
+            foreach ($people as $oep) {
+                $oep->first_name = $oep->first_name;
+                $oep->middle_name = $oep->middle_name;
+                $oep->last_name = $oep->last_name;
+                $oep->suffix = $oep->suffix;
+                if ($oep->isDirty()) {
+                    $oep->save();
+                    $oepCount++;
                 }
             }
         });
 
-        $this->info("Normalized {$memberCount} member(s) and {$nepCount} non-exam personnel record(s).");
+        $this->info("Normalized {$memberCount} member(s) and {$oepCount} other examination personnel record(s).");
 
         return self::SUCCESS;
     }

@@ -23,7 +23,7 @@ class DatabaseSeeder extends Seeder
             SchoolSeeder::class,
             ExaminationSeeder::class,
             TrainingSeeder::class,
-            NonExamPersonnelSeeder::class,
+            OtherExaminationPersonnelSeeder::class,
             CertificateSeeder::class,
             EmailTemplateSeeder::class,
             SettingSeeder::class,

@@ -10,6 +10,7 @@ use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\ExamAssignment;
 use App\Models\Examination;
+use App\Models\ExaminationSchool;
 use App\Models\Member;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,34 @@ use Illuminate\Validation\Rule;
 
 class ExamAssignmentController extends Controller
 {
+    // Proctor/Room Examiner/Supervising Examiner physically staff one specific
+    // school, so (unlike REC/LEC committee roles, which are region-wide by
+    // design) they must always be drawn from that venue's own field office.
+    private const ROOM_ROLES = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
+
+    /** Builds a validation closure for the `examination_school_id` field enforcing that rule. */
+    private function venueJurisdictionRule(Request $request, array $memberIds): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($request, $memberIds) {
+            if (! $value || ! in_array($request->input('role'), self::ROOM_ROLES, true)) {
+                return;
+            }
+
+            $venueFieldOfficeId = ExaminationSchool::find($value)?->school?->field_office_id;
+            if ($venueFieldOfficeId === null) {
+                return;
+            }
+
+            $outOfJurisdiction = Member::whereIn('id', array_filter($memberIds))
+                ->where('field_office_id', '!=', $venueFieldOfficeId)
+                ->exists();
+
+            if ($outOfJurisdiction) {
+                $fail('Proctor, Room Examiner, and Supervising Examiner assignments must stay within the venue\'s own field office.');
+            }
+        };
+    }
+
     public function store(Request $request, Examination $examination): RedirectResponse
     {
         Gate::authorize('create', ExamAssignment::class);
@@ -36,6 +65,7 @@ class ExamAssignmentController extends Controller
             'examination_school_id' => [
                 'nullable',
                 Rule::exists('examination_school', 'id')->where('examination_id', $examination->id),
+                $this->venueJurisdictionRule($request, [$request->input('member_id')]),
             ],
             'exam_room_id' => [
                 'nullable',
@@ -91,6 +121,7 @@ class ExamAssignmentController extends Controller
             'examination_school_id' => [
                 'nullable',
                 Rule::exists('examination_school', 'id')->where('examination_id', $examination->id),
+                $this->venueJurisdictionRule($request, $request->input('member_ids', [])),
             ],
             'exam_room_id' => [
                 'nullable',
@@ -177,6 +208,7 @@ class ExamAssignmentController extends Controller
             'examination_school_id' => [
                 'nullable',
                 Rule::exists('examination_school', 'id')->where('examination_id', $assignment->examination_id),
+                $this->venueJurisdictionRule($request, [$assignment->member_id]),
             ],
             'exam_room_id' => [
                 'nullable',
@@ -272,6 +304,7 @@ class ExamAssignmentController extends Controller
             'examination_school_id' => [
                 'required',
                 Rule::exists('examination_school', 'id')->where('examination_id', $assignment->examination_id),
+                $this->venueJurisdictionRule($request, [$assignment->member_id]),
             ],
         ]);
 

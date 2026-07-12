@@ -32,6 +32,49 @@ class ExamRoomTest extends TestCase
                 ->has('rooms', 3));
     }
 
+    public function test_room_staffing_map_propagates_supervising_examiner_to_whole_group_and_excludes_declined(): void
+    {
+        $venue = ExaminationSchool::factory()->create();
+        $rooms = collect();
+        for ($i = 1; $i <= 6; $i++) {
+            $rooms->push(\App\Models\ExamRoom::factory()->create([
+                'examination_school_id' => $venue->id,
+                'room_number' => sprintf('Room-%03d', $i),
+            ]));
+        }
+        $anchorRoom = $rooms->first();
+        $supervisor = \App\Models\Member::factory()->create(['first_name' => 'Juan', 'middle_name' => null, 'suffix' => null, 'last_name' => 'Dela Cruz']);
+
+        \App\Models\ExamAssignment::factory()->create([
+            'examination_id' => $venue->examination_id,
+            'examination_school_id' => $venue->id,
+            'exam_room_id' => $anchorRoom->id,
+            'member_id' => $supervisor->id,
+            'role' => 'supervising_examiner',
+            'status' => 'confirmed',
+        ]);
+        // Declined Proctor in room 2 — must not count as staffed.
+        \App\Models\ExamAssignment::factory()->create([
+            'examination_id' => $venue->examination_id,
+            'examination_school_id' => $venue->id,
+            'exam_room_id' => $rooms[1]->id,
+            'role' => 'proctor',
+            'status' => 'declined',
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get("/venues/{$venue->id}/rooms")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('roomBreakdown.0.is_supervisor_anchor', true)
+                ->where('roomBreakdown.0.supervising_examiner', 'JUAN DELA CRUZ')
+                ->where('roomBreakdown.1.is_supervisor_anchor', false)
+                ->where('roomBreakdown.1.supervising_examiner', 'JUAN DELA CRUZ')
+                ->where('stats.assigned.proctor', 0)
+                ->where('stats.assigned.supervising_examiner', 1)
+                ->where('stats.assigned_total', 1));
+    }
+
     public function test_bulk_generate_replaces_all_existing_rooms(): void
     {
         $venue = ExaminationSchool::factory()->create();

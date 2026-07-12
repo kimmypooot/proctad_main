@@ -12,8 +12,8 @@ use GdImage;
  * Central QR renderer for the app. Error correction is fixed at H (30%) so
  * the ~22% logo overlay never affects scannability. Pass `logo: false` for
  * QR codes belonging to entities that aren't part of the PROCTAD corps
- * (e.g. Non-Exam Personnel) — the ProCTAD program logo shouldn't appear on
- * their IDs.
+ * (e.g. Other Examination Personnel) — the ProCTAD program logo shouldn't
+ * appear on their IDs.
  */
 class BrandedQrCode
 {

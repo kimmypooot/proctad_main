@@ -78,7 +78,7 @@ The heart of the system. PK is `proctad_id varchar(20)` (business key `PROCTAD-2
 - Add `deleted_at` (members are legally significant; never hard-delete).
 - **No rows in dump** — see Executive Summary.
 
-#### `proctad_non_exam_personnel` → **`non_exam_personnel` (KEEP, minor)**
+#### `proctad_non_exam_personnel` → **`other_examination_personnel` (KEEP, minor)**
 Near-clone of `members` (name parts, gender, contact, agency, QR, photo, statuses) for coordinators/inspectors/janitors/etc.
 - **Do not merge with members.** Different lifecycle (no accreditation, no training, no certificates), different ID series (`NEP-2026-…`), different assignment rules. Merging would nullable-poison a unified table.
 - Same fixes as members: surrogate `id` + unique `code`, `personnel_type` enum → string + PHP enum (adding a personnel type today requires DDL — that's a design smell), `qr_code` → varchar.
@@ -138,12 +138,12 @@ Redundancies: role, exam, school, member, confirmation status, confirmed_at all 
 
 Laravel bonus: the confirm/decline email links should become **signed URLs** (`URL::temporarySignedRoute`) — the token columns, expiry tracking, and manual validation code all disappear.
 
-#### `proctad_nep_school_assignments` → **`nep_assignments` (MODIFY)**
-Mirror of member assignments for NEPs. Keep separate (different entity, simpler lifecycle — no confirmation workflow). Fix: `field_office_id` is a denormalized copy (derivable via NEP) — drop or accept consciously. Note its `school_id` references `schools` directly (unlike member assignments which go through exam_schools) — an inconsistency; align both on `exam_school_id` if NEPs are always at exam venues.
-**Polymorphic alternative** (one `assignments` table with `assignable_type/assignable_id` for Member|NonExamPersonnel): viable, but the member workflow carries confirmation state NEPs don't have; separate tables are simpler and constraint-friendly. Not recommended.
+#### `proctad_nep_school_assignments` → **`oep_assignments` (MODIFY)**
+Mirror of member assignments for OEPs. Keep separate (different entity, simpler lifecycle — no confirmation workflow). Fix: `field_office_id` is a denormalized copy (derivable via OEP) — drop or accept consciously. Note its `school_id` references `schools` directly (unlike member assignments which go through exam_schools) — an inconsistency; align both on `exam_school_id` if OEPs are always at exam venues.
+**Polymorphic alternative** (one `assignments` table with `assignable_type/assignable_id` for Member|OtherExaminationPersonnel): viable, but the member workflow carries confirmation state OEPs don't have; separate tables are simpler and constraint-friendly. Not recommended.
 
-#### `proctad_nep_attendance` → **`nep_attendances` (MODIFY)**
-Has unique (nep, exam, school) and index keys — but **no FK constraints at all** (the ADD CONSTRAINT block is absent). Add FKs to neps, examinations, schools, users(scanned_by).
+#### `proctad_nep_attendance` → **`oep_attendances` (MODIFY)**
+Has unique (oep, exam, school) and index keys — but **no FK constraints at all** (the ADD CONSTRAINT block is absent). Add FKs to other_examination_personnel, examinations, schools, users(scanned_by).
 
 ### 3.5 Training
 
@@ -229,7 +229,7 @@ erDiagram
     field_offices ||--o{ members : has
     field_offices ||--o{ schools : maintains
     field_offices ||--o{ signatories : "scoped (NULL=region)"
-    field_offices ||--o{ non_exam_personnel : has
+    field_offices ||--o{ other_examination_personnel : has
     field_offices ||--o{ trainings : hosts
 
     exam_types ||--o{ examinations : classifies
@@ -243,8 +243,8 @@ erDiagram
     exam_rooms |o--o{ exam_assignments : "room (nullable)"
     exam_assignments ||--o{ assignment_confirmations : "audit events"
 
-    non_exam_personnel ||--o{ nep_assignments : receives
-    non_exam_personnel ||--o{ nep_attendances : records
+    other_examination_personnel ||--o{ oep_assignments : receives
+    other_examination_personnel ||--o{ oep_attendances : records
 
     members ||--o{ member_requirements : submits
     requirement_types ||--o{ member_requirements : defines
@@ -260,13 +260,13 @@ erDiagram
     members |o--o{ qr_scans : scanned
 ```
 
-**Eloquent model inventory (~20 models):** User, FieldOffice, Member, NonExamPersonnel, RequirementType, MemberRequirement, ExamType, Examination, School, ExamSchool, ExamRoom, Training, ExamAssignment, AssignmentConfirmation, NepAssignment, NepAttendance, TrainingAttendance, TrainingAttendanceLog, Certificate, ApprovalRequest, Signatory, QrScan, EmailLog, EmailTemplate, Letterhead, Setting, ActivityLog.
+**Eloquent model inventory (~20 models):** User, FieldOffice, Member, OtherExaminationPersonnel, RequirementType, MemberRequirement, ExamType, Examination, School, ExamSchool, ExamRoom, Training, ExamAssignment, AssignmentConfirmation, OepAssignment, OepAttendance, TrainingAttendance, TrainingAttendanceLog, Certificate, ApprovalRequest, Signatory, QrScan, EmailLog, EmailTemplate, Letterhead, Setting, ActivityLog.
 
 **Relationship corrections found:**
 - `exam_rooms.school_id` and `school_assignments.school_id` **do not reference `schools`** — they reference `exam_schools`. Rename both to `exam_school_id`.
 - `user_member` pivot is a disguised 1:1 → column.
 - `training_records.linked_exam_id` is a dead duplicate of the exam_training pivot.
-- Missing FKs: `nep_attendance.*` (all four), `examinations.created_by`, `examinations.field_office_id`, `exam_schools.assigned_by`, `users.exam_fo_id`, `non_exam_personnel.created_by`, `notifications.reference_id` (polymorphic-ish, un-enforceable — fine).
+- Missing FKs: `nep_attendance.*` (all four), `examinations.created_by`, `examinations.field_office_id`, `exam_schools.assigned_by`, `users.exam_fo_id`, `other_examination_personnel.created_by`, `notifications.reference_id` (polymorphic-ish, un-enforceable — fine).
 - No circular dependencies. Certificates↔approvals↔users is acyclic.
 - **Orphan risk:** every table referencing `proctad_members` is orphaned in this dump (no member rows). Also `qr_scans` ON DELETE SET NULL on a NOT-NULL-looking business flow is fine but means scans can lose their member link.
 
@@ -283,7 +283,7 @@ erDiagram
 **Over-indexing:** `service_history` has 13 indexes; `training_attendance` has 8. Every low-cardinality enum got its own index (`idx_status`, `idx_attendance`, `idx_scan_method`) — these rarely help and tax writes. In the new schema, index FK columns + genuinely selective columns (tokens, dates, composite (member_id, exam)) and drop single-column enum indexes unless a query proves the need.
 
 **Data types:**
-- `qr_code TEXT` on members/NEP/certificates stores file paths → `varchar(255)` (also removes prefix-index hacks).
+- `qr_code TEXT` on members/OEP/certificates stores file paths → `varchar(255)` (also removes prefix-index hacks).
 - `int(10) unsigned` PKs everywhere except `users_cscro8.id int(12)` signed and several `int(11)` signed FK columns pointing at unsigned PKs — MariaDB tolerates it; Laravel migrations will standardize on `unsignedBigInteger`/`foreignId`.
 - Snapshot decimal types (`decimal(29,2)`) exist only in the view-snapshot tables being deleted.
 
@@ -311,10 +311,10 @@ erDiagram
 ## 7. Laravel Conventions & Improvements
 
 - **Naming:** the `proctad_` prefix **stays on the physical tables** — the production database is shared by multiple systems and the prefix is how tables are attributed to this app. Implement it as a Laravel **connection prefix** (`'prefix' => 'proctad_'` in `config/database.php`), not by hardcoding it: migrations write `Schema::create('members', …)` and models need no `$table` overrides, while the server sees `proctad_members`. Laravel's own tables (`migrations`, `sessions`, `cache`, `jobs`, `notifications`) get prefixed automatically — exactly right for a shared database. Caveat: raw SQL bypasses the prefix, so prefer the query builder/Eloquent. Beyond that: plural snake_case tables, `id` PKs, `{model}_id` FKs. Pivots: `examination_training`, `field_office_user`. Bonus: `users_cscro8` becomes `proctad_users`, finally consistent with the rest.
-- **Primary keys:** `id()` (bigint unsigned) everywhere; business codes (`PROCTAD-2026-…`, `NEP-2026-…`, certificate numbers) as unique varchar columns. **UUID/ULID not recommended** — internal admin system, no distributed ID generation, no ID-guessing exposure worth the index cost. The QR/URL-facing artifacts (certificates, confirmations) should use signed URLs, which solves enumeration without ULID PKs.
+- **Primary keys:** `id()` (bigint unsigned) everywhere; business codes (`PROCTAD-2026-…`, `OEP-2026-…`, certificate numbers) as unique varchar columns. **UUID/ULID not recommended** — internal admin system, no distributed ID generation, no ID-guessing exposure worth the index cost. The QR/URL-facing artifacts (certificates, confirmations) should use signed URLs, which solves enumeration without ULID PKs.
 - **Enums:** convert all MySQL ENUMs to `varchar` + PHP backed enums with Eloquent casts. Rationale: ~25 ENUM columns exist; several already show why DB enums hurt (empty-string members, `personnel_type` needing DDL to extend, overlapping status vocabularies).
 - **Timestamps:** add `updated_at` where missing (exam_types, schools, examinations, qr_scans stays created-only as an immutable log — use `const UPDATED_AT = null`).
-- **Soft deletes:** members, non_exam_personnel, users, certificates, exam_assignments, trainings, examinations. Not on append-only logs.
+- **Soft deletes:** members, other_examination_personnel, users, certificates, exam_assignments, trainings, examinations. Not on append-only logs.
 - **Cascades:** the legacy rules are mostly right (CASCADE on owned children, SET NULL on attributions). Preserve them in migrations. One review point: `certificates ON DELETE CASCADE from members` — certificates are legal records; with soft deletes on members this FK rarely fires, but consider RESTRICT to be safe.
 - **JSON columns:** `metadata` (assignment_confirmations), `details` (security_logs), `variables` (email_templates), `qr_data` (attendance logs) → `json` type + `array` casts.
 
@@ -327,7 +327,7 @@ erDiagram
 | Category | Tables |
 |---|---|
 | **Keep (rename/minor)** | field_offices, exam_types, schools, signatories, certificates, approval_requests, qr_scans, email_logs, email_templates, letterheads, assignment_confirmations, training_attendance_logs, security_logs, exam_training (pivot) |
-| **Modify** | users (rebuild), members, non_exam_personnel, examinations, exam_schools, exam_rooms, trainings, training_attendance, nep_school_assignments, nep_attendance, user_field_office |
+| **Modify** | users (rebuild), members, other_examination_personnel, examinations, exam_schools, exam_rooms, trainings, training_attendance, nep_school_assignments, nep_attendance, user_field_office |
 | **Merge** | config + system_settings → settings; school_assignments + service_history → exam_assignments (+ optional service_records snapshot) |
 | **Split** | eligibility_requirements → requirement_types + member_requirements |
 | **Convert to relationship** | user_member → members.user_id |
@@ -341,12 +341,12 @@ erDiagram
 1. Laravel defaults: `users` (rebuilt), `password_reset_tokens`, `sessions`, `cache`, `jobs`
 2. `field_offices`, `exam_types`, `requirement_types`
 3. `field_office_user`
-4. `members` (FK users, field_offices), `non_exam_personnel`
+4. `members` (FK users, field_offices), `other_examination_personnel`
 5. `member_requirements`, `schools`, `signatories`, `trainings`, `examinations`
 6. `exam_schools`, `examination_training`
 7. `exam_rooms`
-8. `exam_assignments`, `nep_assignments`
-9. `assignment_confirmations`, `nep_attendances`, `training_attendances`, `training_attendance_logs`
+8. `exam_assignments`, `oep_assignments`
+9. `assignment_confirmations`, `oep_attendances`, `training_attendances`, `training_attendance_logs`
 10. `certificates`
 11. `approval_requests`, `qr_scans`
 12. `settings`, `letterheads`, `email_templates`, `email_logs`, `activity_logs`, `notifications` (native)
@@ -369,7 +369,7 @@ Same order as above; key transforms:
 3. **Old system runs PHP 7.2** — parallel-run cutover is safer than in-place: build the Laravel app against a migrated copy, freeze legacy, re-run ETL, switch.
 4. **QR codes in the wild** reference `PROCTAD-2026-…` codes and legacy verification URLs — new app must keep resolving old QR payloads (including the inconsistent numeric variants).
 5. Confirmation emails in flight at cutover will contain legacy token URLs — keep a legacy-token resolver route for the token TTL window, or resend.
-6. Duplicate people in users/NEP tables need human review, not just automated dedupe.
+6. Duplicate people in users/OEP tables need human review, not just automated dedupe.
 
 ---
 

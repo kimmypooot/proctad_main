@@ -79,12 +79,17 @@ const editForm = useForm({
 });
 
 const editIsCoverageRole = computed(() => props.roles.find((r) => r.value === editForm.role)?.is_coverage ?? false);
+const overrideComputedRating = ref(false);
 
 const openEdit = (assignment) => {
     editingAssignment.value = assignment;
     editForm.clearErrors();
+    overrideComputedRating.value = false;
     editForm.role = assignment.role;
-    editForm.performance_rating = assignment.rating ?? '';
+    // Prefill from the raw manual column, not `rating` (which may reflect a
+    // computed value) — otherwise saving the form would bake the computed
+    // rating into performance_rating even if the staff never touched it.
+    editForm.performance_rating = assignment.manual_rating ?? '';
     editForm.remarks = assignment.remarks ?? '';
     editForm.attended = assignment.attended;
     editForm.examination_school_id = assignment.examination_school_id ?? '';
@@ -288,6 +293,12 @@ const submitBulkConfirm = () => {
                     <td class="hidden px-3 py-2 xl:table-cell">
                         <BaseBadge v-if="assignment.rating_label" :variant="assignment.rating_variant">
                             {{ assignment.rating_label }}
+                            <AppIcon
+                                v-if="assignment.rating_is_computed"
+                                name="sparkles"
+                                class="ml-1 inline h-3 w-3"
+                                title="Computed from evaluations"
+                            />
                         </BaseBadge>
                         <span v-else class="text-slate-400">—</span>
                     </td>
@@ -356,7 +367,19 @@ const submitBulkConfirm = () => {
                 :options="editRoomOptions"
                 :error="editForm.errors.exam_room_id"
             />
+            <div
+                v-if="editingAssignment?.rating_is_computed"
+                class="rounded-lg border border-brand-200 bg-brand-50/60 p-3 text-sm text-brand-800"
+            >
+                <p class="font-medium">Rating computed automatically</p>
+                <p class="mt-0.5 text-xs">
+                    Based on {{ editingAssignment.rating_computed_count }} evaluation(s) from the Supervising Examiner
+                    (average {{ editingAssignment.rating_computed_average }}/5).
+                </p>
+                <CheckboxInput v-model="overrideComputedRating" class="mt-2">Override with a manual rating</CheckboxInput>
+            </div>
             <SelectInput
+                v-if="!editingAssignment?.rating_is_computed || overrideComputedRating"
                 v-model="editForm.performance_rating"
                 label="Performance Rating"
                 optional

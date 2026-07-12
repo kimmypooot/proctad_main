@@ -70,10 +70,12 @@ class ExamAssignmentCoverageTest extends TestCase
     public function test_non_coverage_role_ignores_covered_school_ids(): void
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $office = \App\Models\FieldOffice::factory()->create();
         $examination = Examination::factory()->create();
-        $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id]);
+        $school = \App\Models\School::factory()->create(['field_office_id' => $office->id]);
+        $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
         $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
-        $member = Member::factory()->create();
+        $member = Member::factory()->create(['field_office_id' => $office->id]);
 
         $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
             'member_id' => $member->id,

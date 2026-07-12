@@ -7,6 +7,7 @@ use App\Exports\ServiceRecordsExport;
 use App\Http\Requests\UpdateOwnProfileRequest;
 use App\Models\Member;
 use App\Services\IdCardPdfService;
+use App\Services\PerformanceRatingCalculator;
 use App\Support\MemberIdCard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -94,7 +95,7 @@ class MyProctadController extends Controller
         ]);
     }
 
-    public function serviceHistory(Request $request): Response
+    public function serviceHistory(Request $request, PerformanceRatingCalculator $ratingCalculator): Response
     {
         $member = $this->ownMember($request);
 
@@ -105,16 +106,21 @@ class MyProctadController extends Controller
                 ->get()
                 ->sortByDesc(fn ($assignment) => $assignment->examination?->exam_date)
                 ->values()
-                ->map(fn ($assignment) => [
-                    'id' => $assignment->id,
-                    'exam_title' => $assignment->examination?->title,
-                    'exam_type' => $assignment->examination?->type,
-                    'exam_date' => $assignment->examination?->exam_date?->format('M d, Y'),
-                    'role_label' => $assignment->role->label(),
-                    'attended' => (bool) $assignment->attendance_confirmed_at,
-                    'rating_label' => $assignment->performance_rating?->label(),
-                    'rating_variant' => $assignment->performance_rating?->badgeVariant(),
-                ]) ?? [],
+                ->map(function ($assignment) use ($ratingCalculator) {
+                    $computed = $ratingCalculator->computeFor($assignment);
+                    $rating = $computed['rating'] ?? $assignment->performance_rating;
+
+                    return [
+                        'id' => $assignment->id,
+                        'exam_title' => $assignment->examination?->title,
+                        'exam_type' => $assignment->examination?->type,
+                        'exam_date' => $assignment->examination?->exam_date?->format('M d, Y'),
+                        'role_label' => $assignment->role->label(),
+                        'attended' => (bool) $assignment->attendance_confirmed_at,
+                        'rating_label' => $rating?->label(),
+                        'rating_variant' => $rating?->badgeVariant(),
+                    ];
+                }) ?? [],
         ]);
     }
 

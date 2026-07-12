@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AssignmentStatus;
 use App\Enums\ExamRole;
 use App\Enums\UserRole;
 use App\Models\ExaminationSchool;
 use App\Models\ExamRoom;
 use App\Models\User;
+use App\Services\RoomStaffingCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +18,8 @@ use Inertia\Response;
 
 class ExamRoomController extends Controller
 {
+    public function __construct(private RoomStaffingCalculator $roomStaffing) {}
+
     public const DESIGNATIONS = [
         'Professional',
         'Sub-Professional',
@@ -28,8 +32,6 @@ class ExamRoomController extends Controller
 
     private const ROOM_ROLES = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
 
-    private const ROOMS_PER_SUPERVISOR = 5;
-
     public function index(Request $request, ExaminationSchool $venue): Response
     {
         Gate::authorize('create', ExaminationSchool::class);
@@ -37,10 +39,15 @@ class ExamRoomController extends Controller
 
         $venue->loadMissing('school', 'examination');
 
-        $rooms = $venue->rooms()->orderBy('room_number')->get();
+        // Numeric order (not DB string order) so anchor-group math here always
+        // matches StaffingRandomizer's/RoomStaffingCalculator's own ordering.
+        $rooms = $venue->rooms()->get()
+            ->sortBy(fn (ExamRoom $room) => (int) preg_replace('/\D/', '', $room->room_number) ?: 0)
+            ->values();
 
         $assignments = $venue->assignments()
             ->whereIn('role', self::ROOM_ROLES)
+            ->whereIn('status', [AssignmentStatus::Pending->value, AssignmentStatus::Confirmed->value])
             ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
             ->get()
             ->map(fn ($a) => [
@@ -48,6 +55,8 @@ class ExamRoomController extends Controller
                 'member' => ['id' => $a->member->id, 'name' => $a->member->name],
                 'role' => $a->role->value,
                 'exam_room_id' => $a->exam_room_id,
+                'status' => $a->status->value,
+                'member_name' => $a->member->name,
             ]);
 
         return Inertia::render('Examinations/Rooms', [
@@ -69,9 +78,10 @@ class ExamRoomController extends Controller
                 'capacity' => $room->capacity,
                 'designation' => $room->designation,
                 'created_at' => $room->created_at->format('M d, Y'),
-            ]),
+            ])->values(),
             'assignments' => $assignments,
-            'stats' => $this->stats($rooms, $assignments),
+            'roomBreakdown' => $this->roomStaffing->breakdown($rooms, $assignments),
+            'stats' => $this->roomStaffing->stats($rooms, $assignments),
             'designations' => self::DESIGNATIONS,
         ]);
     }
@@ -201,34 +211,6 @@ class ExamRoomController extends Controller
             ->update(['designation' => $validated['designation']]);
 
         return back()->with('success', 'Room designations updated.');
-    }
-
-    /** @return array{rooms_count:int,total_capacity:int,required:array,assigned:array,required_total:int,assigned_total:int,ratio:?int} */
-    private function stats($rooms, $assignments): array
-    {
-        $roomsCount = $rooms->count();
-        $assignedByRole = collect($assignments)->countBy('role');
-        $required = [
-            'proctor' => $roomsCount,
-            'room_examiner' => $roomsCount,
-            'supervising_examiner' => (int) ceil($roomsCount / self::ROOMS_PER_SUPERVISOR),
-        ];
-        $requiredTotal = array_sum($required);
-        $assignedTotal = collect($assignments)->count();
-
-        return [
-            'rooms_count' => $roomsCount,
-            'total_capacity' => $rooms->sum('capacity'),
-            'required' => $required,
-            'assigned' => [
-                'proctor' => $assignedByRole->get('proctor', 0),
-                'room_examiner' => $assignedByRole->get('room_examiner', 0),
-                'supervising_examiner' => $assignedByRole->get('supervising_examiner', 0),
-            ],
-            'required_total' => $requiredTotal,
-            'assigned_total' => $assignedTotal,
-            'ratio' => $requiredTotal > 0 ? min(100, round(($assignedTotal / $requiredTotal) * 100)) : null,
-        ];
     }
 
     private function authorizeForVenue(User $user, ExaminationSchool $venue): void

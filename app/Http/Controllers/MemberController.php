@@ -12,6 +12,7 @@ use App\Models\FieldOffice;
 use App\Models\Member;
 use App\Models\User;
 use App\Services\IdCardPdfService;
+use App\Services\PerformanceRatingCalculator;
 use App\Support\MemberIdCard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,7 +101,7 @@ class MemberController extends Controller
             ->with('success', "Member registered with PROCTAD ID {$member->proctad_id}.");
     }
 
-    public function show(Member $member): Response
+    public function show(Member $member, PerformanceRatingCalculator $ratingCalculator): Response
     {
         Gate::authorize('view', $member);
 
@@ -137,16 +138,21 @@ class MemberController extends Controller
             'serviceHistory' => $member->assignments
                 ->sortByDesc(fn ($assignment) => $assignment->examination?->exam_date)
                 ->values()
-                ->map(fn ($assignment) => [
-                    'id' => $assignment->id,
-                    'exam_title' => $assignment->examination?->title,
-                    'exam_type' => $assignment->examination?->type,
-                    'exam_date' => $assignment->examination?->exam_date?->format('M d, Y'),
-                    'role_label' => $assignment->role->label(),
-                    'attended' => (bool) $assignment->attendance_confirmed_at,
-                    'rating_label' => $assignment->performance_rating?->label(),
-                    'rating_variant' => $assignment->performance_rating?->badgeVariant(),
-                ]),
+                ->map(function ($assignment) use ($ratingCalculator) {
+                    $computed = $ratingCalculator->computeFor($assignment);
+                    $rating = $computed['rating'] ?? $assignment->performance_rating;
+
+                    return [
+                        'id' => $assignment->id,
+                        'exam_title' => $assignment->examination?->title,
+                        'exam_type' => $assignment->examination?->type,
+                        'exam_date' => $assignment->examination?->exam_date?->format('M d, Y'),
+                        'role_label' => $assignment->role->label(),
+                        'attended' => (bool) $assignment->attendance_confirmed_at,
+                        'rating_label' => $rating?->label(),
+                        'rating_variant' => $rating?->badgeVariant(),
+                    ];
+                }),
             'idCard' => MemberIdCard::data($member),
             'can' => ['update' => request()->user()->can('update', $member)],
         ]);

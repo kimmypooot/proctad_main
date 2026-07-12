@@ -13,8 +13,8 @@ use App\Models\ExaminationSchool;
 use App\Models\ExamRoom;
 use App\Models\FeeSchedule;
 use App\Models\Member;
-use App\Models\NepAssignment;
-use App\Models\NonExamPersonnel;
+use App\Models\OepAssignment;
+use App\Models\OtherExaminationPersonnel;
 use App\Models\School;
 use App\Models\Signatory;
 use App\Models\User;
@@ -171,15 +171,15 @@ class ExaminationReportTest extends TestCase
             ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
-    public function test_payroll_includes_non_exam_personnel(): void
+    public function test_payroll_includes_other_examination_personnel(): void
     {
         [$exam, $venue] = $this->makeExaminationWithRoster();
         $this->setFeeRate(PayeeType::ExamRole->value, ExamRole::Proctor->value, 1400);
         $this->setFeeRate(PayeeType::ExamRole->value, ExamRole::SupervisingExaminer->value, 1700);
         $this->setFeeRate(PayeeType::PersonnelType->value, PersonnelType::Paymaster->value, 1400);
 
-        $nep = NonExamPersonnel::factory()->create(['personnel_type' => PersonnelType::Paymaster]);
-        NepAssignment::create(['non_exam_personnel_id' => $nep->id, 'examination_school_id' => $venue->id, 'status' => 'assigned']);
+        $oep = OtherExaminationPersonnel::factory()->create(['personnel_type' => PersonnelType::Paymaster]);
+        OepAssignment::create(['other_examination_personnel_id' => $oep->id, 'examination_school_id' => $venue->id, 'status' => 'assigned']);
 
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
 

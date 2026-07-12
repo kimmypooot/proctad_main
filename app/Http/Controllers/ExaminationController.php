@@ -11,13 +11,14 @@ use App\Models\Examination;
 use App\Models\ExaminationSchool;
 use App\Models\ExamType;
 use App\Models\Member;
-use App\Models\NepAssignment;
-use App\Models\NepAttendance;
-use App\Models\NonExamPersonnel;
+use App\Models\OepAssignment;
+use App\Models\OepAttendance;
+use App\Models\OtherExaminationPersonnel;
 use App\Models\School;
+use App\Services\PerformanceRatingCalculator;
+use App\Services\RoomStaffingCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -28,7 +29,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ExaminationController extends Controller
 {
-    private const ROOMS_PER_SUPERVISOR = 5; // matches StaffingRandomizer's default anchoring group size
+    public function __construct(private RoomStaffingCalculator $roomStaffing) {}
+
     public function index(Request $request): Response
     {
         Gate::authorize('viewAny', Examination::class);
@@ -84,14 +86,14 @@ class ExaminationController extends Controller
             ->with('success', 'Examination created — attach a venue to get started.');
     }
 
-    public function show(Request $request, Examination $examination): Response
+    public function show(Request $request, Examination $examination, PerformanceRatingCalculator $ratingCalculator): Response
     {
         Gate::authorize('view', $examination);
 
         $user = $request->user();
         $foScoped = $user->role->isFieldOfficeScoped();
 
-        $assignments = $examination->assignments()
+        $assignmentModels = $examination->assignments()
             ->with(
                 'member:id,proctad_id,first_name,middle_name,last_name,suffix',
                 'fieldOffice:id,name,code',
@@ -101,41 +103,54 @@ class ExaminationController extends Controller
                 'attendances',
             )
             ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
-            ->get()
-            ->map(fn (ExamAssignment $assignment) => [
-                'id' => $assignment->id,
-                'member' => [
-                    'id' => $assignment->member->id,
-                    'proctad_id' => $assignment->member->proctad_id,
-                    'name' => $assignment->member->name,
-                ],
-                'field_office' => $assignment->fieldOffice?->only('id', 'name', 'code'),
-                'role' => $assignment->role->value,
-                'role_label' => $assignment->role->label(),
-                'role_group' => $assignment->role->group()->value,
-                'role_group_label' => $assignment->role->group()->label(),
-                'status' => $assignment->status->value,
-                'status_label' => $assignment->status->label(),
-                'status_variant' => $assignment->status->badgeVariant(),
-                'confirmation_sent_at' => $assignment->confirmation_sent_at?->format('M d, Y H:i'),
-                'venue' => $assignment->examinationSchool?->school?->name,
-                'room' => $assignment->room?->room_number,
-                'examination_school_id' => $assignment->examination_school_id,
-                'exam_room_id' => $assignment->exam_room_id,
-                'attended' => (bool) $assignment->attendance_confirmed_at,
-                'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y H:i'),
-                'rating' => $assignment->performance_rating?->value,
-                'rating_label' => $assignment->performance_rating?->label(),
-                'rating_variant' => $assignment->performance_rating?->badgeVariant(),
-                'remarks' => $assignment->remarks,
-                'can_manage' => $user->can('update', $assignment),
-                'is_coverage_role' => $assignment->isCoverageRole(),
-                'covered_schools' => $assignment->coveredSchools->map(fn ($school) => [
-                    'id' => $school->id,
-                    'name' => $school->school?->name,
-                    'attended' => $assignment->attendances->contains('examination_school_id', $school->id),
-                ]),
-            ]);
+            ->get();
+
+        $computedRatings = $ratingCalculator->computeForMany($assignmentModels);
+
+        $assignments = $assignmentModels
+            ->map(function (ExamAssignment $assignment) use ($user, $computedRatings) {
+                $computed = $computedRatings[$assignment->id] ?? null;
+                $rating = $computed['rating'] ?? $assignment->performance_rating;
+
+                return [
+                    'id' => $assignment->id,
+                    'member' => [
+                        'id' => $assignment->member->id,
+                        'proctad_id' => $assignment->member->proctad_id,
+                        'name' => $assignment->member->name,
+                    ],
+                    'field_office' => $assignment->fieldOffice?->only('id', 'name', 'code'),
+                    'role' => $assignment->role->value,
+                    'role_label' => $assignment->role->label(),
+                    'role_group' => $assignment->role->group()->value,
+                    'role_group_label' => $assignment->role->group()->label(),
+                    'status' => $assignment->status->value,
+                    'status_label' => $assignment->status->label(),
+                    'status_variant' => $assignment->status->badgeVariant(),
+                    'confirmation_sent_at' => $assignment->confirmation_sent_at?->format('M d, Y H:i'),
+                    'venue' => $assignment->examinationSchool?->school?->name,
+                    'room' => $assignment->room?->room_number,
+                    'examination_school_id' => $assignment->examination_school_id,
+                    'exam_room_id' => $assignment->exam_room_id,
+                    'attended' => (bool) $assignment->attendance_confirmed_at,
+                    'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y H:i'),
+                    'rating' => $rating?->value,
+                    'rating_label' => $rating?->label(),
+                    'rating_variant' => $rating?->badgeVariant(),
+                    'manual_rating' => $assignment->performance_rating?->value,
+                    'rating_is_computed' => $computed !== null,
+                    'rating_computed_average' => $computed['average'] ?? null,
+                    'rating_computed_count' => $computed['ratings_count'] ?? null,
+                    'remarks' => $assignment->remarks,
+                    'can_manage' => $user->can('update', $assignment),
+                    'is_coverage_role' => $assignment->isCoverageRole(),
+                    'covered_schools' => $assignment->coveredSchools->map(fn ($school) => [
+                        'id' => $school->id,
+                        'name' => $school->school?->name,
+                        'attended' => $assignment->attendances->contains('examination_school_id', $school->id),
+                    ]),
+                ];
+            });
 
         // Members the current user may assign that aren't on this exam yet.
         $assignable = $user->can('create', ExamAssignment::class)
@@ -152,36 +167,44 @@ class ExaminationController extends Controller
             : [];
 
         $roomRoles = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
-        $roomsPerSupervisor = 5; // matches StaffingRandomizer's default anchoring group size
+
+        // Room-role assignments for the venue breakdown/staffing below are
+        // intentionally NOT filtered by the assignment's own field_office_id
+        // (unlike $assignments above, used for the flat Assignments table).
+        // A room-role assignee can legitimately belong to a different office
+        // than the venue they're staffing (e.g. proctoring at another FO's
+        // school) — venue access is already correctly gated by the venue's
+        // *own* field office just below, so re-filtering by the assignee's
+        // office here would incorrectly hide people actually placed in a
+        // room at a venue this admin does manage (matches ExamRoomController,
+        // which has no such filter either).
+        $roomAssignments = $examination->assignments()
+            ->whereIn('role', $roomRoles)
+            ->with('member:id,first_name,middle_name,last_name,suffix')
+            ->get()
+            ->map(fn (ExamAssignment $a) => [
+                'id' => $a->id,
+                'examination_school_id' => $a->examination_school_id,
+                'role' => $a->role->value,
+                'exam_room_id' => $a->exam_room_id,
+                'status' => $a->status->value,
+                'member_name' => $a->member?->name,
+            ]);
 
         $venues = $examination->venues()
-            ->with('school:id,name,municipality,field_office_id', 'rooms', 'nepAssignments.personnel:id,nep_id,first_name,middle_name,last_name,suffix,personnel_type')
+            ->with('school:id,name,municipality,field_office_id', 'rooms', 'oepAssignments.personnel:id,oep_id,first_name,middle_name,last_name,suffix,personnel_type')
             ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->where('field_office_id', $user->field_office_id)))
             ->get()
-            ->map(function (ExaminationSchool $venue) use ($assignments, $roomRoles, $roomsPerSupervisor) {
-                $roomsCount = $venue->rooms->count();
-                $venueAssignments = $assignments->filter(fn ($a) => $a['examination_school_id'] === $venue->id && in_array($a['role'], $roomRoles, true));
-                $assignedByRole = $venueAssignments->countBy('role');
-                $normalizedAssignments = $venueAssignments->map(fn ($a) => [
-                    'id' => $a['id'],
-                    'role' => $a['role'],
-                    'exam_room_id' => $a['exam_room_id'],
-                    'member_name' => $a['member']['name'],
-                ]);
+            ->map(function (ExaminationSchool $venue) use ($roomAssignments, $roomRoles) {
+                $normalizedAssignments = $roomAssignments->filter(fn ($a) => $a['examination_school_id'] === $venue->id);
+                $eligibleAssignments = $this->roomStaffing->eligible($normalizedAssignments);
                 $unassignedPool = collect($roomRoles)->mapWithKeys(fn ($role) => [
-                    $role => $normalizedAssignments
+                    $role => $eligibleAssignments
                         ->where('role', $role)
                         ->whereNull('exam_room_id')
                         ->map(fn ($a) => ['id' => $a['id'], 'name' => $a['member_name']])
                         ->values(),
                 ]);
-                $required = [
-                    'proctor' => $roomsCount,
-                    'room_examiner' => $roomsCount,
-                    'supervising_examiner' => (int) ceil($roomsCount / $roomsPerSupervisor),
-                ];
-                $requiredTotal = array_sum($required);
-                $assignedTotal = $venueAssignments->count();
 
                 return [
                     'id' => $venue->id,
@@ -193,42 +216,32 @@ class ExaminationController extends Controller
                         'capacity' => $room->capacity,
                         'designation' => $room->designation,
                     ]),
-                    'rooms_count' => $roomsCount,
+                    'rooms_count' => $venue->rooms->count(),
                     'total_capacity' => $venue->rooms->sum('capacity'),
-                    'room_breakdown' => $this->buildRoomBreakdown($venue->rooms, $normalizedAssignments),
+                    'room_breakdown' => $this->roomStaffing->breakdown($venue->rooms, $normalizedAssignments),
                     'unassigned_pool' => $unassignedPool,
-                    'staffing' => [
-                        'required' => $required,
-                        'assigned' => [
-                            'proctor' => $assignedByRole->get('proctor', 0),
-                            'room_examiner' => $assignedByRole->get('room_examiner', 0),
-                            'supervising_examiner' => $assignedByRole->get('supervising_examiner', 0),
-                        ],
-                        'required_total' => $requiredTotal,
-                        'assigned_total' => $assignedTotal,
-                        'ratio' => $requiredTotal > 0 ? min(100, round(($assignedTotal / $requiredTotal) * 100)) : null,
-                    ],
-                    'nep_assignments' => $venue->nepAssignments->map(fn ($assignment) => [
+                    'staffing' => $this->roomStaffing->stats($venue->rooms, $normalizedAssignments),
+                    'oep_assignments' => $venue->oepAssignments->map(fn ($assignment) => [
                         'id' => $assignment->id,
                         'name' => $assignment->personnel?->name,
-                        'nep_id' => $assignment->personnel?->nep_id,
+                        'oep_id' => $assignment->personnel?->oep_id,
                         'personnel_type_label' => $assignment->personnel?->personnel_type?->label(),
                         'role_group' => $assignment->personnel?->personnel_type?->group()->value,
                         'role_group_label' => $assignment->personnel?->personnel_type?->group()->label(),
-                        'present' => $assignment->personnel && NepAttendance::where('non_exam_personnel_id', $assignment->non_exam_personnel_id)
+                        'present' => $assignment->personnel && OepAttendance::where('other_examination_personnel_id', $assignment->other_examination_personnel_id)
                             ->where('examination_school_id', $assignment->examination_school_id)
                             ->exists(),
                     ]),
                 ];
             });
 
-        $availableNep = $user->can('create', NepAssignment::class)
-            ? NonExamPersonnel::query()
+        $availableOep = $user->can('create', OepAssignment::class)
+            ? OtherExaminationPersonnel::query()
                 ->where('is_active', true)
                 ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->orderBy('last_name')
-                ->get(['id', 'first_name', 'middle_name', 'last_name', 'suffix', 'nep_id'])
-                ->map(fn (NonExamPersonnel $nep) => ['value' => $nep->id, 'label' => "{$nep->name} ({$nep->nep_id})"])
+                ->get(['id', 'first_name', 'middle_name', 'last_name', 'suffix', 'oep_id'])
+                ->map(fn (OtherExaminationPersonnel $oep) => ['value' => $oep->id, 'label' => "{$oep->name} ({$oep->oep_id})"])
             : [];
 
         $availableSchools = $user->can('create', ExaminationSchool::class)
@@ -251,10 +264,10 @@ class ExaminationController extends Controller
             'assignableMembers' => $assignable,
             'venues' => $venues,
             'availableSchools' => $availableSchools,
-            'availableNep' => $availableNep,
+            'availableOep' => $availableOep,
             'can' => [
                 'assign' => $user->can('create', ExamAssignment::class),
-                'manageNep' => $user->can('create', NepAssignment::class),
+                'manageOep' => $user->can('create', OepAssignment::class),
                 'manageVenues' => $user->can('create', ExaminationSchool::class),
                 'bulkRevoke' => $user->role === UserRole::SuperAdmin,
             ],
@@ -303,6 +316,7 @@ class ExaminationController extends Controller
                 'examination_school_id' => $a->examination_school_id,
                 'role' => $a->role->value,
                 'exam_room_id' => $a->exam_room_id,
+                'status' => $a->status->value,
                 'member_name' => $a->member?->name,
             ]);
 
@@ -312,7 +326,7 @@ class ExaminationController extends Controller
         foreach ($venues as $venue) {
             $venueAssignments = $assignments->where('examination_school_id', $venue->id);
 
-            foreach ($this->buildRoomBreakdown($venue->rooms, $venueAssignments) as $room) {
+            foreach ($this->roomStaffing->breakdown($venue->rooms, $venueAssignments) as $room) {
                 $rows->push([...$room, 'venue_name' => $venue->school?->name]);
             }
 
@@ -346,45 +360,6 @@ class ExaminationController extends Controller
         $examination->delete();
 
         return redirect()->route('examinations.index')->with('success', 'Examination removed.');
-    }
-
-    /**
-     * Per-room Proctor / Room Examiner / Supervising Examiner breakdown for one venue.
-     * A Supervising Examiner is only ever assigned to the first ("anchor") room of a
-     * group of ROOMS_PER_SUPERVISOR consecutive rooms (see StaffingRandomizer), so
-     * every room in that group is credited with that anchor's supervisor.
-     *
-     * @param  Collection  $rooms  ExamRoom models for one venue
-     * @param  Collection  $venueAssignments  rows: ['id', 'role', 'exam_room_id', 'member_name']
-     * @return Collection<int, array{id:int,room_number:string,capacity:int,designation:?string,proctor:?string,proctor_assignment_id:?int,room_examiner:?string,room_examiner_assignment_id:?int,supervising_examiner:?string,supervising_examiner_assignment_id:?int,is_supervisor_anchor:bool,complete:bool}>
-     */
-    private function buildRoomBreakdown(Collection $rooms, Collection $venueAssignments): Collection
-    {
-        $sortedRooms = $rooms->sortBy(fn ($room) => (int) preg_replace('/\D/', '', $room->room_number) ?: 0)->values();
-        $supervisorByAnchorRoomId = $venueAssignments->where('role', ExamRole::SupervisingExaminer->value)->keyBy('exam_room_id');
-
-        return $sortedRooms->values()->map(function ($room, $index) use ($sortedRooms, $venueAssignments, $supervisorByAnchorRoomId) {
-            $groupStart = intdiv($index, self::ROOMS_PER_SUPERVISOR) * self::ROOMS_PER_SUPERVISOR;
-            $anchorRoom = $sortedRooms->get($groupStart);
-            $supervisor = $anchorRoom ? $supervisorByAnchorRoomId->get($anchorRoom->id) : null;
-            $proctor = $venueAssignments->first(fn ($a) => $a['role'] === ExamRole::Proctor->value && $a['exam_room_id'] === $room->id);
-            $roomExaminer = $venueAssignments->first(fn ($a) => $a['role'] === ExamRole::RoomExaminer->value && $a['exam_room_id'] === $room->id);
-
-            return [
-                'id' => $room->id,
-                'room_number' => $room->room_number,
-                'capacity' => $room->capacity,
-                'designation' => $room->designation,
-                'proctor' => $proctor['member_name'] ?? null,
-                'proctor_assignment_id' => $proctor['id'] ?? null,
-                'room_examiner' => $roomExaminer['member_name'] ?? null,
-                'room_examiner_assignment_id' => $roomExaminer['id'] ?? null,
-                'supervising_examiner' => $supervisor['member_name'] ?? null,
-                'supervising_examiner_assignment_id' => $supervisor['id'] ?? null,
-                'is_supervisor_anchor' => $index === $groupStart,
-                'complete' => (bool) ($proctor && $roomExaminer && $supervisor),
-            ];
-        })->values();
     }
 
     private function validated(Request $request): array

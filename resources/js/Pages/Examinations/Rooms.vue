@@ -18,9 +18,13 @@ const props = defineProps({
     venue: { type: Object, required: true },
     rooms: { type: Array, required: true },
     assignments: { type: Array, required: true },
+    roomBreakdown: { type: Array, required: true },
     stats: { type: Object, required: true },
     designations: { type: Array, required: true },
 });
+
+/** Anchor-aware lookup — a Supervising Examiner only ever links to a group's anchor room, so non-anchor rows must read the propagated value rather than doing a naive per-room match (see RoomStaffingCalculator::breakdown()). */
+const breakdownFor = (room) => props.roomBreakdown.find((b) => b.id === room.id);
 
 const ROOM_ROLES = ['proctor', 'room_examiner', 'supervising_examiner'];
 const ROOM_ROLE_LABELS = { proctor: 'Proctor', room_examiner: 'Room Examiner', supervising_examiner: 'Supervising Examiner' };
@@ -354,8 +358,8 @@ const exportSupervisingExaminers = () => exportCsv(
                 <div v-if="showStaffingMap" class="mt-2 overflow-x-auto">
                     <table class="w-full table-fixed divide-y divide-slate-200 text-sm">
                         <colgroup>
-                            <col class="w-28">
-                            <col v-for="role in ROOM_ROLES" :key="role">
+                            <col class="w-1/4">
+                            <col v-for="role in ROOM_ROLES" :key="role" class="w-1/4">
                         </colgroup>
                         <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>
@@ -369,24 +373,33 @@ const exportSupervisingExaminers = () => exportCsv(
                                     {{ room.room_number }} <span class="text-xs text-slate-400">(cap. {{ room.capacity }})</span>
                                 </td>
                                 <td v-for="role in ROOM_ROLES" :key="role" class="py-2 pr-3">
-                                    <div v-if="occupant(room, role)" class="flex items-center gap-1.5">
-                                        <BaseBadge variant="success" class="min-w-0 max-w-full truncate" :title="occupant(room, role).member.name">
-                                            {{ occupant(room, role).member.name }}
-                                        </BaseBadge>
-                                        <button type="button" class="shrink-0 text-slate-400 hover:text-accent-600" title="Unassign" @click="clearCell(occupant(room, role))">
-                                            <AppIcon name="x-mark" class="h-3.5 w-3.5" />
-                                        </button>
-                                    </div>
-                                    <select
-                                        v-else-if="poolFor(room, role).length"
-                                        class="w-full max-w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600"
-                                        :disabled="savingCell === `${room.id}:${role}`"
-                                        @change="onCellChange(room, role, $event)"
-                                    >
-                                        <option value="">— Unassigned —</option>
-                                        <option v-for="option in poolFor(room, role)" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                    </select>
-                                    <span v-else class="text-xs text-slate-300">No eligible staff</span>
+                                    <!-- Supervising Examiner only links to its group's anchor room — non-anchor rows show the propagated value read-only (see RoomStaffingCalculator::breakdown()). -->
+                                    <template v-if="role === 'supervising_examiner' && !breakdownFor(room)?.is_supervisor_anchor">
+                                        <span v-if="breakdownFor(room)?.supervising_examiner" class="min-w-0 max-w-full truncate text-xs text-slate-500" :title="`${breakdownFor(room).supervising_examiner} (via anchor room)`">
+                                            {{ breakdownFor(room).supervising_examiner }}
+                                        </span>
+                                        <span v-else class="text-xs text-slate-300">No eligible staff</span>
+                                    </template>
+                                    <template v-else>
+                                        <div v-if="occupant(room, role)" class="flex items-center gap-1.5">
+                                            <BaseBadge variant="success" class="min-w-0 max-w-full truncate" :title="occupant(room, role).member.name">
+                                                {{ occupant(room, role).member.name }}
+                                            </BaseBadge>
+                                            <button type="button" class="shrink-0 text-slate-400 hover:text-accent-600" title="Unassign" @click="clearCell(occupant(room, role))">
+                                                <AppIcon name="x-mark" class="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                        <select
+                                            v-else-if="poolFor(room, role).length"
+                                            class="w-full max-w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600"
+                                            :disabled="savingCell === `${room.id}:${role}`"
+                                            @change="onCellChange(room, role, $event)"
+                                        >
+                                            <option value="">— Unassigned —</option>
+                                            <option v-for="option in poolFor(room, role)" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                        </select>
+                                        <span v-else class="text-xs text-slate-300">No eligible staff</span>
+                                    </template>
                                 </td>
                             </tr>
                         </tbody>

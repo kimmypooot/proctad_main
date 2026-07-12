@@ -51,8 +51,8 @@ class ExaminationSchool extends Model
         return $this->hasMany(ExamAssignment::class);
     }
 
-    public function nepAssignments(): HasMany
+    public function oepAssignments(): HasMany
     {
-        return $this->hasMany(NepAssignment::class);
+        return $this->hasMany(OepAssignment::class);
     }
 }

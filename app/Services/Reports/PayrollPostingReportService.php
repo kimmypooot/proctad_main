@@ -8,7 +8,7 @@ use App\Models\ExamAssignment;
 use App\Models\ExaminationSchool;
 use App\Models\Examination;
 use App\Models\FeeSchedule;
-use App\Models\NepAssignment;
+use App\Models\OepAssignment;
 use App\Models\Signatory;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -143,7 +143,7 @@ class PayrollPostingReportService
             ->where('status', AssignmentStatus::Confirmed)
             ->get();
 
-        $nepAssignments = NepAssignment::query()
+        $oepAssignments = OepAssignment::query()
             ->with('personnel:id,first_name,middle_name,last_name,suffix,personnel_type')
             ->where('examination_school_id', $venueId)
             ->get();
@@ -178,8 +178,8 @@ class PayrollPostingReportService
             ]);
         }
 
-        foreach ($nepAssignments as $nepAssignment) {
-            $type = $nepAssignment->personnel?->personnel_type;
+        foreach ($oepAssignments as $oepAssignment) {
+            $type = $oepAssignment->personnel?->personnel_type;
 
             if (! $type) {
                 continue;
@@ -189,7 +189,7 @@ class PayrollPostingReportService
             $cents = $rateFor(PayeeType::PersonnelType, $type->value, $type->label());
             $roster->push([
                 'A' => $running,
-                'B' => $nepAssignment->personnel?->name,
+                'B' => $oepAssignment->personnel?->name,
                 'C' => $type->label(),
                 'D' => $cents / 100,
             ]);

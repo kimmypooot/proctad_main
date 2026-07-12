@@ -64,7 +64,7 @@ class MigrateLegacyData extends Command
 
     private array $serviceMap = [];      // legacy service_id → exam_assignments.id
 
-    private array $nepMap = [];          // legacy nep_id (string) → non_exam_personnel.id
+    private array $oepMap = [];          // legacy nep_id (string) → other_examination_personnel.id
 
     public function handle(): int
     {
@@ -98,9 +98,9 @@ class MigrateLegacyData extends Command
                 $this->importExamAssignments();
                 $this->importTrainingAssignments();
                 $this->importCertificates();
-                $this->importNonExamPersonnel();
-                $this->importNepAssignments();
-                $this->importNepAttendances();
+                $this->importOtherExaminationPersonnel();
+                $this->importOepAssignments();
+                $this->importOepAttendances();
                 $this->importSettings();
                 $this->importLetterheads();
                 $this->importEmailTemplates();
@@ -630,9 +630,9 @@ class MigrateLegacyData extends Command
         return [null, null];
     }
 
-    // ─── Non-exam personnel ────────────────────────────────────────────
+    // ─── Other examination personnel ───────────────────────────────────
 
-    private function importNonExamPersonnel(): void
+    private function importOtherExaminationPersonnel(): void
     {
         $typeMap = [
             'Coordinator' => PersonnelType::Coordinator,
@@ -646,8 +646,8 @@ class MigrateLegacyData extends Command
         ];
 
         foreach ($this->legacy->table('proctad_non_exam_personnel')->orderBy('nep_id')->get() as $row) {
-            $id = DB::table('non_exam_personnel')->insertGetId([
-                'nep_id' => $row->nep_id,
+            $id = DB::table('other_examination_personnel')->insertGetId([
+                'oep_id' => $row->nep_id,
                 'first_name' => $row->first_name,
                 'middle_name' => $row->middle_name,
                 'last_name' => $row->last_name,
@@ -666,54 +666,54 @@ class MigrateLegacyData extends Command
                 'created_at' => $row->created_at,
                 'updated_at' => $row->updated_at,
             ]);
-            $this->nepMap[$row->nep_id] = $id;
-            $this->tally('non_exam_personnel');
+            $this->oepMap[$row->nep_id] = $id;
+            $this->tally('other_examination_personnel');
         }
     }
 
-    private function importNepAssignments(): void
+    private function importOepAssignments(): void
     {
         foreach ($this->legacy->table('proctad_nep_school_assignments')->orderBy('assignment_id')->get() as $row) {
             $venueId = $this->venueByPair["{$row->exam_id}|{$row->school_id}"] ?? null;
 
-            if ($venueId === null || ! isset($this->nepMap[$row->nep_id])) {
-                $this->tally('nep_assignments', skipped: true);
+            if ($venueId === null || ! isset($this->oepMap[$row->nep_id])) {
+                $this->tally('oep_assignments', skipped: true);
 
                 continue;
             }
 
-            DB::table('nep_assignments')->insert([
-                'non_exam_personnel_id' => $this->nepMap[$row->nep_id],
+            DB::table('oep_assignments')->insert([
+                'other_examination_personnel_id' => $this->oepMap[$row->nep_id],
                 'examination_school_id' => $venueId,
                 'status' => $row->assignment_status === 'cancelled' ? 'cancelled' : 'confirmed',
                 'assigned_by' => $this->userMap[$row->assigned_by] ?? null,
                 'created_at' => $row->assigned_at,
                 'updated_at' => $row->updated_at,
             ]);
-            $this->tally('nep_assignments');
+            $this->tally('oep_assignments');
         }
     }
 
-    private function importNepAttendances(): void
+    private function importOepAttendances(): void
     {
         foreach ($this->legacy->table('proctad_nep_attendance')->orderBy('attendance_id')->get() as $row) {
             $venueId = $this->venueByPair["{$row->exam_id}|{$row->school_id}"] ?? null;
 
-            if ($venueId === null || ! isset($this->nepMap[$row->nep_id])) {
-                $this->tally('nep_attendances', skipped: true);
+            if ($venueId === null || ! isset($this->oepMap[$row->nep_id])) {
+                $this->tally('oep_attendances', skipped: true);
 
                 continue;
             }
 
-            DB::table('nep_attendances')->insert([
-                'non_exam_personnel_id' => $this->nepMap[$row->nep_id],
+            DB::table('oep_attendances')->insert([
+                'other_examination_personnel_id' => $this->oepMap[$row->nep_id],
                 'examination_school_id' => $venueId,
                 'status' => $row->attendance_status,
                 'scan_method' => $row->scan_method,
                 'scanned_at' => $row->scanned_at,
                 'scanned_by' => $this->userMap[$row->scanned_by] ?? null,
             ]);
-            $this->tally('nep_attendances');
+            $this->tally('oep_attendances');
         }
     }
 

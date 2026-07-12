@@ -8,7 +8,7 @@ use App\Enums\PayeeType;
 use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\FeeSchedule;
-use App\Models\NepAssignment;
+use App\Models\OepAssignment;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 /**
  * Honorarium payroll sheet, generated from the paginated Payroll.xlsx
  * template (sheet "Payroll SE LNU"): Page 1 (rows 12-50) lists every
- * confirmed role except Room Examiner/Proctor plus Non-Exam Personnel,
+ * confirmed role except Room Examiner/Proctor plus Other Examination Personnel,
  * Page 2 (rows 86-127) lists Room Examiners, Page 3 (rows 160-201) lists
  * Proctors. Each page has its own Page Total; the final Grand Total (row
  * 203 in the unmodified template) is recomputed here as the true sum of
@@ -144,7 +144,7 @@ class PayrollReportService
             ->when($venueId, fn ($q) => $q->where('examination_school_id', $venueId))
             ->get();
 
-        $nepAssignments = NepAssignment::query()
+        $oepAssignments = OepAssignment::query()
             ->with('personnel:id,first_name,middle_name,last_name,suffix,personnel_type')
             ->whereHas('examinationSchool', fn ($q) => $q->where('examination_id', $examination->id)
                 ->when($venueId, fn ($q2) => $q2->where('id', $venueId)))
@@ -186,8 +186,8 @@ class PayrollReportService
             ]);
         }
 
-        foreach ($nepAssignments as $nepAssignment) {
-            $type = $nepAssignment->personnel?->personnel_type;
+        foreach ($oepAssignments as $oepAssignment) {
+            $type = $oepAssignment->personnel?->personnel_type;
 
             if (! $type) {
                 continue;
@@ -197,7 +197,7 @@ class PayrollReportService
             $cents = $rateFor(PayeeType::PersonnelType, $type->value, $type->label());
             $page1->push([
                 'A' => $running,
-                'B' => $nepAssignment->personnel?->name,
+                'B' => $oepAssignment->personnel?->name,
                 'C' => $type->label(),
                 'D' => $cents / 100,
                 'F' => $running,

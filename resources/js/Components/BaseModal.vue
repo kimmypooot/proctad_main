@@ -50,7 +50,7 @@ onBeforeUnmount(() => {
             leave-active-class="transition-opacity duration-150 ease-in"
             leave-to-class="opacity-0"
         >
-            <div v-if="show" class="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+            <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div class="fixed inset-0 bg-slate-900/60" aria-hidden="true" @click="emit('close')" />
 
                 <div

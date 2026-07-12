@@ -27,11 +27,11 @@ enum PersonnelType: string
         };
     }
 
-    public function group(): NepRoleGroup
+    public function group(): OepRoleGroup
     {
         return match ($this) {
-            self::Coordinator, self::Inspector, self::Paymaster => NepRoleGroup::Committee,
-            self::PnpOfficer, self::SecurityOfficer, self::Janitor, self::Helper, self::Driver => NepRoleGroup::Support,
+            self::Coordinator, self::Inspector, self::Paymaster => OepRoleGroup::Committee,
+            self::PnpOfficer, self::SecurityOfficer, self::Janitor, self::Helper, self::Driver => OepRoleGroup::Support,
         };
     }
 }

@@ -71,6 +71,46 @@ class ScannerTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('attendance.outcome', 'already_confirmed'));
     }
 
+    public function test_scan_confirmation_reports_venue_and_room(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $member = Member::factory()->create(['field_office_id' => $office->id]);
+        $exam = \App\Models\Examination::factory()->create();
+        $school = \App\Models\School::factory()->create(['name' => 'Leyte National High School']);
+        $venue = \App\Models\ExaminationSchool::factory()->create([
+            'examination_id' => $exam->id,
+            'school_id' => $school->id,
+        ]);
+        $room = \App\Models\ExamRoom::factory()->create([
+            'examination_school_id' => $venue->id,
+            'room_number' => 'Room-07',
+            'designation' => 'Professional',
+        ]);
+        \App\Models\ExamAssignment::factory()->create([
+            'examination_id' => $exam->id,
+            'member_id' => $member->id,
+            'field_office_id' => $office->id,
+            'examination_school_id' => $venue->id,
+            'exam_room_id' => $room->id,
+            'role' => 'proctor',
+        ]);
+        $admin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $office->id]);
+
+        $this->actingAs($admin)
+            ->get("/scanner?code={$member->proctad_id}&examination_id={$exam->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('attendance.outcome', 'confirmed')
+                ->where('attendance.venue', 'Leyte National High School')
+                ->where('attendance.room', 'Room-07')
+                ->where('attendance.designation', 'Professional')
+                ->where('result.venue', 'Leyte National High School')
+                ->where('result.room', 'Room-07')
+                ->where('result.designation', 'Professional')
+                ->where('attendanceSummary.recent.0.venue', 'Leyte National High School')
+                ->where('attendanceSummary.recent.0.room', 'Room-07')
+                ->where('attendanceSummary.recent.0.designation', 'Professional'));
+    }
+
     public function test_scan_reports_not_assigned_when_member_has_no_assignment(): void
     {
         $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
@@ -101,7 +141,7 @@ class ScannerTest extends TestCase
             'field_office_id' => $office->id,
             'attendance_confirmed_at' => now(),
         ]);
-        \App\Models\ExamAssignment::factory()->create([
+        $absent = \App\Models\ExamAssignment::factory()->create([
             'examination_id' => $exam->id,
             'field_office_id' => $office->id,
         ]);
@@ -113,7 +153,8 @@ class ScannerTest extends TestCase
                 ->where('attendanceSummary.total', 2)
                 ->where('attendanceSummary.present', 1)
                 ->where('attendanceSummary.absent', 1)
-                ->where('attendanceSummary.recent.0.id', "member:{$present->id}"));
+                ->where('attendanceSummary.recent.0.id', "member:{$present->id}")
+                ->where('attendanceSummary.roster.0.code', $absent->member->proctad_id));
     }
 
     public function test_bulk_mark_attendance_marks_only_unconfirmed_members(): void

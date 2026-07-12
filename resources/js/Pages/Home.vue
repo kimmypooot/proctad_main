@@ -207,6 +207,30 @@ const faqs = [
             </div>
         </section>
 
+        <!-- Post-Examination Evaluation CTA (for already-serving Test Administrators) -->
+        <section class="bg-slate-50 py-16 sm:py-24" aria-labelledby="evaluation-heading">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div class="reveal flex flex-col items-center gap-8 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center sm:px-16 lg:flex-row lg:gap-12 lg:text-left">
+                    <span class="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                        <AppIcon name="clipboard-check" class="h-8 w-8" />
+                    </span>
+                    <div class="flex-1">
+                        <h2 id="evaluation-heading" class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                            Already Served as a Test Administrator?
+                        </h2>
+                        <p class="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
+                            Submit your Post-Examination Evaluation to help us assess venue readiness, staff performance,
+                            and the overall examinee experience for future examinations.
+                        </p>
+                    </div>
+                    <BaseButton href="/evaluation" variant="primary" size="lg" class="shrink-0">
+                        Submit Evaluation
+                        <AppIcon name="arrow-right" class="h-4 w-4" />
+                    </BaseButton>
+                </div>
+            </div>
+        </section>
+
         <!-- Statistics -->
         <section class="bg-brand-800 py-16 sm:py-20" aria-label="Program statistics">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
