@@ -1,0 +1,152 @@
+<script setup>
+import { reactive } from 'vue';
+import { Head, useForm } from '@inertiajs/vue3';
+import DashboardLayout from '@/Layouts/DashboardLayout.vue';
+import BaseBadge from '@/Components/BaseBadge.vue';
+import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
+
+const props = defineProps({
+    examRoleRates: { type: Array, required: true },
+    personnelTypeRates: { type: Array, required: true },
+    can: { type: Object, required: true },
+});
+
+const groupBy = (rows) => {
+    const groups = [];
+    const byKey = new Map();
+
+    for (const row of rows) {
+        if (!byKey.has(row.group)) {
+            const group = { key: row.group, label: row.group_label, rows: [] };
+            byKey.set(row.group, group);
+            groups.push(group);
+        }
+        byKey.get(row.group).rows.push(row);
+    }
+
+    return groups;
+};
+
+const examRoleGroups = groupBy(props.examRoleRates);
+const personnelTypeGroups = groupBy(props.personnelTypeRates);
+
+const forms = reactive({});
+
+const formFor = (row) => {
+    const key = `${row.payee_type}:${row.payee_value}`;
+    if (!forms[key]) {
+        forms[key] = useForm({
+            payee_type: row.payee_type,
+            payee_value: row.payee_value,
+            amount: row.amount,
+        });
+    }
+    return forms[key];
+};
+
+const save = (row) => {
+    const form = formFor(row);
+    form.put('/fee-schedules', { preserveScroll: true });
+};
+</script>
+
+<template>
+    <Head title="Fee Management" />
+
+    <DashboardLayout>
+        <DashboardPageHeader
+            title="Fee Management"
+            subtitle="Configure honorarium rates per examination role and non-exam personnel type. These rates are the single source used to compute Payroll and Payroll Posting reports."
+        />
+
+        <div class="mt-6 space-y-8">
+            <section v-for="group in examRoleGroups" :key="`exam-role-${group.key}`">
+                <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ group.label }}</h2>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2">Role</th>
+                                <th class="px-3 py-2">Rate (PHP)</th>
+                                <th class="px-3 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <tr v-for="row in group.rows" :key="row.payee_value" class="hover:bg-brand-50/40">
+                                <td class="px-3 py-2 font-medium text-slate-900">
+                                    {{ row.label }}
+                                    <BaseBadge v-if="!row.configured" variant="warning" size="xs" class="ml-2">Not set</BaseBadge>
+                                </td>
+                                <td class="px-3 py-2">
+                                    <input
+                                        v-model.number="formFor(row).amount"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        class="w-32 rounded-md border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                        :disabled="!can.manage"
+                                    />
+                                </td>
+                                <td class="px-3 py-2">
+                                    <button
+                                        v-if="can.manage"
+                                        type="button"
+                                        class="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                                        :disabled="formFor(row).processing"
+                                        @click="save(row)"
+                                    >
+                                        Save
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section v-for="group in personnelTypeGroups" :key="`personnel-type-${group.key}`">
+                <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ group.label }}</h2>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="px-3 py-2">Personnel Type</th>
+                                <th class="px-3 py-2">Rate (PHP)</th>
+                                <th class="px-3 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <tr v-for="row in group.rows" :key="row.payee_value" class="hover:bg-brand-50/40">
+                                <td class="px-3 py-2 font-medium text-slate-900">
+                                    {{ row.label }}
+                                    <BaseBadge v-if="!row.configured" variant="warning" size="xs" class="ml-2">Not set</BaseBadge>
+                                </td>
+                                <td class="px-3 py-2">
+                                    <input
+                                        v-model.number="formFor(row).amount"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        class="w-32 rounded-md border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                        :disabled="!can.manage"
+                                    />
+                                </td>
+                                <td class="px-3 py-2">
+                                    <button
+                                        v-if="can.manage"
+                                        type="button"
+                                        class="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                                        :disabled="formFor(row).processing"
+                                        @click="save(row)"
+                                    >
+                                        Save
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </DashboardLayout>
+</template>

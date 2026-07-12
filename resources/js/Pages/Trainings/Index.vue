@@ -1,0 +1,143 @@
+<script setup>
+import { ref } from 'vue';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import DashboardLayout from '@/Layouts/DashboardLayout.vue';
+import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseButton from '@/Components/BaseButton.vue';
+import BaseModal from '@/Components/BaseModal.vue';
+import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
+import EmptyState from '@/Components/EmptyState.vue';
+import IconButton from '@/Components/IconButton.vue';
+import SelectInput from '@/Components/SelectInput.vue';
+import TextInput from '@/Components/TextInput.vue';
+
+const props = defineProps({
+    trainings: { type: Array, required: true },
+    types: { type: Array, required: true },
+    can: { type: Object, required: true },
+});
+
+const showForm = ref(false);
+const editing = ref(null);
+
+const form = useForm({
+    title: '',
+    type: '',
+    training_date: '',
+    end_date: '',
+    venue: '',
+});
+
+const openCreate = () => {
+    editing.value = null;
+    form.reset();
+    form.clearErrors();
+    showForm.value = true;
+};
+
+const openEdit = (training) => {
+    editing.value = training;
+    form.clearErrors();
+    form.title = training.title;
+    form.type = training.type;
+    form.training_date = training.training_date;
+    form.end_date = '';
+    form.venue = training.venue ?? '';
+    showForm.value = true;
+};
+
+const submit = () => {
+    const options = { preserveScroll: true, onSuccess: () => (showForm.value = false) };
+    if (editing.value) {
+        form.put(`/trainings/${editing.value.id}`, options);
+    } else {
+        form.post('/trainings', options);
+    }
+};
+</script>
+
+<template>
+    <Head title="Trainings" />
+
+    <DashboardLayout>
+        <DashboardPageHeader
+            title="Training Sessions"
+            subtitle="Orientation, briefing, and examination-administration training for PROCTAD members."
+        >
+            <template v-if="can.manage" #actions>
+                <BaseButton variant="primary" size="sm" @click="openCreate">
+                    Add Training
+                </BaseButton>
+            </template>
+        </DashboardPageHeader>
+
+        <div v-if="trainings.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <tr>
+                        <th class="px-3 py-2">Training</th>
+                        <th class="hidden px-3 py-2 sm:table-cell">Type</th>
+                        <th class="px-3 py-2">Date</th>
+                        <th class="hidden px-3 py-2 xl:table-cell">Venue</th>
+                        <th class="hidden px-3 py-2 md:table-cell">Participants</th>
+                        <th class="px-3 py-2">Status</th>
+                        <th class="w-10 px-3 py-2 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <tr v-for="training in trainings" :key="training.id" class="transition-colors hover:bg-brand-50/40">
+                        <td class="px-3 py-2">
+                            <Link :href="`/trainings/${training.id}`" class="font-medium text-slate-900 hover:underline">
+                                {{ training.title }}
+                            </Link>
+                            <p class="text-xs text-slate-400 sm:hidden">{{ training.type_label }}</p>
+                        </td>
+                        <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 sm:table-cell">{{ training.type_label }}</td>
+                        <td class="whitespace-nowrap px-3 py-2 text-slate-600">{{ training.training_date }}</td>
+                        <td class="hidden px-3 py-2 text-slate-600 xl:table-cell">{{ training.venue ?? '—' }}</td>
+                        <td class="hidden px-3 py-2 text-slate-600 md:table-cell">{{ training.assignments_count }}</td>
+                        <td class="px-3 py-2">
+                            <BaseBadge :variant="training.completed ? 'success' : 'warning'">
+                                {{ training.completed ? 'Completed' : 'Scheduled' }}
+                            </BaseBadge>
+                        </td>
+                        <td class="px-3 py-2 text-center">
+                            <IconButton v-if="can.manage && !training.completed" icon="pencil" label="Edit" @click="openEdit(training)" />
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div v-else class="mt-6">
+            <EmptyState
+                icon="academic-cap"
+                title="No training sessions yet"
+                description="Scheduled trainings and briefings appear here."
+            />
+        </div>
+
+        <BaseModal :show="showForm" :title="editing ? 'Edit Training' : 'Add Training'" @close="showForm = false">
+            <form id="training-form" class="space-y-4" novalidate @submit.prevent="submit">
+                <TextInput v-model="form.title" label="Title" required placeholder="e.g. PROCTAD Orientation" :error="form.errors.title" />
+                <SelectInput v-model="form.type" label="Type" required :options="types" :error="form.errors.type" />
+                <TextInput v-model="form.training_date" label="Training Date" type="date" required :error="form.errors.training_date" />
+                <TextInput v-model="form.end_date" label="End Date" type="date" optional :error="form.errors.end_date" />
+                <TextInput v-model="form.venue" label="Venue" optional :error="form.errors.venue" />
+            </form>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="showForm = false">Cancel</BaseButton>
+                <BaseButton
+                    type="submit"
+                    form="training-form"
+                    variant="primary"
+                    size="sm"
+                    :loading="form.processing"
+                    :disabled="form.processing"
+                >
+                    {{ editing ? 'Save Changes' : 'Add Training' }}
+                </BaseButton>
+            </template>
+        </BaseModal>
+    </DashboardLayout>
+</template>

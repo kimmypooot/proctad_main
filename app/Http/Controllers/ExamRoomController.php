@@ -1,0 +1,244 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Enums\ExamRole;
+use App\Enums\UserRole;
+use App\Models\ExaminationSchool;
+use App\Models\ExamRoom;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class ExamRoomController extends Controller
+{
+    public const DESIGNATIONS = [
+        'Professional',
+        'Sub-Professional',
+        'Fire Officer Examination',
+        'Penology Officer Examination',
+        'BCLTE',
+        'ICLTE',
+        'Special Needs',
+    ];
+
+    private const ROOM_ROLES = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
+
+    private const ROOMS_PER_SUPERVISOR = 5;
+
+    public function index(Request $request, ExaminationSchool $venue): Response
+    {
+        Gate::authorize('create', ExaminationSchool::class);
+        $this->authorizeForVenue($request->user(), $venue);
+
+        $venue->loadMissing('school', 'examination');
+
+        $rooms = $venue->rooms()->orderBy('room_number')->get();
+
+        $assignments = $venue->assignments()
+            ->whereIn('role', self::ROOM_ROLES)
+            ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
+            ->get()
+            ->map(fn ($a) => [
+                'id' => $a->id,
+                'member' => ['id' => $a->member->id, 'name' => $a->member->name],
+                'role' => $a->role->value,
+                'exam_room_id' => $a->exam_room_id,
+            ]);
+
+        return Inertia::render('Examinations/Rooms', [
+            'examination' => [
+                'id' => $venue->examination->id,
+                'title' => $venue->examination->title,
+                'exam_date' => $venue->examination->exam_date->toDateString(),
+            ],
+            'venue' => [
+                'id' => $venue->id,
+                'school_name' => $venue->school?->name,
+                'municipality' => $venue->school?->municipality,
+                'contact_person' => $venue->school?->contact_person,
+                'contact_number' => $venue->school?->contact_number,
+            ],
+            'rooms' => $rooms->map(fn (ExamRoom $room) => [
+                'id' => $room->id,
+                'room_number' => $room->room_number,
+                'capacity' => $room->capacity,
+                'designation' => $room->designation,
+                'created_at' => $room->created_at->format('M d, Y'),
+            ]),
+            'assignments' => $assignments,
+            'stats' => $this->stats($rooms, $assignments),
+            'designations' => self::DESIGNATIONS,
+        ]);
+    }
+
+    public function store(Request $request, ExaminationSchool $venue): RedirectResponse
+    {
+        Gate::authorize('create', ExaminationSchool::class);
+        $this->authorizeForVenue($request->user(), $venue);
+
+        $validated = $request->validate([
+            'room_number' => ['required', 'string', 'max:50'],
+            'capacity' => ['required', 'integer', 'min:1', 'max:500'],
+            'designation' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $venue->rooms()->create($validated);
+
+        return back()->with('success', "Room {$validated['room_number']} added.");
+    }
+
+    public function update(Request $request, ExamRoom $room): RedirectResponse
+    {
+        $room->loadMissing('examinationSchool.school');
+        $this->authorizeForVenue($request->user(), $room->examinationSchool);
+
+        $validated = $request->validate([
+            'room_number' => ['required', 'string', 'max:50'],
+            'capacity' => ['required', 'integer', 'min:1', 'max:500'],
+            'designation' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $room->update($validated);
+
+        return back()->with('success', 'Room updated.');
+    }
+
+    public function destroy(Request $request, ExamRoom $room): RedirectResponse
+    {
+        $room->loadMissing('examinationSchool.school');
+        $this->authorizeForVenue($request->user(), $room->examinationSchool);
+
+        $room->delete();
+
+        return back()->with('success', 'Room removed.');
+    }
+
+    /** Replace all rooms for the venue with a fresh, sequentially-numbered set — matches legacy's "Generate/Regenerate Rooms". */
+    public function bulkGenerate(Request $request, ExaminationSchool $venue): RedirectResponse
+    {
+        Gate::authorize('create', ExaminationSchool::class);
+        $this->authorizeForVenue($request->user(), $venue);
+
+        $validated = $request->validate([
+            'count' => ['required', 'integer', 'min:1', 'max:100'],
+            'capacity' => ['required', 'integer', 'min:1', 'max:9999'],
+        ]);
+
+        DB::transaction(function () use ($venue, $validated) {
+            $venue->assignments()->whereIn('role', self::ROOM_ROLES)->update(['exam_room_id' => null]);
+            $venue->rooms()->delete();
+
+            for ($n = 1; $n <= $validated['count']; $n++) {
+                $venue->rooms()->create([
+                    'room_number' => sprintf('Room-%03d', $n),
+                    'capacity' => $validated['capacity'],
+                ]);
+            }
+        });
+
+        return back()->with('success', "{$validated['count']} room(s) generated.");
+    }
+
+    /** Append N more rooms without touching existing ones — matches legacy's "Add More Rooms" (additive, no confirmation). */
+    public function bulkAdd(Request $request, ExaminationSchool $venue): RedirectResponse
+    {
+        Gate::authorize('create', ExaminationSchool::class);
+        $this->authorizeForVenue($request->user(), $venue);
+
+        $validated = $request->validate([
+            'count' => ['required', 'integer', 'min:1', 'max:100'],
+            'capacity' => ['required', 'integer', 'min:1', 'max:9999'],
+            'designation' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $nextNumber = $venue->rooms()
+            ->get()
+            ->max(fn (ExamRoom $room) => (int) preg_replace('/\D/', '', $room->room_number)) + 1;
+
+        for ($i = 0; $i < $validated['count']; $i++) {
+            $venue->rooms()->create([
+                'room_number' => sprintf('Room-%03d', $nextNumber + $i),
+                'capacity' => $validated['capacity'],
+                'designation' => $validated['designation'] ?? null,
+            ]);
+        }
+
+        return back()->with('success', "{$validated['count']} room(s) added.");
+    }
+
+    /** Delete every room for the venue — matches legacy's "Clear All Rooms". */
+    public function clearAll(Request $request, ExaminationSchool $venue): RedirectResponse
+    {
+        Gate::authorize('create', ExaminationSchool::class);
+        $this->authorizeForVenue($request->user(), $venue);
+
+        DB::transaction(function () use ($venue) {
+            $venue->assignments()->whereIn('role', self::ROOM_ROLES)->update(['exam_room_id' => null]);
+            $venue->rooms()->delete();
+        });
+
+        return back()->with('success', 'All rooms cleared.');
+    }
+
+    /** Bulk-apply a designation to all rooms or only undesignated ones — matches legacy's "Override Room Designations" bulk apply. */
+    public function overrideDesignation(Request $request, ExaminationSchool $venue): RedirectResponse
+    {
+        Gate::authorize('create', ExaminationSchool::class);
+        $this->authorizeForVenue($request->user(), $venue);
+
+        $validated = $request->validate([
+            'designation' => ['required', 'string', 'max:100'],
+            'scope' => ['required', 'string', 'in:all,undesignated'],
+        ]);
+
+        $venue->rooms()
+            ->when($validated['scope'] === 'undesignated', fn ($q) => $q->whereNull('designation'))
+            ->update(['designation' => $validated['designation']]);
+
+        return back()->with('success', 'Room designations updated.');
+    }
+
+    /** @return array{rooms_count:int,total_capacity:int,required:array,assigned:array,required_total:int,assigned_total:int,ratio:?int} */
+    private function stats($rooms, $assignments): array
+    {
+        $roomsCount = $rooms->count();
+        $assignedByRole = collect($assignments)->countBy('role');
+        $required = [
+            'proctor' => $roomsCount,
+            'room_examiner' => $roomsCount,
+            'supervising_examiner' => (int) ceil($roomsCount / self::ROOMS_PER_SUPERVISOR),
+        ];
+        $requiredTotal = array_sum($required);
+        $assignedTotal = collect($assignments)->count();
+
+        return [
+            'rooms_count' => $roomsCount,
+            'total_capacity' => $rooms->sum('capacity'),
+            'required' => $required,
+            'assigned' => [
+                'proctor' => $assignedByRole->get('proctor', 0),
+                'room_examiner' => $assignedByRole->get('room_examiner', 0),
+                'supervising_examiner' => $assignedByRole->get('supervising_examiner', 0),
+            ],
+            'required_total' => $requiredTotal,
+            'assigned_total' => $assignedTotal,
+            'ratio' => $requiredTotal > 0 ? min(100, round(($assignedTotal / $requiredTotal) * 100)) : null,
+        ];
+    }
+
+    private function authorizeForVenue(User $user, ExaminationSchool $venue): void
+    {
+        $venue->loadMissing('school');
+
+        abort_unless(
+            $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
+                || ($user->role === UserRole::FoAdmin && $user->field_office_id === $venue->school?->field_office_id),
+            403,
+        );
+    }
+}

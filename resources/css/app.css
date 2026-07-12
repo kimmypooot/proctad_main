@@ -1,0 +1,121 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+/*
+ * Design system conventions (documented, not enforced by config — see FRONTEND_AUDIT.md §9):
+ *
+ * Border radius:
+ *   rounded-lg   — controls: buttons, inputs, pagination items, icon-chrome buttons, banners (BaseAlert)
+ *   rounded-xl   — surfaces: cards, panels, modal bodies, ID cards
+ *   rounded-full — pills: badges, avatars, toggle switches
+ *
+ * Shadow / elevation:
+ *   shadow-sm  — buttons (primary/accent/white variants), scrolled sticky nav
+ *   shadow-md  — ID cards
+ *   shadow-lg  — dropdowns (notifications, account menu), mobile nav panel
+ *   shadow-xl  — modal surface (BaseModal)
+ */
+
+@theme {
+    /* Typography — Poppins everywhere */
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Brand — CSC RO VIII */
+    --color-brand-50: #eef0fb;
+    --color-brand-100: #dde1f6;
+    --color-brand-200: #b9c0ec;
+    --color-brand-300: #8f9adf;
+    --color-brand-400: #5f6ecb;
+    --color-brand-500: #3d4bae;
+    --color-brand-600: #2A338F;
+    --color-brand-700: #232b78;
+    --color-brand-800: #1c2260;
+    --color-brand-900: #151a49;
+    --color-brand-950: #0d1030;
+
+    --color-accent-50: #fdecee;
+    --color-accent-100: #fbd5d9;
+    --color-accent-200: #f6a9b0;
+    --color-accent-300: #f17781;
+    --color-accent-400: #ee4552;
+    --color-accent-500: #EC1C2D;
+    --color-accent-600: #c8121f;
+    --color-accent-700: #a30f1a;
+    --color-accent-800: #7e0c14;
+    --color-accent-900: #5c090f;
+
+    /* Motion */
+    --animate-fade-in: fade-in 0.25s ease-out both;
+    --animate-fade-up: fade-up 0.3s ease-out both;
+
+    @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes fade-up {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+}
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+        text-rendering: optimizeLegibility;
+    }
+
+    /* Visible, consistent focus indicator for keyboard users */
+    :focus-visible {
+        outline: 2px solid var(--color-brand-600);
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
+
+    ::selection {
+        background-color: var(--color-brand-600);
+        color: white;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+}
+
+@layer utilities {
+    /* Scroll-reveal helper: elements start hidden, .is-revealed fades them up. */
+    .reveal {
+        opacity: 0;
+        transform: translateY(16px);
+        transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    }
+
+    .reveal.is-revealed {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .reveal {
+            opacity: 1;
+            transform: none;
+        }
+    }
+}

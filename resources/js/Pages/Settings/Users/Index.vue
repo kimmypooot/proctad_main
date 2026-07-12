@@ -1,0 +1,243 @@
+<script setup>
+import { computed, ref, watch } from 'vue';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import DashboardLayout from '@/Layouts/DashboardLayout.vue';
+import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseButton from '@/Components/BaseButton.vue';
+import BaseModal from '@/Components/BaseModal.vue';
+import BasePagination from '@/Components/BasePagination.vue';
+import CheckboxInput from '@/Components/CheckboxInput.vue';
+import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
+import EmptyState from '@/Components/EmptyState.vue';
+import IconButton from '@/Components/IconButton.vue';
+import SelectInput from '@/Components/SelectInput.vue';
+import TableSkeleton from '@/Components/TableSkeleton.vue';
+import TextInput from '@/Components/TextInput.vue';
+
+const props = defineProps({
+    users: { type: Object, required: true },
+    filters: { type: Object, default: () => ({}) },
+    roles: { type: Array, required: true },
+    fieldOffices: { type: Array, required: true },
+    can: { type: Object, required: true },
+});
+
+const currentUserId = computed(() => usePage().props.auth.user.id);
+
+const search = ref(props.filters.search ?? '');
+const role = ref(props.filters.role ?? '');
+const loading = ref(false);
+
+let debounce = null;
+const applyFilters = () => router.get('/users', {
+    search: search.value || undefined,
+    role: role.value || undefined,
+}, {
+    preserveState: true,
+    replace: true,
+    only: ['users', 'filters'],
+    onStart: () => (loading.value = true),
+    onFinish: () => (loading.value = false),
+});
+
+watch(search, () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(applyFilters, 350);
+});
+watch(role, applyFilters);
+
+/* --- Create --- */
+const showCreate = ref(false);
+const createForm = useForm({
+    first_name: '', middle_name: '', last_name: '', suffix: '',
+    email: '', username: '', role: '', field_office_id: '',
+});
+
+const openCreate = () => {
+    createForm.reset();
+    createForm.clearErrors();
+    showCreate.value = true;
+};
+
+const submitCreate = () => createForm.post('/users', {
+    preserveScroll: true,
+    onSuccess: () => (showCreate.value = false),
+});
+
+/* --- Edit role / field office / active --- */
+const editing = ref(null);
+const editForm = useForm({ role: '', field_office_id: '', is_active: true });
+
+const openEdit = (user) => {
+    editing.value = user;
+    editForm.clearErrors();
+    editForm.role = user.role;
+    editForm.field_office_id = user.field_office?.id ?? '';
+    editForm.is_active = user.is_active;
+};
+
+const submitEdit = () => editForm.put(`/users/${editing.value.id}`, {
+    preserveScroll: true,
+    onSuccess: () => (editing.value = null),
+});
+
+/* --- Password reset --- */
+const resetForm = useForm({});
+const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-reset`, { preserveScroll: true });
+</script>
+
+<template>
+    <Head title="User Accounts" />
+
+    <DashboardLayout>
+        <DashboardPageHeader
+            title="User Accounts"
+            subtitle="Staff accounts. New accounts receive an emailed link to set their own password."
+        >
+            <template v-if="can.create" #actions>
+                <BaseButton variant="primary" size="sm" @click="openCreate">
+                    Add User
+                </BaseButton>
+            </template>
+        </DashboardPageHeader>
+
+        <!-- Filters -->
+        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+            <TextInput v-model="search" label="Search" placeholder="Name, email, or username" />
+            <SelectInput
+                v-model="role"
+                label="Role"
+                placeholder="All roles"
+                :options="[{ value: '', label: 'All roles' }, ...roles]"
+            />
+        </div>
+
+        <!-- Results -->
+        <div v-if="loading || users.data.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <tr>
+                        <th class="px-3 py-2">Name</th>
+                        <th class="px-3 py-2">Role</th>
+                        <th class="hidden px-3 py-2 xl:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 md:table-cell">Last Login</th>
+                        <th class="px-3 py-2">Status</th>
+                        <th class="px-3 py-2 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <TableSkeleton v-if="loading" :columns="6" />
+                    <tr v-for="user in loading ? [] : users.data" :key="user.id" class="transition-colors hover:bg-brand-50/40">
+                        <td class="max-w-[12rem] px-3 py-2 sm:max-w-[14rem]">
+                            <p class="truncate font-medium text-slate-900" :title="user.name">{{ user.name }}</p>
+                            <p class="truncate text-xs text-slate-500" :title="user.email">{{ user.email }}</p>
+                            <p class="truncate text-xs text-slate-400 xl:hidden">{{ user.field_office?.name ?? '—' }}</p>
+                        </td>
+                        <td class="max-w-[8rem] truncate px-3 py-2 text-slate-600">{{ user.role_label }}</td>
+                        <td class="hidden max-w-[10rem] truncate px-3 py-2 text-slate-600 xl:table-cell" :title="user.field_office?.name ?? ''">{{ user.field_office?.name ?? '—' }}</td>
+                        <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 md:table-cell">{{ user.last_login_at ?? 'Never' }}</td>
+                        <td class="px-3 py-2">
+                            <div class="flex flex-col gap-1">
+                                <BaseBadge :variant="user.is_active ? 'success' : 'neutral'">
+                                    {{ user.is_active ? 'Active' : 'Deactivated' }}
+                                </BaseBadge>
+                                <BaseBadge v-if="user.must_change_password" variant="warning">Password pending</BaseBadge>
+                            </div>
+                        </td>
+                        <td class="px-3 py-2 text-center">
+                            <div class="inline-flex gap-1">
+                                <IconButton icon="pencil" label="Edit" @click="openEdit(user)" />
+                                <IconButton
+                                    icon="arrow-path"
+                                    label="Reset Password"
+                                    :disabled="resetForm.processing"
+                                    @click="sendReset(user)"
+                                />
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div v-else class="mt-6">
+            <EmptyState icon="user-group" title="No users found" description="No accounts match your search or filters." />
+        </div>
+
+        <div class="mt-6">
+            <BasePagination :links="users.links" />
+        </div>
+
+        <!-- Create modal -->
+        <BaseModal :show="showCreate" title="Add User" @close="showCreate = false">
+            <form id="user-create-form" class="space-y-4" novalidate @submit.prevent="submitCreate">
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <TextInput v-model="createForm.first_name" label="First Name" required :error="createForm.errors.first_name" />
+                    <TextInput v-model="createForm.last_name" label="Last Name" required :error="createForm.errors.last_name" />
+                    <TextInput v-model="createForm.middle_name" label="Middle Name" optional :error="createForm.errors.middle_name" />
+                    <TextInput v-model="createForm.suffix" label="Suffix" optional :error="createForm.errors.suffix" />
+                </div>
+                <TextInput v-model="createForm.email" label="Email Address" type="email" required :error="createForm.errors.email" />
+                <TextInput v-model="createForm.username" label="Username" optional :error="createForm.errors.username" />
+                <SelectInput v-model="createForm.role" label="Role" required :options="roles" :error="createForm.errors.role" />
+                <SelectInput
+                    v-model="createForm.field_office_id"
+                    label="Testing Center"
+                    optional
+                    placeholder="Region-wide / none"
+                    :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
+                    :error="createForm.errors.field_office_id"
+                />
+            </form>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="showCreate = false">Cancel</BaseButton>
+                <BaseButton
+                    type="submit"
+                    form="user-create-form"
+                    variant="primary"
+                    size="sm"
+                    :loading="createForm.processing"
+                    :disabled="createForm.processing"
+                >
+                    Add User
+                </BaseButton>
+            </template>
+        </BaseModal>
+
+        <!-- Edit modal -->
+        <BaseModal :show="!!editing" title="Edit User" @close="editing = null">
+            <form id="user-edit-form" class="space-y-4" novalidate @submit.prevent="submitEdit">
+                <p class="text-sm text-slate-600">
+                    <strong>{{ editing?.name }}</strong>
+                    <span class="ml-1 text-xs text-slate-400">{{ editing?.email }}</span>
+                </p>
+                <SelectInput v-model="editForm.role" label="Role" required :options="roles" :error="editForm.errors.role" />
+                <SelectInput
+                    v-model="editForm.field_office_id"
+                    label="Testing Center"
+                    optional
+                    placeholder="Region-wide / none"
+                    :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
+                    :error="editForm.errors.field_office_id"
+                />
+                <CheckboxInput v-model="editForm.is_active" :disabled="editing?.id === currentUserId">
+                    Active
+                    <span v-if="editing?.id === currentUserId" class="text-xs text-slate-400">(you cannot deactivate your own account)</span>
+                </CheckboxInput>
+            </form>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="editing = null">Cancel</BaseButton>
+                <BaseButton
+                    type="submit"
+                    form="user-edit-form"
+                    variant="primary"
+                    size="sm"
+                    :loading="editForm.processing"
+                    :disabled="editForm.processing"
+                >
+                    Save Changes
+                </BaseButton>
+            </template>
+        </BaseModal>
+    </DashboardLayout>
+</template>
