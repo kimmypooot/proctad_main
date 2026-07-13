@@ -110,4 +110,21 @@ class CertificateController extends Controller
             "{$certificate->certificate_no}.pdf",
         );
     }
+
+    /**
+     * Inline preview of the released PDF (for the "View" modal), same
+     * authorization as download() but rendered in the browser instead of
+     * forcing an attachment.
+     */
+    public function view(Certificate $certificate): StreamedResponse
+    {
+        Gate::authorize('download', $certificate);
+
+        abort_unless($certificate->pdf_path && Storage::disk('local')->exists($certificate->pdf_path), 404);
+
+        return Storage::disk('local')->response(
+            $certificate->pdf_path,
+            "{$certificate->certificate_no}.pdf",
+        );
+    }
 }

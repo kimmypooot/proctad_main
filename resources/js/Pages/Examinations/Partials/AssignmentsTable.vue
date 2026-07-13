@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -21,7 +21,7 @@ const props = defineProps({
     can: { type: Object, required: true },
 });
 
-const { venueOptions, roomOptionsFor } = useVenueOptions(computed(() => props.venues));
+const { venueOptions, roomOptionsFor, staffedRoomCountFor, ONE_PER_ROOM_ROLES } = useVenueOptions(computed(() => props.venues));
 
 /* --- Status quick-filter (All / Pending / Confirmed / Declined / Expired / Cancelled) --- */
 const statusFilter = ref('all');
@@ -106,7 +106,19 @@ const toggleEditCoveredSchool = (id) => {
     }
 };
 
-const editRoomOptions = computed(() => roomOptionsFor(editForm.examination_school_id));
+const editIsRoomExclusiveRole = computed(() => ONE_PER_ROOM_ROLES.includes(editForm.role));
+const editRoleLabel = computed(() => props.roles.find((r) => r.value === editForm.role)?.label ?? '');
+const editRoomOptions = computed(() => roomOptionsFor(editForm.examination_school_id, editForm.role, editingAssignment.value?.id));
+const editStaffedRoomCount = computed(() => staffedRoomCountFor(editForm.examination_school_id, editForm.role));
+
+// A role change may invalidate the previously-picked room (now staffed by
+// someone else for the new role) — drop it instead of silently resubmitting
+// a room the server will reject anyway.
+watch(editRoomOptions, (options) => {
+    if (editForm.exam_room_id && !options.some((o) => o.value === editForm.exam_room_id)) {
+        editForm.exam_room_id = '';
+    }
+});
 
 const saveEdit = () => editForm
     .transform((data) => ({
@@ -363,10 +375,18 @@ const submitBulkConfirm = () => {
                 v-model="editForm.exam_room_id"
                 label="Room"
                 optional
-                placeholder="Not yet assigned"
+                :placeholder="editIsRoomExclusiveRole && editForm.examination_school_id && !editRoomOptions.length
+                    ? 'No open rooms for this role'
+                    : 'Not yet assigned'"
                 :options="editRoomOptions"
                 :error="editForm.errors.exam_room_id"
             />
+            <p
+                v-if="editIsRoomExclusiveRole && editForm.examination_school_id && !editRoomOptions.length"
+                class="text-xs text-amber-700"
+            >
+                Every room at this venue already has a {{ editRoleLabel }} assigned ({{ editStaffedRoomCount }} room(s)).
+            </p>
             <div
                 v-if="editingAssignment?.rating_is_computed"
                 class="rounded-lg border border-brand-200 bg-brand-50/60 p-3 text-sm text-brand-800"

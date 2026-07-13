@@ -84,7 +84,7 @@
         <p class="presented">
             {{ $certificate->type->value === 'designation_order' ? 'Be it known that' : 'is hereby presented to' }}
         </p>
-        <p class="name">{{ $member->name }}</p>
+        <p class="name">{{ $member->nameFirstLast() }}</p>
         <p class="proctad-id">{{ $member->proctad_id }} · {{ $member->fieldOffice?->name }}</p>
 
         <p class="body-text">{{ $body }}</p>

@@ -71,14 +71,12 @@ class CertificateSeeder extends Seeder
             ->whereNotNull('attendance_confirmed_at')
             ->get();
 
-        foreach ($assignments as $index => $assignment) {
-            $certificate = $certificates->generatePending(CertificateType::Completion, $assignment, $requestedBy);
-
-            // Completion certificates auto-release on training completion in the
-            // real flow; mirror that here, leaving one pending for demo purposes.
-            if ($index > 0) {
-                $certificates->release($certificate, $requestedBy);
-            }
+        foreach ($assignments as $assignment) {
+            // generatePending() auto-releases Completion certificates itself —
+            // there's no approver role for this type, so none can ever be left
+            // pending (a prior version of this seeder did that "for demo
+            // purposes," which produced a certificate nobody could approve).
+            $certificates->generatePending(CertificateType::Completion, $assignment, $requestedBy);
         }
 
         if ($assignments->isNotEmpty()) {

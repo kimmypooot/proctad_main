@@ -67,9 +67,9 @@ class ExamRoomTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('roomBreakdown.0.is_supervisor_anchor', true)
-                ->where('roomBreakdown.0.supervising_examiner', 'JUAN DELA CRUZ')
+                ->where('roomBreakdown.0.supervising_examiner', 'DELA CRUZ, JUAN')
                 ->where('roomBreakdown.1.is_supervisor_anchor', false)
-                ->where('roomBreakdown.1.supervising_examiner', 'JUAN DELA CRUZ')
+                ->where('roomBreakdown.1.supervising_examiner', 'DELA CRUZ, JUAN')
                 ->where('stats.assigned.proctor', 0)
                 ->where('stats.assigned.supervising_examiner', 1)
                 ->where('stats.assigned_total', 1));

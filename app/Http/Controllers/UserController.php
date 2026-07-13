@@ -21,7 +21,7 @@ class UserController extends Controller
     {
         Gate::authorize('viewAny', User::class);
 
-        $users = User::with('fieldOffice:id,name,code')
+        $users = User::with(['fieldOffice:id,name,code', 'member:id,user_id'])
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search')->trim();
                 $q->where(fn ($q) => $q
@@ -30,16 +30,33 @@ class UserController extends Controller
                     ->orWhere('username', 'like', "%{$term}%"));
             })
             ->when($request->filled('role'), fn ($q) => $q->where('role', $request->string('role')))
+            ->when($request->filled('field_office_id'), fn ($q) => $q->where('field_office_id', $request->integer('field_office_id')))
+            // Self-registered member accounts (via /register, including Google
+            // sign-up) never get linked to a PROCTAD registry record automatically
+            // — this surfaces the ones still waiting for staff to register them
+            // as a Member (which auto-links by matching email).
+            ->when($request->string('linked') === 'unlinked', fn ($q) => $q
+                ->where('role', UserRole::Member)
+                ->whereDoesntHave('member'))
             ->orderBy('name')
             ->paginate(15)
             ->withQueryString()
             ->through(fn (User $user) => $this->present($user));
 
+        // Hidden field offices already assigned to a user must still appear in
+        // the create/edit forms so an existing assignment doesn't silently blank out.
+        $referencedIds = User::whereNotNull('field_office_id')->distinct()->pluck('field_office_id');
+
         return Inertia::render('Settings/Users/Index', [
             'users' => $users,
-            'filters' => $request->only('search', 'role'),
+            'filters' => $request->only('search', 'role', 'field_office_id', 'linked'),
             'roles' => $this->roleOptions(),
             'fieldOffices' => FieldOffice::orderBy('name')->get(['id', 'name', 'code']),
+            'assignableFieldOffices' => FieldOffice::query()
+                ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $referencedIds))
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']),
+            'unlinkedMemberCount' => User::where('role', UserRole::Member)->whereDoesntHave('member')->count(),
             'can' => ['create' => $request->user()->can('create', User::class)],
         ]);
     }
@@ -139,6 +156,9 @@ class UserController extends Controller
             'is_active' => $user->is_active,
             'must_change_password' => $user->must_change_password,
             'last_login_at' => $user->last_login_at?->format('M d, Y H:i'),
+            // Only meaningful for role === member — whether a PROCTAD registry
+            // record has been linked yet (see MemberController::resolveAccount()).
+            'has_member_record' => $user->role === UserRole::Member ? $user->member !== null : null,
         ];
     }
 }

@@ -14,6 +14,7 @@ use App\Models\TrainingAssignment;
 use App\Models\User;
 use App\Notifications\CertificateDecided;
 use App\Notifications\CertificatePendingApproval;
+use App\Notifications\MemberCertificateDecided;
 use App\Support\BrandedQrCode;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Mail;
@@ -26,7 +27,10 @@ class CertificateService
 {
     /**
      * Queue a certificate for approval. Idempotent per (type, source record):
-     * re-scans never create duplicates.
+     * re-scans never create duplicates. Types with no approver (currently
+     * only Completion — spec 3.2) are released immediately instead of ever
+     * touching Pending: nobody holds `decide()` rights for a null approver
+     * role, so leaving one pending would strand it forever.
      */
     public function generatePending(
         CertificateType $type,
@@ -44,9 +48,15 @@ class CertificateService
             'requested_by' => $requestedBy->id,
         ]);
 
-        if ($certificate->wasRecentlyCreated) {
-            $this->notifyApprovers($certificate);
+        if (! $certificate->wasRecentlyCreated) {
+            return $certificate;
         }
+
+        if ($type->approverRole() === null) {
+            return $this->release($certificate, $requestedBy);
+        }
+
+        $this->notifyApprovers($certificate);
 
         return $certificate;
     }
@@ -79,6 +89,7 @@ class CertificateService
         }
 
         $this->notifyRequester($certificate);
+        $this->notifyMember($certificate);
 
         return $certificate;
     }
@@ -125,6 +136,7 @@ class CertificateService
         ]);
 
         $this->notifyRequester($certificate);
+        $this->notifyMember($certificate);
 
         return $certificate;
     }
@@ -161,6 +173,20 @@ class CertificateService
     {
         if ($certificate->requestedBy) {
             $certificate->requestedBy->notify(new CertificateDecided($certificate));
+        }
+    }
+
+    /**
+     * Bell-notify the certificate's OWNING member (not the staff requester
+     * above) via their linked self-service account, if they have one — the
+     * in-app half of "approved/disapproved," alongside the release email.
+     */
+    private function notifyMember(Certificate $certificate): void
+    {
+        $certificate->loadMissing('member.user');
+
+        if ($certificate->member?->user) {
+            $certificate->member->user->notify(new MemberCertificateDecided($certificate));
         }
     }
 

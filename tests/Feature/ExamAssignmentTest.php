@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AssignmentStatus;
 use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
@@ -176,6 +177,8 @@ class ExamAssignmentTest extends TestCase
             'examination_id' => $this->exam->id,
             'examination_school_id' => $venue->id,
             'role' => ExamRole::Proctor->value,
+            // Room assignment requires the member to have already confirmed.
+            'status' => AssignmentStatus::Confirmed->value,
         ]);
 
         $this->actingAs($admin)

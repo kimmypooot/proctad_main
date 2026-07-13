@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\FieldOffice;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Socialite\Contracts\Provider;
@@ -14,11 +15,13 @@ class GoogleAuthTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function mockGoogleUser(string $id, string $email): void
+    private function mockGoogleUser(string $id, string $email, ?string $givenName = null, ?string $familyName = null): void
     {
         $googleUser = new SocialiteUser;
         $googleUser->id = $id;
         $googleUser->email = $email;
+        $googleUser->avatar = 'https://example.test/avatar.jpg';
+        $googleUser->user = ['given_name' => $givenName, 'family_name' => $familyName];
 
         $provider = Mockery::mock(Provider::class);
         $provider->shouldReceive('user')->andReturn($googleUser);
@@ -49,15 +52,78 @@ class GoogleAuthTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
-    public function test_unknown_email_is_rejected(): void
+    public function test_unknown_email_redirects_to_registration_completion(): void
     {
-        $this->mockGoogleUser('google-999', 'stranger@gmail.com');
+        $this->mockGoogleUser('google-999', 'stranger@gmail.com', 'Stranger', 'Person');
 
         $this->get('/auth/google/callback')
-            ->assertRedirect(route('member.login'));
+            ->assertRedirect(route('register'));
 
         $this->assertGuest();
         $this->assertSame(0, User::where('google_id', 'google-999')->count());
+        $this->assertSame('stranger@gmail.com', session('google_pending_registration.email'));
+    }
+
+    public function test_register_page_prefills_pending_google_identity(): void
+    {
+        $this->mockGoogleUser('google-999', 'stranger@gmail.com', 'Stranger', 'Person');
+        $this->get('/auth/google/callback');
+
+        $this->get('/register')
+            ->assertInertia(fn ($page) => $page
+                ->component('Auth/Register')
+                ->where('google.email', 'stranger@gmail.com')
+                ->where('google.first_name', 'Stranger')
+                ->where('google.last_name', 'Person'));
+    }
+
+    public function test_completes_registration_from_pending_google_identity(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+        $this->mockGoogleUser('google-999', 'stranger@gmail.com', 'Stranger', 'Person');
+        $this->get('/auth/google/callback');
+
+        $this->post('/register', [
+            'first_name' => 'Stranger',
+            'last_name' => 'Person',
+            'sex' => 'male',
+            'mobile_number' => '09171234567',
+            'agency' => 'DepEd Division Office',
+            'field_office_id' => $fieldOffice->id,
+            'terms' => true,
+        ])->assertRedirect(route('dashboard'));
+
+        $user = User::where('email', 'stranger@gmail.com')->first();
+        $this->assertNotNull($user);
+        $this->assertSame('google-999', $user->google_id);
+        $this->assertNotNull($user->email_verified_at);
+        $this->assertAuthenticatedAs($user);
+        $this->assertNull(session('google_pending_registration'));
+
+        $member = \App\Models\Member::where('user_id', $user->id)->first();
+        $this->assertNotNull($member);
+        $this->assertNotNull($member->proctad_id);
+    }
+
+    public function test_registration_rejects_a_pending_google_identity_whose_email_was_since_taken(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+        $this->mockGoogleUser('google-999', 'stranger@gmail.com', 'Stranger', 'Person');
+        $this->get('/auth/google/callback');
+
+        User::factory()->create(['email' => 'stranger@gmail.com']);
+
+        $this->post('/register', [
+            'first_name' => 'Stranger',
+            'last_name' => 'Person',
+            'sex' => 'male',
+            'mobile_number' => '09171234567',
+            'agency' => 'DepEd Division Office',
+            'field_office_id' => $fieldOffice->id,
+            'terms' => true,
+        ])->assertStatus(422);
+
+        $this->assertGuest();
     }
 
     public function test_member_login_page_renders(): void

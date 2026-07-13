@@ -9,6 +9,10 @@ const props = defineProps({
     fieldOffices: { type: Array, required: true },
     /** Pass member statuses to show the status controls (edit mode) */
     statuses: { type: Array, default: null },
+    /** True when prefilled from an existing unlinked account (Users worklist) — the
+     * email must stay exactly what that account uses so submitting links it, not
+     * creates a duplicate (see MemberController::resolveAccount()). */
+    emailLocked: { type: Boolean, default: false },
 });
 
 const sexOptions = [
@@ -62,8 +66,11 @@ const sexOptions = [
                 label="Email Address"
                 type="email"
                 required
+                :disabled="emailLocked"
                 :error="form.errors.email"
-                hint="Also used for the member's login (Google sign-in supported)."
+                :hint="emailLocked
+                    ? 'Locked to the existing account\'s email so this links it instead of creating a duplicate.'
+                    : 'Also used for the member\'s login (Google sign-in supported).'"
             />
             <TextInput
                 v-model="form.mobile_number"

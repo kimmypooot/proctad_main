@@ -15,8 +15,12 @@ class CertificatePolicy
     }
 
     /**
-     * Approve or disapprove: the certificate type's approver role, and for
-     * FO-scoped approvers (Field Director) only within their own Testing Center.
+     * Approve or disapprove: the certificate type's primary approver role
+     * (Field Director within their own Testing Center for Appearance/
+     * Designation Order, Management region-wide for Appreciation), plus two
+     * fallback paths for when the primary approver is unavailable — Super
+     * Admin/ESD Admin region-wide for any type, and Field Director locally
+     * for any type originating in their own Testing Center.
      */
     public function decide(User $user, Certificate $certificate): bool
     {
@@ -26,16 +30,21 @@ class CertificatePolicy
 
         $approverRole = $certificate->type->approverRole();
 
-        if ($approverRole === null || $user->role !== $approverRole) {
-            // Super Admin may act as a fallback approver for any type.
-            return $user->role === UserRole::SuperAdmin && $approverRole !== null;
+        if ($approverRole === null) {
+            return false;
         }
 
-        if ($user->role === UserRole::FieldDirector) {
-            return $user->field_office_id === $certificate->field_office_id;
+        if ($user->role === $approverRole) {
+            return $user->role !== UserRole::FieldDirector
+                || $user->field_office_id === $certificate->field_office_id;
         }
 
-        return true;
+        if (in_array($user->role, [UserRole::SuperAdmin, UserRole::EsdAdmin], true)) {
+            return true;
+        }
+
+        return $user->role === UserRole::FieldDirector
+            && $user->field_office_id === $certificate->field_office_id;
     }
 
     /**

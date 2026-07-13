@@ -1,13 +1,18 @@
 <script setup>
-import { computed } from 'vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BarChart from '@/Components/Charts/BarChart.vue';
+import LineAreaChart from '@/Components/Charts/LineAreaChart.vue';
+import StatusBreakdownBar from '@/Components/Charts/StatusBreakdownBar.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import ProgressRing from '@/Components/ProgressRing.vue';
+import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
+import TableSkeleton from '@/Components/TableSkeleton.vue';
 
 // Cycled by index, not tied to any stat's meaning — purely to break up the
 // grid visually instead of four identical brand-blue chips in a row.
@@ -20,6 +25,7 @@ const props = defineProps({
     fieldOffice: { type: Object, default: null },
     stats: { type: Array, required: true },
     memberSummary: { type: Object, default: null },
+    analytics: { type: Object, default: null },
 });
 
 const page = usePage();
@@ -71,6 +77,25 @@ const actionChipClasses = {
     accent: 'bg-accent-50 text-accent-600',
 };
 const actionChip = (accent) => actionChipClasses[accent] ?? actionChipClasses.brand;
+
+/* --- Admin analytics --- */
+const secondaryStatAccents = ['brand', 'emerald', 'amber', 'accent'];
+
+const feedFieldOfficeId = ref(props.analytics?.selectedFieldOfficeId ?? '');
+const feedLoading = ref(false);
+
+const applyFeedFilter = () => {
+    router.get('/dashboard', {
+        field_office_id: feedFieldOfficeId.value || undefined,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        only: ['analytics'],
+        onStart: () => (feedLoading.value = true),
+        onFinish: () => (feedLoading.value = false),
+    });
+};
 </script>
 
 <template>
@@ -99,6 +124,87 @@ const actionChip = (accent) => actionChipClasses[accent] ?? actionChipClasses.br
                 :accent="statAccents[i % statAccents.length]"
             />
         </div>
+
+        <!-- Admin analytics -->
+        <template v-if="analytics">
+            <div class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                    v-for="(stat, i) in analytics.secondaryStats"
+                    :key="stat.label"
+                    compact
+                    :label="stat.label"
+                    :value="stat.value.toLocaleString()"
+                    :icon="stat.icon"
+                    :accent="secondaryStatAccents[i % secondaryStatAccents.length]"
+                />
+            </div>
+
+            <div class="mt-4 grid gap-4 xl:grid-cols-3">
+                <div class="xl:col-span-2">
+                    <LineAreaChart
+                        title="New Registrations — Last 6 Months"
+                        :labels="analytics.registrationTrend.map((p) => p.label)"
+                        :values="analytics.registrationTrend.map((p) => p.value)"
+                    />
+                </div>
+                <StatusBreakdownBar title="Member Status Breakdown" :segments="analytics.statusBreakdown" />
+            </div>
+
+            <div v-if="analytics.registrationsByFieldOffice" class="mt-4">
+                <BarChart title="Registrations by Testing Center (All-Time)" :items="analytics.registrationsByFieldOffice" />
+            </div>
+
+            <!-- Recent registrations -->
+            <div class="mt-4 rounded-xl border border-slate-200 bg-white p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h3 class="text-sm font-semibold text-slate-900">Recent Registrations</h3>
+                    <div v-if="analytics.fieldOffices" class="w-56">
+                        <SelectInput
+                            v-model="feedFieldOfficeId"
+                            label="Testing Center"
+                            placeholder="All Testing Centers"
+                            :options="[{ value: '', label: 'All Testing Centers (Overall)' }, ...analytics.fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
+                            @update:model-value="applyFeedFilter"
+                        />
+                    </div>
+                </div>
+                <p v-if="analytics.regionTotalThisMonth !== null" class="mt-1 text-xs text-slate-400">
+                    Region-wide, {{ analytics.regionTotalThisMonth }} member(s) registered this month.
+                </p>
+
+                <div v-if="!feedLoading && !analytics.recentRegistrations.length" class="mt-4">
+                    <EmptyState icon="users" title="No registrations yet" description="New member registrations will appear here." />
+                </div>
+                <div v-else class="mt-3 overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-100 text-sm">
+                        <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <tr>
+                                <th class="py-2 pr-3 font-semibold">Member</th>
+                                <th class="hidden py-2 pr-3 font-semibold sm:table-cell">Testing Center</th>
+                                <th class="py-2 pr-3 font-semibold">Status</th>
+                                <th class="py-2 pl-3 text-right font-semibold">Registered</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <TableSkeleton v-if="feedLoading" :columns="4" />
+                            <tr v-for="member in feedLoading ? [] : analytics.recentRegistrations" :key="member.id">
+                                <td class="py-2.5 pr-3">
+                                    <Link :href="`/members/${member.id}`" class="font-medium text-slate-900 hover:text-brand-700 hover:underline">
+                                        {{ member.name }}
+                                    </Link>
+                                    <p class="font-mono text-xs text-brand-700">{{ member.proctad_id }}</p>
+                                </td>
+                                <td class="hidden py-2.5 pr-3 text-slate-500 sm:table-cell">{{ member.field_office }}</td>
+                                <td class="py-2.5 pr-3">
+                                    <BaseBadge :variant="member.status_variant">{{ member.status_label }}</BaseBadge>
+                                </td>
+                                <td class="py-2.5 pl-3 text-right text-xs text-slate-400">{{ member.registered_at }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </template>
 
         <!-- Role-specific panel -->
         <div class="mt-8 rounded-2xl border border-slate-200 bg-slate-50/60 p-6">

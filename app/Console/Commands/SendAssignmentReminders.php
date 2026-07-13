@@ -49,7 +49,7 @@ class SendAssignmentReminders extends Command
                 toName: $assignment->member->name,
                 emailType: 'designation',
                 data: [
-                    'member_name' => $assignment->member->name,
+                    'member_name' => $assignment->member->nameFirstLast(),
                     'exam_name' => $assignment->examination->title,
                     'exam_date' => $assignment->examination->exam_date->format('F j, Y (l)'),
                     'designation' => $assignment->role->label(),

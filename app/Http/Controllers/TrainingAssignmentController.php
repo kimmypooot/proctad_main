@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BlacklistStatus;
 use App\Enums\UserRole;
 use App\Models\Member;
 use App\Models\Training;
@@ -35,6 +36,12 @@ class TrainingAssignmentController extends Controller
         abort_if(
             $user->role === UserRole::FoAdmin && $member->field_office_id !== $user->field_office_id,
             403,
+        );
+
+        abort_if(
+            $member->blacklists()->where('status', BlacklistStatus::Active)->exists(),
+            422,
+            'This member is blacklisted and cannot be assigned.',
         );
 
         $training->assignments()->create([

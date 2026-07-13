@@ -56,9 +56,14 @@ class OtherExaminationPersonnel extends Model
         return $id;
     }
 
+    /** Default display format: "Last Name, First Name Middle Name Suffix". */
     protected function name(): Attribute
     {
-        return Attribute::get(fn () => $this->fullName());
+        return Attribute::get(function () {
+            $given = trim(collect([$this->first_name, $this->middle_name, $this->suffix])->filter()->implode(' '));
+
+            return trim(collect([$this->last_name, $given])->filter()->implode(', '));
+        });
     }
 
     /**
@@ -106,6 +111,11 @@ class OtherExaminationPersonnel extends Model
         return $this->hasMany(OepAttendance::class);
     }
 
+    /**
+     * "First Middle Last Suffix" — kept separate from the `name` accessor
+     * above for the few contexts that must not change format: ID cards and
+     * email greetings.
+     */
     public function fullName(): string
     {
         return trim(collect([$this->first_name, $this->middle_name, $this->last_name, $this->suffix])

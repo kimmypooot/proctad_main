@@ -17,7 +17,7 @@ class OepIdCard
 
         return [
             'oep_id' => $oep->oep_id,
-            'name' => $oep->name,
+            'name' => $oep->fullName(),
             'personnel_type_label' => $oep->personnel_type->label(),
             'agency' => $oep->agency,
             'position' => $oep->position,

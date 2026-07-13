@@ -9,12 +9,11 @@ use App\Models\AssignmentConfirmation;
 use App\Models\ExamAssignment;
 use App\Models\User;
 use App\Notifications\AssignmentDeclined;
-use App\Services\NotificationMailer;
+use App\Services\AssignmentConfirmationSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -22,61 +21,22 @@ use Inertia\Response;
 
 class AssignmentConfirmationController extends Controller
 {
-    /** How long a confirmation link stays valid (matches the legacy 7-day token). */
-    private const LINK_LIFETIME_DAYS = 7;
-
     /**
      * Staff action: email the member a signed confirmation link (D5 — spec
      * requires assignment confirmation; audit recommended signed URLs over
-     * stored plaintext tokens).
+     * stored plaintext tokens). Also used as "Resend" once already sent.
      */
-    public function send(Request $request, ExamAssignment $assignment, NotificationMailer $mailer): RedirectResponse
+    public function send(Request $request, ExamAssignment $assignment, AssignmentConfirmationSender $sender): RedirectResponse
     {
         Gate::authorize('update', $assignment);
 
-        $assignment->loadMissing('member', 'examination');
-        $member = $assignment->member;
+        $sent = $sender->send($assignment, $request->user());
 
-        if (! $member?->email) {
+        if (! $sent) {
             return back()->with('error', 'This member has no email address on file.');
         }
 
-        $signedUrl = URL::temporarySignedRoute(
-            'assignments.confirm',
-            now()->addDays(self::LINK_LIFETIME_DAYS),
-            ['assignment' => $assignment->id],
-        );
-
-        $mailer->send(
-            templateCode: 'assignment_confirmation',
-            toEmail: $member->email,
-            toName: $member->name,
-            emailType: 'designation',
-            data: [
-                'member_name' => $member->name,
-                'exam_name' => $assignment->examination->title,
-                'exam_date' => $assignment->examination->exam_date->format('F j, Y (l)'),
-                'designation' => $assignment->role->label(),
-                'proctad_id' => $member->proctad_id,
-                'confirmation_url' => $signedUrl,
-            ],
-            sentBy: $request->user(),
-        );
-
-        $assignment->update([
-            'status' => AssignmentStatus::Pending,
-            'confirmation_sent_at' => now(),
-            'responded_at' => null,
-            'decline_reason' => null,
-        ]);
-
-        $assignment->confirmations()->create([
-            'action' => ConfirmationAction::Sent,
-            'ip_address' => $request->ip(),
-            'metadata' => ['sent_by' => $request->user()->id],
-        ]);
-
-        return back()->with('success', "Confirmation request sent to {$member->name}.");
+        return back()->with('success', "Confirmation request sent to {$assignment->member->name}.");
     }
 
     /**

@@ -36,7 +36,13 @@ trait Auditable
     protected function recordAudit(string $action, ?array $changes): void
     {
         AuditLog::create([
-            'user_id' => auth()->id(),
+            // auth()->id() falls back to the raw, unvalidated session value
+            // when auth()->user() resolves to null — a stale session
+            // referencing a since-deleted user would otherwise violate this
+            // column's FK constraint and crash the entire request. user()
+            // performs the real DB-backed lookup, so it's null exactly when
+            // there's truly no valid actor.
+            'user_id' => auth()->user()?->id,
             'action' => $action,
             'auditable_type' => static::class,
             'auditable_id' => $this->getKey(),

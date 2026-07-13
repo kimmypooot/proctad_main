@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AssignmentStatus;
+use App\Enums\BlacklistStatus;
 use App\Enums\ConfirmationAction;
 use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
@@ -12,6 +13,7 @@ use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
 use App\Models\Member;
+use App\Services\AssignmentConfirmationSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +26,47 @@ class ExamAssignmentController extends Controller
     // school, so (unlike REC/LEC committee roles, which are region-wide by
     // design) they must always be drawn from that venue's own field office.
     private const ROOM_ROLES = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
+
+    // Exactly one Proctor and one Room Examiner per room (Supervising Examiner
+    // is anchor-group based — see RoomStaffingCalculator — and isn't a simple
+    // one-per-room slot, so it's deliberately excluded here).
+    private const ONE_PER_ROOM_ROLES = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value];
+
+    /**
+     * Builds a validation closure for `exam_room_id` that (a) requires the
+     * member to have already CONFIRMED their assignment before a room can be
+     * set — a test administrator only learns their room once they've said
+     * they're actually available — and (b) for Proctor/Room Examiner, rejects
+     * a room that's already staffed for that role.
+     */
+    private function roomAssignabilityRule(?string $role, AssignmentStatus $currentStatus, ?int $excludeAssignmentId = null): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($role, $currentStatus, $excludeAssignmentId) {
+            if (! $value) {
+                return;
+            }
+
+            if ($currentStatus !== AssignmentStatus::Confirmed) {
+                $fail('This assignment must be confirmed by the member before a room can be assigned.');
+
+                return;
+            }
+
+            if (! in_array($role, self::ONE_PER_ROOM_ROLES, true)) {
+                return;
+            }
+
+            $taken = ExamAssignment::where('exam_room_id', $value)
+                ->where('role', $role)
+                ->whereIn('status', [AssignmentStatus::Pending->value, AssignmentStatus::Confirmed->value])
+                ->when($excludeAssignmentId, fn ($q) => $q->where('id', '!=', $excludeAssignmentId))
+                ->exists();
+
+            if ($taken) {
+                $fail(ExamRole::from($role)->label().' is already assigned to this room.');
+            }
+        };
+    }
 
     /** Builds a validation closure for the `examination_school_id` field enforcing that rule. */
     private function venueJurisdictionRule(Request $request, array $memberIds): \Closure
@@ -48,7 +91,7 @@ class ExamAssignmentController extends Controller
         };
     }
 
-    public function store(Request $request, Examination $examination): RedirectResponse
+    public function store(Request $request, Examination $examination, AssignmentConfirmationSender $confirmationSender): RedirectResponse
     {
         Gate::authorize('create', ExamAssignment::class);
 
@@ -67,10 +110,14 @@ class ExamAssignmentController extends Controller
                 Rule::exists('examination_school', 'id')->where('examination_id', $examination->id),
                 $this->venueJurisdictionRule($request, [$request->input('member_id')]),
             ],
+            // No 'required_with:examination_school_id' here: a test administrator
+            // only needs to know their venue and role at assignment time — which
+            // room they'll staff is only decided closer to exam day (Step 3), and
+            // only once they've confirmed (see roomAssignabilityRule).
             'exam_room_id' => [
                 'nullable',
-                'required_with:examination_school_id',
                 Rule::exists('exam_rooms', 'id')->where('examination_school_id', $request->input('examination_school_id')),
+                $this->roomAssignabilityRule($request->input('role'), AssignmentStatus::Pending),
             ],
             'covered_school_ids' => ['nullable', 'array'],
             'covered_school_ids.*' => [
@@ -89,6 +136,12 @@ class ExamAssignmentController extends Controller
             403,
         );
 
+        abort_if(
+            $member->blacklists()->where('status', BlacklistStatus::Active)->exists(),
+            422,
+            'This member is blacklisted and cannot be assigned.',
+        );
+
         $assignment = $examination->assignments()->create([
             'member_id' => $member->id,
             'role' => $validated['role'],
@@ -99,6 +152,13 @@ class ExamAssignmentController extends Controller
 
         $this->syncCoveredSchools($assignment, $validated['covered_school_ids'] ?? []);
 
+        // A venue is enough for the member to need to know and confirm —
+        // notify them (email + in-app) the moment one is set, rather than
+        // waiting on staff to remember to click "Send Confirmation".
+        if ($assignment->examination_school_id) {
+            $confirmationSender->send($assignment, $user);
+        }
+
         return back()->with('success', "{$member->name} assigned to {$examination->title}.");
     }
 
@@ -108,7 +168,7 @@ class ExamAssignmentController extends Controller
      * examination are silently skipped (reported back in the flash message)
      * rather than failing the whole batch.
      */
-    public function bulkStore(Request $request, Examination $examination): RedirectResponse
+    public function bulkStore(Request $request, Examination $examination, AssignmentConfirmationSender $confirmationSender): RedirectResponse
     {
         Gate::authorize('create', ExamAssignment::class);
 
@@ -123,11 +183,6 @@ class ExamAssignmentController extends Controller
                 Rule::exists('examination_school', 'id')->where('examination_id', $examination->id),
                 $this->venueJurisdictionRule($request, $request->input('member_ids', [])),
             ],
-            'exam_room_id' => [
-                'nullable',
-                'required_with:examination_school_id',
-                Rule::exists('exam_rooms', 'id')->where('examination_school_id', $request->input('examination_school_id')),
-            ],
             'covered_school_ids' => ['nullable', 'array'],
             'covered_school_ids.*' => [
                 'integer',
@@ -140,8 +195,12 @@ class ExamAssignmentController extends Controller
             ->whereIn('id', $validated['member_ids'])
             ->where('status', 'active')
             ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
             ->get();
 
+        // Room is deliberately not set here: a test administrator only needs
+        // to know their venue and role at assignment time — which room they
+        // staff is decided later via Step 3 (see RoomAssignmentPanel).
         $assigned = 0;
         foreach ($members as $member) {
             if (in_array($member->id, $alreadyAssigned, true)) {
@@ -153,9 +212,16 @@ class ExamAssignmentController extends Controller
                 'role' => $validated['role'],
                 'field_office_id' => $member->field_office_id,
                 'examination_school_id' => $validated['examination_school_id'] ?? null,
-                'exam_room_id' => $validated['exam_room_id'] ?? null,
             ]);
             $this->syncCoveredSchools($assignment, $validated['covered_school_ids'] ?? []);
+
+            // A venue is enough for the member to need to know and confirm —
+            // notify them (email + in-app) the moment one is set, rather than
+            // waiting on staff to remember to click "Send Confirmation".
+            if ($assignment->examination_school_id) {
+                $confirmationSender->send($assignment, $user);
+            }
+
             $assigned++;
         }
 
@@ -196,9 +262,11 @@ class ExamAssignmentController extends Controller
         return back()->with('success', "Confirmed {$assignments->count()} assignment(s).");
     }
 
-    public function update(Request $request, ExamAssignment $assignment): RedirectResponse
+    public function update(Request $request, ExamAssignment $assignment, AssignmentConfirmationSender $confirmationSender): RedirectResponse
     {
         Gate::authorize('update', $assignment);
+
+        $hadVenue = $assignment->examination_school_id !== null;
 
         $validated = $request->validate([
             'role' => ['required', Rule::enum(ExamRole::class)],
@@ -210,10 +278,12 @@ class ExamAssignmentController extends Controller
                 Rule::exists('examination_school', 'id')->where('examination_id', $assignment->examination_id),
                 $this->venueJurisdictionRule($request, [$assignment->member_id]),
             ],
+            // No 'required_with:examination_school_id' — see store(): room is
+            // only decided once the member has confirmed (roomAssignabilityRule).
             'exam_room_id' => [
                 'nullable',
-                'required_with:examination_school_id',
                 Rule::exists('exam_rooms', 'id')->where('examination_school_id', $request->input('examination_school_id')),
+                $this->roomAssignabilityRule($request->input('role'), $assignment->status, $assignment->id),
             ],
             'covered_school_ids' => ['nullable', 'array'],
             'covered_school_ids.*' => [
@@ -238,6 +308,13 @@ class ExamAssignmentController extends Controller
 
         $this->syncCoveredSchools($assignment->fresh(), $validated['covered_school_ids'] ?? []);
 
+        // Only notify the first time a venue is set here — re-editing an
+        // already-notified assignment (e.g. tweaking remarks) shouldn't spam
+        // another confirmation email.
+        if (! $hadVenue && $assignment->examination_school_id) {
+            $confirmationSender->send($assignment, $request->user());
+        }
+
         return back()->with('success', 'Service record updated.');
     }
 
@@ -255,6 +332,7 @@ class ExamAssignmentController extends Controller
             'exam_room_id' => [
                 'nullable',
                 Rule::exists('exam_rooms', 'id')->where('examination_school_id', $assignment->examination_school_id),
+                $this->roomAssignabilityRule($assignment->role->value, $assignment->status, $assignment->id),
             ],
         ]);
 

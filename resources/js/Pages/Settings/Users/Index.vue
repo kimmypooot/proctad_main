@@ -11,6 +11,7 @@ import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
+import StatCard from '@/Components/StatCard.vue';
 import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextInput from '@/Components/TextInput.vue';
 
@@ -19,6 +20,8 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     roles: { type: Array, required: true },
     fieldOffices: { type: Array, required: true },
+    assignableFieldOffices: { type: Array, required: true },
+    unlinkedMemberCount: { type: Number, required: true },
     can: { type: Object, required: true },
 });
 
@@ -26,12 +29,16 @@ const currentUserId = computed(() => usePage().props.auth.user.id);
 
 const search = ref(props.filters.search ?? '');
 const role = ref(props.filters.role ?? '');
+const fieldOfficeId = ref(props.filters.field_office_id ?? '');
+const linked = ref(props.filters.linked ?? '');
 const loading = ref(false);
 
 let debounce = null;
 const applyFilters = () => router.get('/users', {
     search: search.value || undefined,
     role: role.value || undefined,
+    field_office_id: fieldOfficeId.value || undefined,
+    linked: linked.value || undefined,
 }, {
     preserveState: true,
     replace: true,
@@ -44,7 +51,12 @@ watch(search, () => {
     clearTimeout(debounce);
     debounce = setTimeout(applyFilters, 350);
 });
-watch(role, applyFilters);
+watch([role, fieldOfficeId, linked], applyFilters);
+
+const showUnlinkedOnly = () => {
+    linked.value = 'unlinked';
+    applyFilters();
+};
 
 /* --- Create --- */
 const showCreate = ref(false);
@@ -101,14 +113,43 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
             </template>
         </DashboardPageHeader>
 
+        <!-- Unlinked member accounts worklist -->
+        <div v-if="unlinkedMemberCount > 0" class="mt-6">
+            <button type="button" class="block w-full text-left" @click="showUnlinkedOnly">
+                <StatCard
+                    compact
+                    label="Awaiting PROCTAD Registration"
+                    :value="unlinkedMemberCount"
+                    icon="exclamation-triangle"
+                    accent="amber"
+                    hint="Self-registered member accounts with no linked PROCTAD record yet — click to filter."
+                />
+            </button>
+        </div>
+
         <!-- Filters -->
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
             <TextInput v-model="search" label="Search" placeholder="Name, email, or username" />
             <SelectInput
                 v-model="role"
                 label="Role"
                 placeholder="All roles"
                 :options="[{ value: '', label: 'All roles' }, ...roles]"
+            />
+            <SelectInput
+                v-model="fieldOfficeId"
+                label="Testing Center"
+                placeholder="All field offices"
+                :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
+            />
+            <SelectInput
+                v-model="linked"
+                label="PROCTAD Record"
+                placeholder="All member accounts"
+                :options="[
+                    { value: '', label: 'All member accounts' },
+                    { value: 'unlinked', label: 'Awaiting registration' },
+                ]"
             />
         </div>
 
@@ -142,10 +183,17 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
                                     {{ user.is_active ? 'Active' : 'Deactivated' }}
                                 </BaseBadge>
                                 <BaseBadge v-if="user.must_change_password" variant="warning">Password pending</BaseBadge>
+                                <BaseBadge v-if="user.has_member_record === false" variant="warning">No PROCTAD record</BaseBadge>
                             </div>
                         </td>
                         <td class="px-3 py-2 text-center">
                             <div class="inline-flex gap-1">
+                                <IconButton
+                                    v-if="user.has_member_record === false"
+                                    icon="user-plus"
+                                    label="Register as PROCTAD Member"
+                                    :href="`/members/create?from_user=${user.id}`"
+                                />
                                 <IconButton icon="pencil" label="Edit" @click="openEdit(user)" />
                                 <IconButton
                                     icon="arrow-path"
@@ -185,7 +233,7 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
                     label="Testing Center"
                     optional
                     placeholder="Region-wide / none"
-                    :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
+                    :options="assignableFieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
                     :error="createForm.errors.field_office_id"
                 />
             </form>
@@ -217,7 +265,7 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
                     label="Testing Center"
                     optional
                     placeholder="Region-wide / none"
-                    :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
+                    :options="assignableFieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
                     :error="editForm.errors.field_office_id"
                 />
                 <CheckboxInput v-model="editForm.is_active" :disabled="editing?.id === currentUserId">

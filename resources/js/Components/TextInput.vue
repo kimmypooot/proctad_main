@@ -14,6 +14,9 @@ const props = defineProps({
     autocomplete: { type: String, default: null },
     placeholder: { type: String, default: null },
     inputmode: { type: String, default: null },
+    /** Extra classes for the `<input>` itself — plain `class` on this component lands on the outer wrapper instead. */
+    inputClass: { type: String, default: '' },
+    disabled: { type: Boolean, default: false },
 });
 
 const id = useId();
@@ -42,17 +45,19 @@ const describedBy = computed(() => {
                 v-model="model"
                 :type="inputType"
                 :required="required"
+                :disabled="disabled"
                 :autocomplete="autocomplete ?? undefined"
                 :placeholder="placeholder ?? undefined"
                 :inputmode="inputmode ?? undefined"
                 :aria-invalid="!!error || undefined"
                 :aria-describedby="describedBy"
-                class="block w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 min-h-[2.75rem]"
+                class="block w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 min-h-[2.75rem] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
                 :class="[
                     error
                         ? 'border-accent-400 focus:border-accent-500 focus:ring-accent-200'
                         : 'border-slate-300 focus:border-brand-500 focus:ring-brand-100',
                     isPassword ? 'pr-12' : '',
+                    inputClass,
                 ]"
             >
 

@@ -18,7 +18,7 @@ class MemberIdCard
 
         return [
             'proctad_id' => $member->proctad_id,
-            'name' => $member->name,
+            'name' => $member->nameFirstLast(),
             'agency' => $member->agency,
             'position' => $member->position,
             'field_office' => $member->fieldOffice?->name,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BlacklistStatus;
 use App\Enums\CertificateType;
 use App\Enums\TrainingType;
 use App\Models\Member;
@@ -76,6 +77,7 @@ class TrainingController extends Controller
                 ->where('status', 'active')
                 ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->whereDoesntHave('trainingAssignments', fn ($q) => $q->where('training_id', $training->id))
+                ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
                 ->orderBy('last_name')
                 ->get(['id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix'])
                 ->map(fn (Member $member) => [
@@ -136,9 +138,10 @@ class TrainingController extends Controller
         $attended = $training->assignments()->whereNotNull('attendance_confirmed_at')->get();
 
         foreach ($attended as $assignment) {
+            // generatePending() auto-releases Completion certificates itself
+            // (no approver exists for this type) — no separate release() call needed.
             $certificate = $certificates->generatePending(CertificateType::Completion, $assignment, $request->user());
             if ($certificate->wasRecentlyCreated) {
-                $certificates->release($certificate, $request->user());
                 $issued++;
             }
         }

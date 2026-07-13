@@ -70,12 +70,35 @@ class CertificatePagesTest extends TestCase
         $this->certificate(CertificateType::Appearance, CertificateStatus::Pending, $otherFo->id);
         $this->certificate(CertificateType::Appreciation, CertificateStatus::Pending, $fo->id);
 
+        // Field Director sees both pending requests in their own Testing
+        // Center — Appearance (primary approver) and Appreciation (local
+        // fallback for Management) — but not the other FO's Appearance request.
         $this->actingAs($fieldDirector)
             ->get('/approvals')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Approvals/Index')
-                ->has('pending', 1));
+                ->has('pending', 2));
+    }
+
+    public function test_field_director_can_approve_appreciation_as_a_local_fallback(): void
+    {
+        $fo = FieldOffice::factory()->create();
+        $otherFo = FieldOffice::factory()->create();
+        $fieldDirector = User::factory()->create(['role' => UserRole::FieldDirector, 'field_office_id' => $fo->id]);
+
+        $ownFo = $this->certificate(CertificateType::Appreciation, CertificateStatus::Pending, $fo->id);
+        $anotherFo = $this->certificate(CertificateType::Appreciation, CertificateStatus::Pending, $otherFo->id);
+
+        $this->actingAs($fieldDirector)
+            ->post("/certificates/{$ownFo->id}/approve")
+            ->assertRedirect();
+        $this->assertSame(CertificateStatus::Released, $ownFo->fresh()->status);
+
+        $this->actingAs($fieldDirector)
+            ->post("/certificates/{$anotherFo->id}/approve")
+            ->assertForbidden();
+        $this->assertSame(CertificateStatus::Pending, $anotherFo->fresh()->status);
     }
 
     public function test_management_sees_only_appreciation_approvals(): void
@@ -100,5 +123,63 @@ class CertificatePagesTest extends TestCase
             ->assertRedirect();
 
         $this->assertSame(CertificateStatus::Released, $certificate->fresh()->status);
+    }
+
+    public function test_esd_admin_is_a_fallback_approver(): void
+    {
+        $esdAdmin = User::factory()->create(['role' => UserRole::EsdAdmin]);
+        $certificate = $this->certificate(CertificateType::Appearance, CertificateStatus::Pending);
+
+        $this->actingAs($esdAdmin)
+            ->get('/approvals')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('pending', 1));
+
+        $this->actingAs($esdAdmin)
+            ->post("/certificates/{$certificate->id}/approve")
+            ->assertRedirect();
+
+        $this->assertSame(CertificateStatus::Released, $certificate->fresh()->status);
+    }
+
+    public function test_bulk_approve_releases_only_eligible_certificates(): void
+    {
+        $fo = FieldOffice::factory()->create();
+        $otherFo = FieldOffice::factory()->create();
+        $fieldDirector = User::factory()->create(['role' => UserRole::FieldDirector, 'field_office_id' => $fo->id]);
+
+        $inScope = $this->certificate(CertificateType::Appearance, CertificateStatus::Pending, $fo->id);
+        $outOfScope = $this->certificate(CertificateType::Appearance, CertificateStatus::Pending, $otherFo->id);
+
+        $this->actingAs($fieldDirector)
+            ->post('/certificates/bulk-approve', [
+                'certificate_ids' => [$inScope->id, $outOfScope->id],
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(CertificateStatus::Released, $inScope->fresh()->status);
+        $this->assertSame(CertificateStatus::Pending, $outOfScope->fresh()->status);
+    }
+
+    public function test_bulk_disapprove_requires_a_shared_remarks_and_applies_to_all(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $first = $this->certificate(CertificateType::Appearance, CertificateStatus::Pending);
+        $second = $this->certificate(CertificateType::DesignationOrder, CertificateStatus::Pending);
+
+        $this->actingAs($admin)
+            ->post('/certificates/bulk-disapprove', ['certificate_ids' => [$first->id, $second->id]])
+            ->assertSessionHasErrors('remarks');
+
+        $this->actingAs($admin)
+            ->post('/certificates/bulk-disapprove', [
+                'certificate_ids' => [$first->id, $second->id],
+                'remarks' => 'Missing supporting documents.',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(CertificateStatus::Disapproved, $first->fresh()->status);
+        $this->assertSame(CertificateStatus::Disapproved, $second->fresh()->status);
+        $this->assertSame('Missing supporting documents.', $second->fresh()->disapproval_remarks);
     }
 }

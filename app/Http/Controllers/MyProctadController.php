@@ -102,7 +102,12 @@ class MyProctadController extends Controller
         return Inertia::render('My/ServiceHistory', [
             'hasRecord' => $member !== null,
             'records' => $member?->assignments()
-                ->with('examination:id,title,type,exam_date')
+                ->with([
+                    'examination:id,title,type,exam_date',
+                    'examinationSchool.school:id,name',
+                    'room:id,room_number,designation,examination_school_id',
+                    'confirmedBy:id,name',
+                ])
                 ->get()
                 ->sortByDesc(fn ($assignment) => $assignment->examination?->exam_date)
                 ->values()
@@ -116,9 +121,21 @@ class MyProctadController extends Controller
                         'exam_type' => $assignment->examination?->type,
                         'exam_date' => $assignment->examination?->exam_date?->format('M d, Y'),
                         'role_label' => $assignment->role->label(),
+                        'status_label' => $assignment->status->label(),
+                        'status_variant' => $assignment->status->badgeVariant(),
+                        'testing_center' => $assignment->examinationSchool?->school?->name,
+                        'room' => $assignment->room
+                            ? trim("{$assignment->room->designation} {$assignment->room->room_number}")
+                            : null,
                         'attended' => (bool) $assignment->attendance_confirmed_at,
+                        'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y g:i A'),
+                        'confirmed_by' => $assignment->confirmedBy?->name,
+                        'decline_reason' => $assignment->decline_reason,
+                        'remarks' => $assignment->remarks,
                         'rating_label' => $rating?->label(),
                         'rating_variant' => $rating?->badgeVariant(),
+                        'rating_average' => $computed['average'] ?? null,
+                        'rating_count' => $computed['ratings_count'] ?? null,
                     ];
                 }) ?? [],
         ]);
@@ -188,7 +205,7 @@ class MyProctadController extends Controller
         return Inertia::render('My/Trainings', [
             'hasRecord' => $member !== null,
             'records' => $member?->trainingAssignments()
-                ->with('training:id,title,type,training_date,completed_at')
+                ->with('training:id,title,type,training_date,end_date,venue,completed_at')
                 ->get()
                 ->sortByDesc(fn ($assignment) => $assignment->training?->training_date)
                 ->values()
@@ -197,8 +214,12 @@ class MyProctadController extends Controller
                     'title' => $assignment->training?->title,
                     'type_label' => $assignment->training?->type->label(),
                     'date' => $assignment->training?->training_date?->format('M d, Y'),
+                    'end_date' => $assignment->training?->end_date?->format('M d, Y'),
+                    'venue' => $assignment->training?->venue,
                     'attended' => (bool) $assignment->attendance_confirmed_at,
+                    'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y g:i A'),
                     'completed' => $assignment->training?->completed_at !== null,
+                    'completed_at' => $assignment->training?->completed_at?->format('M d, Y'),
                 ]) ?? [],
         ]);
     }

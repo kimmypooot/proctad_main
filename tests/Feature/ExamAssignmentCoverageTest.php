@@ -7,7 +7,6 @@ use App\Models\ExamAssignment;
 use App\Models\ExamAssignmentAttendance;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
-use App\Models\ExamRoom;
 use App\Models\Member;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,7 +29,6 @@ class ExamAssignmentCoverageTest extends TestCase
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $examination = Examination::factory()->create();
         $testingCenter = ExaminationSchool::factory()->create(['examination_id' => $examination->id]);
-        $room = ExamRoom::factory()->create(['examination_school_id' => $testingCenter->id]);
         $covered1 = ExaminationSchool::factory()->create(['examination_id' => $examination->id]);
         $covered2 = ExaminationSchool::factory()->create(['examination_id' => $examination->id]);
         $member = Member::factory()->create();
@@ -39,7 +37,6 @@ class ExamAssignmentCoverageTest extends TestCase
             'member_id' => $member->id,
             'role' => 'rec_chair',
             'examination_school_id' => $testingCenter->id,
-            'exam_room_id' => $room->id,
             'covered_school_ids' => [$covered1->id, $covered2->id],
         ])->assertRedirect();
 
@@ -74,14 +71,12 @@ class ExamAssignmentCoverageTest extends TestCase
         $examination = Examination::factory()->create();
         $school = \App\Models\School::factory()->create(['field_office_id' => $office->id]);
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
-        $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
         $member = Member::factory()->create(['field_office_id' => $office->id]);
 
         $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
             'member_id' => $member->id,
             'role' => 'proctor',
             'examination_school_id' => $venue->id,
-            'exam_room_id' => $room->id,
             'covered_school_ids' => [$venue->id],
         ])->assertRedirect();
 

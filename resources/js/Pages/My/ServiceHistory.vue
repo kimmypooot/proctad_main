@@ -1,12 +1,15 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
+import IconButton from '@/Components/IconButton.vue';
+import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
 
 const props = defineProps({
@@ -16,6 +19,47 @@ const props = defineProps({
 
 const confirmedCount = computed(() => props.records.filter((r) => r.attended).length);
 const latestRecord = computed(() => props.records[0] ?? null);
+
+/* --- Filters (client-side; the list is scoped to the logged-in member) --- */
+const search = ref('');
+const typeFilter = ref('');
+const statusFilter = ref('');
+
+const typeOptions = computed(() => {
+    const seen = new Set();
+    props.records.forEach((r) => r.exam_type && seen.add(r.exam_type));
+    return [...seen].map((value) => ({ value, label: value }));
+});
+
+const statusOptions = computed(() => {
+    const seen = new Map();
+    props.records.forEach((r) => r.status_label && seen.set(r.status_label, r.status_label));
+    return [...seen.values()].map((label) => ({ value: label, label }));
+});
+
+const filteredRecords = computed(() => props.records.filter((r) => {
+    if (typeFilter.value && r.exam_type !== typeFilter.value) return false;
+    if (statusFilter.value && r.status_label !== statusFilter.value) return false;
+    if (search.value) {
+        const needle = search.value.toLowerCase();
+        const haystack = `${r.exam_title ?? ''} ${r.testing_center ?? ''}`.toLowerCase();
+        if (!haystack.includes(needle)) return false;
+    }
+    return true;
+}));
+
+const hasActiveFilters = computed(() => !!(search.value || typeFilter.value || statusFilter.value));
+
+const resetFilters = () => {
+    search.value = '';
+    typeFilter.value = '';
+    statusFilter.value = '';
+};
+
+/* --- View modal --- */
+const viewing = ref(null);
+const viewRecord = (record) => (viewing.value = record);
+const closeViewer = () => (viewing.value = null);
 </script>
 
 <template>
@@ -49,11 +93,45 @@ const latestRecord = computed(() => props.records[0] ?? null);
         <template v-else-if="records.length">
             <div class="mt-6 grid gap-4 sm:grid-cols-3">
                 <StatCard compact label="Total Assignments" :value="records.length" icon="clipboard-check" />
-                <StatCard compact label="Confirmed Attendance" :value="confirmedCount" icon="check-badge" />
+                <StatCard compact label="Confirmed Attendance" :value="confirmedCount" icon="check-badge" accent="emerald" />
                 <StatCard compact label="Most Recent" :value="latestRecord?.exam_title ?? '—'" icon="clock" />
             </div>
 
-            <div class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <!-- Filters -->
+            <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">Search</label>
+                    <div class="relative">
+                        <AppIcon name="magnifying-glass" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            v-model="search"
+                            type="text"
+                            placeholder="Examination or testing center"
+                            class="block w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 text-sm text-slate-900 transition-colors duration-200 min-h-[2.75rem] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                        >
+                    </div>
+                </div>
+                <SelectInput
+                    v-model="typeFilter"
+                    label="Exam Type"
+                    placeholder="All types"
+                    :options="[{ value: '', label: 'All types' }, ...typeOptions]"
+                />
+                <SelectInput
+                    v-model="statusFilter"
+                    label="Status"
+                    placeholder="All statuses"
+                    :options="[{ value: '', label: 'All statuses' }, ...statusOptions]"
+                />
+            </div>
+            <div v-if="hasActiveFilters" class="mt-2 flex items-center justify-between text-sm text-slate-500">
+                <span>{{ filteredRecords.length }} of {{ records.length }} assignment(s)</span>
+                <button type="button" class="font-medium text-brand-700 hover:text-brand-800 hover:underline" @click="resetFilters">
+                    Clear filters
+                </button>
+            </div>
+
+            <div v-if="filteredRecords.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">
                     <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
@@ -62,10 +140,11 @@ const latestRecord = computed(() => props.records[0] ?? null);
                             <th class="hidden px-3 py-2 sm:table-cell">Role Performed</th>
                             <th class="hidden px-3 py-2 md:table-cell">Attendance</th>
                             <th class="px-3 py-2">Rating</th>
+                            <th class="w-10 px-3 py-2 text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        <tr v-for="record in records" :key="record.id" class="transition-colors hover:bg-brand-50/40">
+                        <tr v-for="record in filteredRecords" :key="record.id" class="transition-colors hover:bg-brand-50/40">
                             <td class="px-3 py-2">
                                 <p class="font-medium text-slate-900">{{ record.exam_title }}</p>
                                 <p class="text-xs text-slate-500">{{ record.exam_type }}</p>
@@ -85,9 +164,19 @@ const latestRecord = computed(() => props.records[0] ?? null);
                                 </BaseBadge>
                                 <span v-else class="text-slate-400">—</span>
                             </td>
+                            <td class="px-3 py-2 text-center">
+                                <IconButton icon="eye" label="View details" @click="viewRecord(record)" />
+                            </td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            <div v-else class="mt-6">
+                <EmptyState
+                    icon="clock"
+                    title="No assignments match your filters"
+                    description="Try adjusting or clearing the filters above."
+                />
             </div>
         </template>
 
@@ -98,5 +187,70 @@ const latestRecord = computed(() => props.records[0] ?? null);
                 description="Your examination assignments will appear here once your Testing Center deploys you."
             />
         </div>
+
+        <!-- View assignment modal -->
+        <BaseModal :show="!!viewing" title="Assignment Details" max-width="lg" @close="closeViewer">
+            <div v-if="viewing" class="space-y-4">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-brand-700">{{ viewing.exam_type }}</p>
+                    <p class="mt-1 text-base font-semibold text-slate-900">{{ viewing.exam_title }}</p>
+                    <p class="mt-0.5 text-sm text-slate-500">{{ viewing.exam_date }}</p>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Role Performed</p>
+                        <p class="mt-0.5 text-sm text-slate-800">{{ viewing.role_label }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Assignment Status</p>
+                        <p class="mt-0.5">
+                            <BaseBadge :variant="viewing.status_variant">{{ viewing.status_label }}</BaseBadge>
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</p>
+                        <p class="mt-0.5 text-sm text-slate-800">{{ viewing.testing_center ?? '—' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Room</p>
+                        <p class="mt-0.5 text-sm text-slate-800">{{ viewing.room ?? '—' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Attendance</p>
+                        <p class="mt-0.5 text-sm text-slate-800">
+                            <span v-if="viewing.attended" class="inline-flex items-center gap-1 text-emerald-700">
+                                <AppIcon name="check-circle" class="h-4 w-4" /> Confirmed
+                            </span>
+                            <span v-else class="text-slate-400">Not confirmed</span>
+                        </p>
+                        <p v-if="viewing.attendance_confirmed_at" class="text-xs text-slate-400">{{ viewing.attendance_confirmed_at }}</p>
+                        <p v-if="viewing.confirmed_by" class="text-xs text-slate-400">by {{ viewing.confirmed_by }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Performance Rating</p>
+                        <p class="mt-0.5">
+                            <BaseBadge v-if="viewing.rating_label" :variant="viewing.rating_variant">{{ viewing.rating_label }}</BaseBadge>
+                            <span v-else class="text-slate-400">—</span>
+                        </p>
+                        <p v-if="viewing.rating_average" class="text-xs text-slate-400">
+                            Average {{ viewing.rating_average }} from {{ viewing.rating_count }} rating(s)
+                        </p>
+                    </div>
+                </div>
+
+                <div v-if="viewing.decline_reason">
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Decline Reason</p>
+                    <p class="mt-0.5 text-sm text-accent-600">{{ viewing.decline_reason }}</p>
+                </div>
+                <div v-if="viewing.remarks">
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Remarks</p>
+                    <p class="mt-0.5 text-sm text-slate-800">{{ viewing.remarks }}</p>
+                </div>
+            </div>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="closeViewer">Close</BaseButton>
+            </template>
+        </BaseModal>
     </DashboardLayout>
 </template>

@@ -153,7 +153,7 @@ class ExaminationTest extends TestCase
         $this->actingAs($venueAdmin)
             ->get("/examinations/{$exam->id}")
             ->assertInertia(fn (Assert $page) => $page
-                ->where('venues.0.room_breakdown.0.proctor', 'TYLER TORPHY')
+                ->where('venues.0.room_breakdown.0.proctor', 'TORPHY, TYLER')
                 ->where('venues.0.staffing.assigned.proctor', 1));
     }
 

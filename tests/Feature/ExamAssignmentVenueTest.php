@@ -28,16 +28,49 @@ class ExamAssignmentVenueTest extends TestCase
         $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
         $member = Member::factory()->create(['field_office_id' => $office->id]);
 
+        // A brand-new assignment only gets venue/role — the room is decided
+        // later, once the member has confirmed their availability.
         $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
             'member_id' => $member->id,
             'role' => 'proctor',
             'examination_school_id' => $venue->id,
-            'exam_room_id' => $room->id,
         ])->assertRedirect();
 
         $assignment = ExamAssignment::firstOrFail();
         $this->assertSame($venue->id, $assignment->examination_school_id);
-        $this->assertSame($room->id, $assignment->exam_room_id);
+        $this->assertNull($assignment->exam_room_id);
+
+        $assignment->update(['status' => 'confirmed']);
+
+        $this->actingAs($admin)->patch("/assignments/{$assignment->id}/room", [
+            'exam_room_id' => $room->id,
+        ])->assertRedirect();
+
+        $this->assertSame($room->id, $assignment->fresh()->exam_room_id);
+    }
+
+    public function test_room_cannot_be_assigned_before_the_member_confirms(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $office = FieldOffice::factory()->create();
+        $examination = Examination::factory()->create();
+        $school = School::factory()->create(['field_office_id' => $office->id]);
+        $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
+        $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
+        $member = Member::factory()->create(['field_office_id' => $office->id]);
+        $assignment = ExamAssignment::factory()->create([
+            'examination_id' => $examination->id,
+            'member_id' => $member->id,
+            'role' => 'proctor',
+            'examination_school_id' => $venue->id,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($admin)->patch("/assignments/{$assignment->id}/room", [
+            'exam_room_id' => $room->id,
+        ])->assertSessionHasErrors('exam_room_id');
+
+        $this->assertNull($assignment->fresh()->exam_room_id);
     }
 
     public function test_room_must_belong_to_the_selected_venue(): void
@@ -76,7 +109,8 @@ class ExamAssignmentVenueTest extends TestCase
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $office = FieldOffice::factory()->create();
         $member = Member::factory()->create(['field_office_id' => $office->id]);
-        $assignment = ExamAssignment::factory()->create(['member_id' => $member->id, 'role' => 'proctor']);
+        // Confirmed: the room can only be set once the member has confirmed.
+        $assignment = ExamAssignment::factory()->create(['member_id' => $member->id, 'role' => 'proctor', 'status' => 'confirmed']);
         $school = School::factory()->create(['field_office_id' => $office->id]);
         $venue = ExaminationSchool::factory()->create(['examination_id' => $assignment->examination_id, 'school_id' => $school->id]);
         $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
@@ -120,7 +154,6 @@ class ExamAssignmentVenueTest extends TestCase
         $examination = Examination::factory()->create();
         $school = School::factory()->create(['field_office_id' => $venueOffice->id]);
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
-        $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
         $member = Member::factory()->create(['field_office_id' => $memberOffice->id]);
 
         // REC/LEC-style committee roles are intentionally region-wide.
@@ -128,7 +161,6 @@ class ExamAssignmentVenueTest extends TestCase
             'member_id' => $member->id,
             'role' => 'rec_chair',
             'examination_school_id' => $venue->id,
-            'exam_room_id' => $room->id,
         ])->assertRedirect()->assertSessionDoesntHaveErrors();
 
         $this->assertDatabaseCount('exam_assignments', 1);

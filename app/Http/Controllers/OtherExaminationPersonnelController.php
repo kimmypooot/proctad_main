@@ -112,7 +112,7 @@ class OtherExaminationPersonnelController extends Controller
                 'contact_number', 'email', 'agency', 'position', 'personnel_type',
                 'field_office_id', 'is_active',
             ]),
-            'fieldOffices' => $this->assignableFieldOffices($request->user()),
+            'fieldOffices' => $this->assignableFieldOffices($request->user(), $otherExaminationPersonnel->field_office_id),
             'personnelTypes' => $this->personnelTypeOptions(),
         ]);
     }
@@ -179,9 +179,10 @@ class OtherExaminationPersonnelController extends Controller
         ]);
     }
 
-    private function assignableFieldOffices(User $user)
+    private function assignableFieldOffices(User $user, ?int $currentId = null)
     {
         return FieldOffice::query()
+            ->where(fn ($q) => $q->where('is_active', true)->when($currentId, fn ($q2) => $q2->orWhere('id', $currentId)))
             ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->whereKey($user->field_office_id))
             ->orderBy('name')
             ->get(['id', 'name', 'code']);

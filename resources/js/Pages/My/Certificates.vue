@@ -1,12 +1,14 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
+import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
 
 const props = defineProps({
@@ -25,6 +27,47 @@ const typeIcons = {
 };
 
 const iconFor = (certificate) => typeIcons[certificate.type] ?? 'document-check';
+
+/* --- Filters (client-side; the list is scoped to the logged-in member) --- */
+const search = ref('');
+const statusFilter = ref('');
+const typeFilter = ref('');
+
+const statusOptions = computed(() => {
+    const seen = new Map();
+    props.certificates.forEach((c) => seen.set(c.status, c.status_label));
+    return [...seen].map(([value, label]) => ({ value, label }));
+});
+
+const typeOptions = computed(() => {
+    const seen = new Map();
+    props.certificates.forEach((c) => seen.set(c.type, c.type_label));
+    return [...seen].map(([value, label]) => ({ value, label }));
+});
+
+const filteredCertificates = computed(() => props.certificates.filter((c) => {
+    if (statusFilter.value && c.status !== statusFilter.value) return false;
+    if (typeFilter.value && c.type !== typeFilter.value) return false;
+    if (search.value) {
+        const needle = search.value.toLowerCase();
+        const haystack = `${c.certificate_no ?? ''} ${c.source ?? ''}`.toLowerCase();
+        if (!haystack.includes(needle)) return false;
+    }
+    return true;
+}));
+
+const hasActiveFilters = computed(() => !!(search.value || statusFilter.value || typeFilter.value));
+
+const resetFilters = () => {
+    search.value = '';
+    statusFilter.value = '';
+    typeFilter.value = '';
+};
+
+/* --- View modal --- */
+const viewing = ref(null);
+const viewCertificate = (certificate) => (viewing.value = certificate);
+const closeViewer = () => (viewing.value = null);
 </script>
 
 <template>
@@ -44,15 +87,49 @@ const iconFor = (certificate) => typeIcons[certificate.type] ?? 'document-check'
         <template v-else-if="certificates.length">
             <div class="mt-6 grid gap-4 sm:grid-cols-3">
                 <StatCard compact label="Total Certificates" :value="certificates.length" icon="document-check" />
-                <StatCard compact label="Released" :value="releasedCount" icon="check-badge" />
-                <StatCard compact label="Pending Approval" :value="pendingCount" icon="clock" />
+                <StatCard compact label="Released" :value="releasedCount" icon="check-badge" accent="emerald" />
+                <StatCard compact label="Pending Approval" :value="pendingCount" icon="clock" accent="amber" />
             </div>
 
-            <div class="mt-6 space-y-3">
+            <!-- Filters -->
+            <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-slate-700">Search</label>
+                    <div class="relative">
+                        <AppIcon name="magnifying-glass" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                            v-model="search"
+                            type="text"
+                            placeholder="Certificate no. or source"
+                            class="block w-full rounded-lg border border-slate-300 py-2.5 pl-10 pr-4 text-sm text-slate-900 transition-colors duration-200 min-h-[2.75rem] focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                        >
+                    </div>
+                </div>
+                <SelectInput
+                    v-model="statusFilter"
+                    label="Status"
+                    placeholder="All statuses"
+                    :options="[{ value: '', label: 'All statuses' }, ...statusOptions]"
+                />
+                <SelectInput
+                    v-model="typeFilter"
+                    label="Type"
+                    placeholder="All types"
+                    :options="[{ value: '', label: 'All types' }, ...typeOptions]"
+                />
+            </div>
+            <div v-if="hasActiveFilters" class="mt-2 flex items-center justify-between text-sm text-slate-500">
+                <span>{{ filteredCertificates.length }} of {{ certificates.length }} certificate(s)</span>
+                <button type="button" class="font-medium text-brand-700 hover:text-brand-800 hover:underline" @click="resetFilters">
+                    Clear filters
+                </button>
+            </div>
+
+            <div v-if="filteredCertificates.length" class="mt-6 space-y-3">
                 <div
-                    v-for="certificate in certificates"
+                    v-for="certificate in filteredCertificates"
                     :key="certificate.id"
-                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5"
+                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 transition-shadow duration-200 hover:shadow-md"
                 >
                     <div class="flex items-start gap-4">
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
@@ -63,6 +140,7 @@ const iconFor = (certificate) => typeIcons[certificate.type] ?? 'document-check'
                             <p class="mt-1 font-mono text-sm font-semibold text-slate-900">{{ certificate.certificate_no ?? '— pending —' }}</p>
                             <p class="mt-0.5 text-sm text-slate-600">{{ certificate.source }}</p>
                             <p v-if="certificate.source_date" class="text-xs text-slate-400">{{ certificate.source_date }}</p>
+                            <p v-if="certificate.released_at" class="text-xs text-slate-400">Released {{ certificate.released_at }}</p>
                             <p v-if="certificate.disapproval_remarks" class="mt-1 max-w-md text-xs text-accent-600">
                                 {{ certificate.disapproval_remarks }}
                             </p>
@@ -70,17 +148,29 @@ const iconFor = (certificate) => typeIcons[certificate.type] ?? 'document-check'
                     </div>
                     <div class="flex items-center gap-3">
                         <BaseBadge :variant="certificate.status_variant">{{ certificate.status_label }}</BaseBadge>
-                        <BaseButton
-                            v-if="certificate.status === 'released'"
-                            variant="link"
-                            external
-                            :href="`/certificates/${certificate.id}/download`"
-                        >
-                            <AppIcon name="document-check" class="h-4 w-4" />
-                            Download
-                        </BaseButton>
+                        <template v-if="certificate.status === 'released'">
+                            <BaseButton variant="link" @click="viewCertificate(certificate)">
+                                <AppIcon name="eye" class="h-4 w-4" />
+                                View
+                            </BaseButton>
+                            <BaseButton
+                                variant="link"
+                                external
+                                :href="`/certificates/${certificate.id}/download`"
+                            >
+                                <AppIcon name="arrow-down-tray" class="h-4 w-4" />
+                                Download
+                            </BaseButton>
+                        </template>
                     </div>
                 </div>
+            </div>
+            <div v-else class="mt-6">
+                <EmptyState
+                    icon="document-check"
+                    title="No certificates match your filters"
+                    description="Try adjusting or clearing the filters above."
+                />
             </div>
         </template>
 
@@ -91,5 +181,30 @@ const iconFor = (certificate) => typeIcons[certificate.type] ?? 'document-check'
                 description="Certificates you earn from examinations and trainings will appear here."
             />
         </div>
+
+        <!-- View certificate modal -->
+        <BaseModal :show="!!viewing" :title="viewing?.certificate_no ?? 'Certificate'" max-width="3xl" @close="closeViewer">
+            <div v-if="viewing" class="-mx-6 -my-5 overflow-hidden rounded-b-xl bg-slate-100">
+                <iframe
+                    :key="viewing.id"
+                    :src="`/certificates/${viewing.id}/view`"
+                    :title="`${viewing.certificate_no ?? 'Certificate'} preview`"
+                    class="h-[75vh] w-full border-0"
+                />
+            </div>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="closeViewer">Close</BaseButton>
+                <BaseButton
+                    v-if="viewing"
+                    variant="primary"
+                    size="sm"
+                    external
+                    :href="`/certificates/${viewing.id}/download`"
+                >
+                    <AppIcon name="arrow-down-tray" class="h-4 w-4" />
+                    Download
+                </BaseButton>
+            </template>
+        </BaseModal>
     </DashboardLayout>
 </template>

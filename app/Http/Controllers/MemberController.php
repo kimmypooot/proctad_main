@@ -74,7 +74,32 @@ class MemberController extends Controller
 
         return Inertia::render('Members/Create', [
             'fieldOffices' => $this->assignableFieldOffices($request->user()),
+            'prefill' => $this->prefillFromUnlinkedUser($request),
         ]);
+    }
+
+    /**
+     * Jumping here from the Users page's "unlinked member accounts" worklist
+     * (?from_user=ID) prefills the form from that self-registered account —
+     * submitting normally still goes through resolveAccount()'s email match,
+     * which will find and link this exact account rather than creating a new one.
+     */
+    private function prefillFromUnlinkedUser(Request $request): ?array
+    {
+        if (! $request->filled('from_user')) {
+            return null;
+        }
+
+        $user = User::where('id', $request->integer('from_user'))
+            ->where('role', UserRole::Member)
+            ->doesntHave('member')
+            ->first();
+
+        if (! $user) {
+            return null;
+        }
+
+        return $user->only('first_name', 'middle_name', 'last_name', 'suffix', 'email', 'mobile_number', 'field_office_id');
     }
 
     public function store(StoreMemberRequest $request): RedirectResponse
@@ -195,7 +220,7 @@ class MemberController extends Controller
                 'sex', 'email', 'mobile_number', 'agency', 'position', 'field_office_id',
                 'status', 'disqualification_remarks',
             ]),
-            'fieldOffices' => $this->assignableFieldOffices($request->user()),
+            'fieldOffices' => $this->assignableFieldOffices($request->user(), $member->field_office_id),
             'statuses' => $this->statusOptions(),
         ]);
     }
@@ -310,9 +335,10 @@ class MemberController extends Controller
         ]);
     }
 
-    private function assignableFieldOffices(User $user)
+    private function assignableFieldOffices(User $user, ?int $currentId = null)
     {
         return FieldOffice::query()
+            ->where(fn ($q) => $q->where('is_active', true)->when($currentId, fn ($q2) => $q2->orWhere('id', $currentId)))
             ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->whereKey($user->field_office_id))
             ->orderBy('name')
             ->get(['id', 'name', 'code']);

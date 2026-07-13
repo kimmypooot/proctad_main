@@ -221,7 +221,7 @@ class IdCardPdfService
     private function memberData(Member $member): array
     {
         $member->loadMissing('fieldOffice:id,name,code');
-        $name = $this->latin1(mb_strtoupper($member->name));
+        $name = $this->latin1(mb_strtoupper($member->nameFirstLast()));
 
         return [
             'role' => 'PROCTAD',
@@ -239,7 +239,7 @@ class IdCardPdfService
     private function oepData(OtherExaminationPersonnel $oep): array
     {
         $oep->loadMissing('fieldOffice:id,name,code');
-        $name = $this->latin1(mb_strtoupper($oep->name));
+        $name = $this->latin1(mb_strtoupper($oep->fullName()));
 
         return [
             'role' => mb_strtoupper($oep->personnel_type->label()),

@@ -93,6 +93,14 @@ class SignatoryController extends Controller
             return FieldOffice::whereKey($user->field_office_id)->get(['id', 'name', 'code'])->all();
         }
 
-        return FieldOffice::orderBy('name')->get(['id', 'name', 'code'])->all();
+        // Include hidden field offices already referenced by an existing signatory
+        // so its edit form doesn't silently blank out that selection.
+        $referencedIds = Signatory::whereNotNull('field_office_id')->distinct()->pluck('field_office_id');
+
+        return FieldOffice::query()
+            ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $referencedIds))
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->all();
     }
 }

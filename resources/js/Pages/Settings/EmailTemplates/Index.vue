@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -34,6 +34,44 @@ const submit = () => form.put(`/email-templates/${editing.value.id}`, {
     preserveScroll: true,
     onSuccess: () => (editing.value = null),
 });
+
+/* --- Preview: substitute {placeholder} variables with sample values so admins
+   can see roughly how the email will look, without sending a real one. --- */
+const SAMPLE_VALUES = {
+    member_name: 'Juan Dela Cruz',
+    exam_name: 'March 2026 CSE-PPT',
+    exam_date: 'March 15, 2026 (Sunday)',
+    designation: 'Room Examiner',
+    proctad_id: 'PROCTAD-CSCRO8-AB12CD',
+    confirmation_url: 'https://proctad.example/assignments/123/confirm?signature=sample',
+};
+
+const sampleFor = (key, description) => SAMPLE_VALUES[key] ?? `[${description || key}]`;
+
+const substitute = (text, variables) => (text ?? '').replace(
+    /\{(\w+)\}/g,
+    (match, key) => sampleFor(key, variables?.[key]),
+);
+
+const previewing = ref(null);
+
+const openPreview = (template) => {
+    previewing.value = { subject: template.subject, body_html: template.body_html, variables: template.variables };
+};
+
+const previewDraft = () => {
+    previewing.value = { subject: form.subject, body_html: form.body_html, variables: editing.value?.variables };
+};
+
+const previewSubject = computed(() => (previewing.value ? substitute(previewing.value.subject, previewing.value.variables) : ''));
+
+const previewHtmlDoc = computed(() => {
+    if (!previewing.value) return '';
+    const body = substitute(previewing.value.body_html, previewing.value.variables);
+    return `<!doctype html><html><head><meta charset="utf-8">`
+        + `<style>body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1e293b;padding:16px;margin:0;line-height:1.6}`
+        + `a{color:#2A338F}</style></head><body>${body}</body></html>`;
+});
 </script>
 
 <template>
@@ -67,7 +105,10 @@ const submit = () => form.put(`/email-templates/${editing.value.id}`, {
                             </BaseBadge>
                         </td>
                         <td class="px-3 py-2 text-center">
-                            <IconButton v-if="can.manage" icon="pencil" label="Edit" @click="openEdit(template)" />
+                            <div class="inline-flex gap-1">
+                                <IconButton icon="eye" label="Preview" @click="openPreview(template)" />
+                                <IconButton v-if="can.manage" icon="pencil" label="Edit" @click="openEdit(template)" />
+                            </div>
                         </td>
                     </tr>
                 </tbody>
@@ -101,6 +142,7 @@ const submit = () => form.put(`/email-templates/${editing.value.id}`, {
                 <CheckboxInput v-model="form.is_active">Active (used when sending this email type)</CheckboxInput>
             </form>
             <template #footer>
+                <BaseButton variant="outline" size="sm" @click="previewDraft">Preview</BaseButton>
                 <BaseButton variant="outline" size="sm" @click="editing = null">Cancel</BaseButton>
                 <BaseButton
                     type="submit"
@@ -112,6 +154,27 @@ const submit = () => form.put(`/email-templates/${editing.value.id}`, {
                 >
                     Save Changes
                 </BaseButton>
+            </template>
+        </BaseModal>
+
+        <!-- Preview modal -->
+        <BaseModal :show="!!previewing" title="Email Preview" max-width="xl" @close="previewing = null">
+            <div v-if="previewing">
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Subject</p>
+                <p class="mt-0.5 font-semibold text-slate-900">{{ previewSubject }}</p>
+
+                <p class="mt-4 text-xs font-medium uppercase tracking-wide text-slate-400">Body</p>
+                <div class="mt-2 overflow-hidden rounded-lg border border-slate-200">
+                    <iframe :srcdoc="previewHtmlDoc" sandbox="" class="h-96 w-full bg-white" title="Email body preview" />
+                </div>
+
+                <p class="mt-3 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-500">
+                    Placeholder variables are filled with sample values for this preview — actual emails substitute
+                    the real member/exam data.
+                </p>
+            </div>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="previewing = null">Close</BaseButton>
             </template>
         </BaseModal>
     </DashboardLayout>

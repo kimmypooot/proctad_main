@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\BlacklistStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
@@ -65,6 +66,12 @@ class AuthenticatedSessionController extends Controller
         if ($user !== null && ! $user->is_active) {
             throw ValidationException::withMessages([
                 'login' => __('This account has been deactivated. Please contact your administrator.'),
+            ]);
+        }
+
+        if ($user !== null && $user->member?->blacklists()->where('status', BlacklistStatus::Active)->exists()) {
+            throw ValidationException::withMessages([
+                'login' => __('This account has been blacklisted. Please contact your administrator.'),
             ]);
         }
 

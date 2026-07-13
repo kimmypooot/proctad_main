@@ -15,12 +15,18 @@ class FieldOfficeController extends Controller
     {
         Gate::authorize('viewAny', FieldOffice::class);
 
+        $fieldOffices = FieldOffice::withCount('users')->orderBy('name')->get();
+
         return Inertia::render('Settings/FieldOffices/Index', [
-            'fieldOffices' => FieldOffice::withCount('users')->orderBy('name')->get()
-                ->map(fn (FieldOffice $office) => [
-                    ...$office->only('id', 'name', 'code', 'address'),
-                    'users_count' => $office->users_count,
-                ]),
+            'fieldOffices' => $fieldOffices->map(fn (FieldOffice $office) => [
+                ...$office->only('id', 'name', 'code', 'address', 'is_active'),
+                'users_count' => $office->users_count,
+            ]),
+            'stats' => [
+                'total' => $fieldOffices->count(),
+                'active' => $fieldOffices->where('is_active', true)->count(),
+                'hidden' => $fieldOffices->where('is_active', false)->count(),
+            ],
             'can' => ['manage' => $request->user()->can('manage', FieldOffice::class)],
         ]);
     }
@@ -33,6 +39,7 @@ class FieldOfficeController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:20', 'unique:field_offices,code'],
             'address' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['required', 'boolean'],
         ]);
 
         FieldOffice::create($validated);
@@ -48,6 +55,7 @@ class FieldOfficeController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:20', 'unique:field_offices,code,'.$fieldOffice->id],
             'address' => ['nullable', 'string', 'max:255'],
+            'is_active' => ['required', 'boolean'],
         ]);
 
         $fieldOffice->update($validated);

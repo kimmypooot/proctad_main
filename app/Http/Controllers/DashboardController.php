@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BlacklistStatus;
 use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
 use App\Enums\EligibilityRequirement;
 use App\Enums\MemberStatus;
 use App\Enums\UserRole;
+use App\Models\Blacklist;
 use App\Models\Certificate;
 use App\Models\ExamAssignment;
 use App\Models\Examination;
@@ -16,6 +18,7 @@ use App\Models\Training;
 use App\Models\TrainingAssignment;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,7 +39,158 @@ class DashboardController extends Controller
             'fieldOffice' => $fieldOffice?->only('id', 'name', 'code'),
             'stats' => $this->statsFor($role, $user, $member),
             'memberSummary' => $role === UserRole::Member ? $this->memberSummary($member) : null,
+            'analytics' => $this->adminAnalytics($role, $user, $request),
         ]);
+    }
+
+    /**
+     * SaaS-style analytics for the admin dashboard: a 6-month registration
+     * trend, member status breakdown, and a recent-registrations feed.
+     * Region-wide roles (Super Admin/ESD Admin) see the whole region plus a
+     * per-Testing-Center breakdown and can filter the recent-registrations
+     * feed to one office; Testing Center Staff (FO-scoped) see their own
+     * office only, with a region-wide total alongside for context.
+     */
+    private function adminAnalytics(UserRole $role, User $user, Request $request): ?array
+    {
+        if (! in_array($role, [UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin], true)) {
+            return null;
+        }
+
+        $regionWide = $role->isRegionWide();
+        $ownFieldOfficeId = $user->field_office_id;
+
+        // Region-wide roles may filter the recent-registrations feed to one
+        // office; FO-scoped roles always see their own office.
+        $filterFieldOfficeId = $regionWide
+            ? ($request->filled('field_office_id') ? $request->integer('field_office_id') : null)
+            : $ownFieldOfficeId;
+
+        // The trend/status/secondary-stat scope: null (whole region) for
+        // region-wide roles, own office for FO-scoped roles. Deliberately NOT
+        // tied to $filterFieldOfficeId — a region-wide admin filtering the
+        // feed to one office still sees region-wide trend/status context.
+        $scopeFieldOfficeId = $regionWide ? null : $ownFieldOfficeId;
+
+        return [
+            'scope' => $regionWide ? 'region' : 'field_office',
+            'fieldOffices' => $regionWide ? FieldOffice::orderBy('name')->get(['id', 'name', 'code']) : null,
+            'selectedFieldOfficeId' => $filterFieldOfficeId,
+            'registrationTrend' => $this->registrationTrend($scopeFieldOfficeId),
+            'registrationsByFieldOffice' => $regionWide ? $this->registrationsByFieldOffice() : null,
+            'statusBreakdown' => $this->memberStatusBreakdown($scopeFieldOfficeId),
+            'recentRegistrations' => $this->recentRegistrations($filterFieldOfficeId),
+            'regionTotalThisMonth' => $regionWide ? null : Member::query()
+                ->whereYear('created_at', now()->year)
+                ->whereMonth('created_at', now()->month)
+                ->count(),
+            'secondaryStats' => [
+                $this->stat(
+                    'Upcoming Examinations',
+                    Examination::where('exam_date', '>=', today())
+                        ->when($scopeFieldOfficeId, fn ($q) => $q->whereHas('assignments', fn ($q2) => $q2->where('field_office_id', $scopeFieldOfficeId)))
+                        ->count(),
+                    'calendar',
+                    null,
+                ),
+                $this->stat(
+                    'Certificates Issued (Month)',
+                    Certificate::where('status', CertificateStatus::Released)
+                        ->whereYear('released_at', now()->year)
+                        ->whereMonth('released_at', now()->month)
+                        ->when($scopeFieldOfficeId, fn ($q) => $q->where('field_office_id', $scopeFieldOfficeId))
+                        ->count(),
+                    'document-check',
+                    null,
+                ),
+                $this->stat(
+                    'Upcoming Trainings',
+                    Training::whereNull('completed_at')
+                        ->whereDate('training_date', '>=', today())
+                        ->when($scopeFieldOfficeId, fn ($q) => $q->whereHas('assignments', fn ($q2) => $q2->where('field_office_id', $scopeFieldOfficeId)))
+                        ->count(),
+                    'academic-cap',
+                    null,
+                ),
+                $this->stat(
+                    'Active Blacklist Entries',
+                    Blacklist::where('status', BlacklistStatus::Active)
+                        ->when($scopeFieldOfficeId, fn ($q) => $q->where('field_office_id', $scopeFieldOfficeId))
+                        ->count(),
+                    'exclamation-triangle',
+                    null,
+                ),
+            ],
+        ];
+    }
+
+    /**
+     * Monthly registration counts for the last 6 months (this month inclusive).
+     */
+    private function registrationTrend(?int $fieldOfficeId): array
+    {
+        return collect(range(5, 0))
+            ->map(function (int $monthsAgo) use ($fieldOfficeId) {
+                $month = now()->subMonths($monthsAgo);
+
+                $count = Member::query()
+                    ->whereYear('created_at', $month->year)
+                    ->whereMonth('created_at', $month->month)
+                    ->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId))
+                    ->count();
+
+                return ['label' => $month->format('M'), 'value' => $count];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function registrationsByFieldOffice(): array
+    {
+        return FieldOffice::withCount('members')
+            ->orderByDesc('members_count')
+            ->get()
+            ->map(fn (FieldOffice $fo) => ['label' => $fo->code ?? $fo->name, 'value' => $fo->members_count])
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string, value: int, color: string}>
+     */
+    private function memberStatusBreakdown(?int $fieldOfficeId): array
+    {
+        $scoped = fn () => Member::query()->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId));
+
+        return [
+            ['key' => 'active', 'label' => 'Active', 'value' => (clone $scoped())->where('status', MemberStatus::Active)->count(), 'color' => 'good'],
+            ['key' => 'inactive', 'label' => 'Inactive', 'value' => (clone $scoped())->where('status', MemberStatus::Inactive)->count(), 'color' => 'neutral'],
+            ['key' => 'disqualified', 'label' => 'Disqualified', 'value' => (clone $scoped())->where('status', MemberStatus::Disqualified)->count(), 'color' => 'warning'],
+            [
+                'key' => 'blacklisted',
+                'label' => 'Blacklisted',
+                'value' => (clone $scoped())->whereHas('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))->count(),
+                'color' => 'critical',
+            ],
+        ];
+    }
+
+    private function recentRegistrations(?int $fieldOfficeId): Collection
+    {
+        return Member::query()
+            ->with('fieldOffice:id,name,code')
+            ->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId))
+            ->latest('created_at')
+            ->limit(10)
+            ->get()
+            ->map(fn (Member $member) => [
+                'id' => $member->id,
+                'name' => $member->name,
+                'proctad_id' => $member->proctad_id,
+                'field_office' => $member->fieldOffice?->name,
+                'status_label' => $member->status->label(),
+                'status_variant' => $member->status->badgeVariant(),
+                'registered_at' => $member->created_at->diffForHumans(),
+            ]);
     }
 
     /**

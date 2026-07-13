@@ -48,7 +48,7 @@ class OtherExaminationPersonnelTest extends TestCase
 
         $oep = OtherExaminationPersonnel::firstOrFail();
         $this->assertStringStartsWith('OEP-CSCRO8-', $oep->oep_id);
-        $this->assertSame('JUAN DELA CRUZ', $oep->name);
+        $this->assertSame('DELA CRUZ, JUAN', $oep->name);
     }
 
     public function test_fo_admin_cannot_register_personnel_for_another_office(): void

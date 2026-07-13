@@ -11,6 +11,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BlacklistController;
 use App\Http\Controllers\CertificateApprovalController;
 use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\DashboardController;
@@ -136,6 +137,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
     // Owning members may download their own released certificates (policy-checked).
     Route::get('/certificates/{certificate}/download', [CertificateController::class, 'download'])
         ->name('certificates.download');
+    Route::get('/certificates/{certificate}/view', [CertificateController::class, 'view'])
+        ->name('certificates.view');
 
     // Own-record access is allowed by MemberPolicy::view.
     Route::get('/members/{member}/photo', [MemberController::class, 'photo'])->name('members.photo');
@@ -153,11 +156,27 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
 
     Route::middleware('role:super_admin,management,field_director')->group(function () {
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+    });
+
+    // ESD Admin is included as a fallback approver alongside Super Admin, in
+    // case the primary approver (Field Director/Management) is unavailable.
+    Route::middleware('role:super_admin,esd_admin,management,field_director')->group(function () {
         Route::get('/approvals', [CertificateApprovalController::class, 'index'])->name('approvals.index');
         Route::post('/certificates/{certificate}/approve', [CertificateApprovalController::class, 'approve'])
             ->name('certificates.approve');
         Route::post('/certificates/{certificate}/disapprove', [CertificateApprovalController::class, 'disapprove'])
             ->name('certificates.disapprove');
+        Route::post('/certificates/bulk-approve', [CertificateApprovalController::class, 'bulkApprove'])
+            ->name('certificates.bulk-approve');
+        Route::post('/certificates/bulk-disapprove', [CertificateApprovalController::class, 'bulkDisapprove'])
+            ->name('certificates.bulk-disapprove');
+    });
+
+    Route::middleware('role:super_admin,esd_admin,fo_admin,field_director')->group(function () {
+        Route::get('/blacklists', [BlacklistController::class, 'index'])->name('blacklists.index');
+        Route::get('/blacklists/members/search', [BlacklistController::class, 'searchMembers'])->name('blacklists.members.search');
+        Route::post('/blacklists', [BlacklistController::class, 'store'])->name('blacklists.store');
+        Route::post('/blacklists/{blacklist}/lift', [BlacklistController::class, 'lift'])->name('blacklists.lift');
     });
 
     Route::middleware('role:super_admin,esd_admin,management,field_director,fo_admin')->group(function () {

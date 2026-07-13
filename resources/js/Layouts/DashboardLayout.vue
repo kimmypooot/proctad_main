@@ -120,6 +120,7 @@ const navByRole = {
             items: [
                 { label: 'PROCTAD Members', icon: 'users', href: '/members' },
                 { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
+                { label: 'Blacklisted Test Admins', icon: 'exclamation-triangle', href: '/blacklists' },
             ],
         },
         {
@@ -170,6 +171,7 @@ const navByRole = {
                 { label: 'Members', icon: 'users', href: '/members' },
                 { label: 'Certificates', icon: 'document-check', href: '/certificates' },
                 { label: 'Service Records', icon: 'document-text', href: '/examinations' },
+                { label: 'Blacklisted Test Admins', icon: 'exclamation-triangle', href: '/blacklists' },
             ],
         },
         {
@@ -221,10 +223,17 @@ const navByRole = {
             ],
         },
         {
+            section: 'Approvals',
+            items: [
+                { label: 'Approvals', icon: 'clipboard-check', href: '/approvals' },
+            ],
+        },
+        {
             section: 'Registry',
             items: [
                 { label: 'PROCTAD Registry', icon: 'users', href: '/members' },
                 { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
+                { label: 'Blacklisted Test Admins', icon: 'exclamation-triangle', href: '/blacklists' },
             ],
         },
         {
@@ -288,6 +297,7 @@ navByRole.super_admin = [
         items: [
             { label: 'PROCTAD Registry', icon: 'users', href: '/members' },
             { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
+            { label: 'Blacklisted Test Admins', icon: 'exclamation-triangle', href: '/blacklists' },
         ],
     },
     {
@@ -580,7 +590,7 @@ const logout = () => {
                                 <template v-else>{{ initials }}</template>
                             </span>
                             <span class="hidden text-left sm:block">
-                                <span class="block max-w-[10rem] truncate text-sm font-medium leading-none text-slate-800">{{ user?.name }}</span>
+                                <span class="block text-sm font-bold leading-none text-slate-800">{{ user?.name }}</span>
                                 <span class="mt-0.5 block text-xs leading-none text-slate-400">{{ roleLabel }}</span>
                             </span>
                             <AppIcon name="chevron-down" class="h-4 w-4 shrink-0 text-slate-400 transition-transform" :class="userMenuOpen && 'rotate-180'" />

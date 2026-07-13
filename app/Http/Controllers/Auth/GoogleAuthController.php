@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\BlacklistStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirect;
 use Throwable;
@@ -23,20 +25,32 @@ class GoogleAuthController extends Controller
     {
         try {
             $googleUser = Socialite::driver('google')->user();
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            Log::warning('Google sign-in failed', ['message' => $e->getMessage(), 'exception' => $e::class]);
+
             return redirect()->route('member.login')
                 ->with('error', 'Google sign-in failed. Please try again.');
         }
 
-        // Only pre-registered accounts may sign in — there is no self-provisioning
-        // through Google. Unknown emails are directed to their Testing Center.
         $user = User::where('google_id', $googleUser->getId())
             ->orWhere('email', $googleUser->getEmail())
             ->first();
 
+        // No matching account: hand off to the registration form to finish
+        // creating one. The Google identity (already verified by Google) is
+        // kept server-side in the session — the completion form only ever
+        // collects the fields Google doesn't provide (mobile number, terms),
+        // never a client-supplied email/identity.
         if (! $user) {
-            return redirect()->route('member.login')
-                ->with('error', 'No PROCTAD account is registered under that Google email. Please contact your Testing Center.');
+            $request->session()->put('google_pending_registration', [
+                'google_id' => $googleUser->getId(),
+                'email' => $googleUser->getEmail(),
+                'first_name' => $googleUser->user['given_name'] ?? null,
+                'last_name' => $googleUser->user['family_name'] ?? null,
+                'avatar' => $googleUser->getAvatar(),
+            ]);
+
+            return redirect()->route('register');
         }
 
         if ($user->locked_until?->isFuture()) {
@@ -47,6 +61,11 @@ class GoogleAuthController extends Controller
         if (! $user->is_active) {
             return redirect()->route('member.login')
                 ->with('error', 'This account has been deactivated. Please contact your administrator.');
+        }
+
+        if ($user->member?->blacklists()->where('status', BlacklistStatus::Active)->exists()) {
+            return redirect()->route('member.login')
+                ->with('error', 'This account has been blacklisted. Please contact your administrator.');
         }
 
         $user->forceFill([

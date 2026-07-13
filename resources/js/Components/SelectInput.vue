@@ -9,6 +9,7 @@ const props = defineProps({
     /** Array of strings or { value, label } objects */
     options: { type: Array, default: () => [] },
     error: { type: String, default: null },
+    hint: { type: String, default: null },
     required: { type: Boolean, default: false },
     optional: { type: Boolean, default: false },
     placeholder: { type: String, default: 'Select an option' },
@@ -72,6 +73,9 @@ const grouped = computed(() => {
 
         <p v-if="error" :id="`${id}-error`" class="mt-1.5 text-sm text-accent-600" role="alert">
             {{ error }}
+        </p>
+        <p v-else-if="hint" class="mt-1.5 text-sm text-slate-500">
+            {{ hint }}
         </p>
     </div>
 </template>

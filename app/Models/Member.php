@@ -54,14 +54,30 @@ class Member extends Model
         return $id;
     }
 
+    /** Default display format: "Last Name, First Name Middle Name Suffix". */
     protected function name(): Attribute
     {
-        return Attribute::get(fn () => trim(collect([
+        return Attribute::get(function () {
+            $given = trim(collect([$this->first_name, $this->middle_name, $this->suffix])->filter()->implode(' '));
+
+            return trim(collect([$this->last_name, $given])->filter()->implode(', '));
+        });
+    }
+
+    /**
+     * "First Middle Last Suffix" — kept separate from the `name` accessor
+     * above for the few contexts that must not change format: certificates
+     * (which already have their own per-type formatting in
+     * CertificateService), ID cards, and email greetings.
+     */
+    public function nameFirstLast(): string
+    {
+        return trim(collect([
             $this->first_name,
             $this->middle_name,
             $this->last_name,
             $this->suffix,
-        ])->filter()->implode(' ')));
+        ])->filter()->implode(' '));
     }
 
     /**
@@ -130,6 +146,11 @@ class Member extends Model
     public function certificates(): HasMany
     {
         return $this->hasMany(Certificate::class);
+    }
+
+    public function blacklists(): HasMany
+    {
+        return $this->hasMany(Blacklist::class);
     }
 
     /**

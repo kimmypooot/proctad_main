@@ -16,11 +16,11 @@ const props = defineProps({
 
 defineEmits(['jump-to-venues']);
 
-const { venueOptions, roomOptionsFor } = useVenueOptions(computed(() => props.venues));
+const { venueOptions } = useVenueOptions(computed(() => props.venues));
 
 const memberSearch = ref('');
 const selected = ref([]);
-const assignForm = useForm({ member_ids: [], role: '', examination_school_id: '', exam_room_id: '', covered_school_ids: [] });
+const assignForm = useForm({ member_ids: [], role: '', examination_school_id: '', covered_school_ids: [] });
 
 const isCoverageRole = computed(() => props.roles.find((r) => r.value === assignForm.role)?.is_coverage ?? false);
 
@@ -67,14 +67,11 @@ const selectAllFiltered = () => {
         : [...new Set([...selected.value, ...ids])];
 };
 
-const assignRoomOptions = computed(() => roomOptionsFor(assignForm.examination_school_id));
-
 const assign = () => assignForm
     .transform((data) => ({
         ...data,
         member_ids: selected.value,
         examination_school_id: data.examination_school_id || null,
-        exam_room_id: data.exam_room_id || null,
         covered_school_ids: isCoverageRole.value ? data.covered_school_ids : [],
     }))
     .post(`/examinations/${props.examination.id}/assignments/bulk`, {
@@ -92,7 +89,7 @@ const assign = () => assignForm
         <h2 class="text-base font-semibold text-slate-900">Step 2 · Assign Members</h2>
 
         <p v-if="!venues.length" class="mt-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-500">
-            No venues are attached yet. You can still assign members without a venue/room — appropriate for
+            No venues are attached yet. You can still assign members without a venue — appropriate for
             Regional Committee roles — but most Proctor/Examiner assignments should wait until a venue is set up.
             <button type="button" class="font-semibold text-brand-700 hover:underline" @click="$emit('jump-to-venues')">
                 Go to Step 1 to add a venue →
@@ -117,17 +114,13 @@ const assign = () => assignForm
                     placeholder="Not yet assigned"
                     :options="venueOptions"
                     :error="assignForm.errors.examination_school_id"
-                    @update:model-value="assignForm.exam_room_id = ''"
-                />
-                <SelectInput
-                    v-model="assignForm.exam_room_id"
-                    label="Room"
-                    optional
-                    placeholder="Not yet assigned"
-                    :options="assignRoomOptions"
-                    :error="assignForm.errors.exam_room_id"
                 />
             </div>
+
+            <p class="mt-2 text-xs text-slate-400">
+                Only venue and role are assigned here — which room each Proctor/Room Examiner staffs is decided
+                separately in Step 3, closer to the exam date.
+            </p>
 
             <div v-if="isCoverageRole" class="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
                 <p class="text-sm font-medium text-slate-700">Covered schools</p>

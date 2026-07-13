@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AssignmentStatus;
+use App\Enums\BlacklistStatus;
 use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
@@ -158,6 +160,7 @@ class ExaminationController extends Controller
                 ->where('status', 'active')
                 ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->whereDoesntHave('assignments', fn ($q) => $q->where('examination_id', $examination->id))
+                ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
                 ->orderBy('last_name')
                 ->get(['id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'field_office_id'])
                 ->map(fn (Member $member) => [
@@ -198,9 +201,14 @@ class ExaminationController extends Controller
             ->map(function (ExaminationSchool $venue) use ($roomAssignments, $roomRoles) {
                 $normalizedAssignments = $roomAssignments->filter(fn ($a) => $a['examination_school_id'] === $venue->id);
                 $eligibleAssignments = $this->roomStaffing->eligible($normalizedAssignments);
+                // Room assignment is a member's LAST step, only reachable once
+                // they've confirmed their availability — a still-Pending person
+                // isn't offered here even though they otherwise count toward
+                // venue staffing totals (see $eligibleAssignments above).
                 $unassignedPool = collect($roomRoles)->mapWithKeys(fn ($role) => [
                     $role => $eligibleAssignments
                         ->where('role', $role)
+                        ->where('status', AssignmentStatus::Confirmed->value)
                         ->whereNull('exam_room_id')
                         ->map(fn ($a) => ['id' => $a['id'], 'name' => $a['member_name']])
                         ->values(),
