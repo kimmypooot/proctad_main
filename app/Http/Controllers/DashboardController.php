@@ -303,7 +303,10 @@ class DashboardController extends Controller
                 ),
                 $this->stat(
                     'Upcoming Trainings',
-                    Training::whereNull('completed_at')->whereDate('training_date', '>=', today())->count(),
+                    Training::whereNull('completed_at')
+                        ->whereDate('training_date', '>=', today())
+                        ->where('field_office_id', $user->field_office_id)
+                        ->count(),
                     'academic-cap',
                     null,
                 ),

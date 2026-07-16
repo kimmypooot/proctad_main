@@ -27,6 +27,9 @@ class ScannerController extends Controller
 {
     public function __construct(private CertificateService $certificates) {}
 
+    /** @var array<array{CertificateType, ExamAssignment|TrainingAssignment, User}> */
+    private array $pendingCertificates = [];
+
     public function __invoke(Request $request): Response
     {
         $user = $request->user();
@@ -109,7 +112,7 @@ class ScannerController extends Controller
                 ->map(fn (ExaminationSchool $venue) => ['value' => $venue->id, 'label' => $venue->school?->name]);
         }
 
-        return Inertia::render('Scanner/Index', [
+        $response = Inertia::render('Scanner/Index', [
             'code' => $raw['code'],
             'examinationId' => $examinationId,
             'trainingId' => $trainingId,
@@ -119,9 +122,21 @@ class ScannerController extends Controller
             'notFound' => $notFound,
             'attendance' => $attendance,
             'venues' => $venues,
-            'events' => $this->eventOptions(),
+            'events' => $this->eventOptions($user),
             'attendanceSummary' => $this->attendanceSummary($examinationId, $trainingId, $venueId, $user),
         ]);
+
+        if ($this->pendingCertificates) {
+            $certificates = $this->certificates;
+            $pending = $this->pendingCertificates;
+            app()->terminating(function () use ($certificates, $pending) {
+                foreach ($pending as [$type, $assignment, $user]) {
+                    $certificates->generatePending($type, $assignment, $user);
+                }
+            });
+        }
+
+        return $response;
     }
 
     /**
@@ -447,8 +462,7 @@ class ScannerController extends Controller
             'attendance_confirmed_by' => $user->id,
         ]);
 
-        $certificate = $this->certificates
-            ->generatePending(CertificateType::Appreciation, $assignment, $user);
+        $this->pendingCertificates[] = [CertificateType::Appreciation, $assignment, $user];
 
         return [
             'outcome' => 'confirmed',
@@ -457,9 +471,6 @@ class ScannerController extends Controller
             'venue' => $assignment->examinationSchool?->school?->name,
             'room' => $assignment->room?->room_number,
             'designation' => $assignment->room?->designation,
-            'certificate' => $certificate->wasRecentlyCreated
-                ? $certificate->type->label().' queued for Management approval'
-                : null,
         ];
     }
 
@@ -478,27 +489,27 @@ class ScannerController extends Controller
 
         $coveredVenueName = ExaminationSchool::with('school')->find($venueId)?->school?->name;
 
-        $existing = ExamAssignmentAttendance::where('exam_assignment_id', $assignment->id)
-            ->where('examination_school_id', $venueId)
-            ->first();
+        $attendance = ExamAssignmentAttendance::firstOrCreate(
+            [
+                'exam_assignment_id' => $assignment->id,
+                'examination_school_id' => $venueId,
+            ],
+            [
+                'status' => 'present',
+                'scan_method' => 'qr',
+                'scanned_at' => now(),
+                'scanned_by' => $user->id,
+            ],
+        );
 
-        if ($existing) {
+        if (! $attendance->wasRecentlyCreated) {
             return [
                 'outcome' => 'already_confirmed',
-                'confirmed_at' => $existing->scanned_at->format('M d, Y H:i'),
+                'confirmed_at' => $attendance->scanned_at->format('M d, Y H:i'),
                 'role_label' => $assignment->role->label(),
                 'venue' => $coveredVenueName,
             ];
         }
-
-        $attendance = ExamAssignmentAttendance::create([
-            'exam_assignment_id' => $assignment->id,
-            'examination_school_id' => $venueId,
-            'status' => 'present',
-            'scan_method' => 'qr',
-            'scanned_at' => now(),
-            'scanned_by' => $user->id,
-        ]);
 
         return [
             'outcome' => 'confirmed',
@@ -514,13 +525,10 @@ class ScannerController extends Controller
      */
     private function confirmTrainingAttendance(Member $member, int $trainingId, User $user): array
     {
-        $assignment = TrainingAssignment::where('training_id', $trainingId)
-            ->where('member_id', $member->id)
-            ->first();
-
-        if (! $assignment) {
-            return ['outcome' => 'not_assigned'];
-        }
+        $assignment = TrainingAssignment::firstOrCreate(
+            ['training_id' => $trainingId, 'member_id' => $member->id],
+            ['field_office_id' => $member->field_office_id],
+        );
 
         if ($assignment->attendance_confirmed_at) {
             return [
@@ -534,15 +542,11 @@ class ScannerController extends Controller
             'attendance_confirmed_by' => $user->id,
         ]);
 
-        $certificate = $this->certificates
-            ->generatePending(CertificateType::Appearance, $assignment, $user);
+        $this->pendingCertificates[] = [CertificateType::Appearance, $assignment, $user];
 
         return [
             'outcome' => 'confirmed',
             'confirmed_at' => $assignment->attendance_confirmed_at->format('M d, Y H:i'),
-            'certificate' => $certificate->wasRecentlyCreated
-                ? $certificate->type->label().' queued for Field Director approval'
-                : null,
         ];
     }
 
@@ -555,36 +559,35 @@ class ScannerController extends Controller
     {
         $assignment = OepAssignment::where('examination_school_id', $venueId)
             ->where('other_examination_personnel_id', $oep->id)
+            ->with('examinationSchool.school')
             ->first();
 
         if (! $assignment) {
             return ['outcome' => 'not_assigned'];
         }
 
-        // OEP attendance is always venue-scoped (no room concept) — the venue
-        // is whichever one the operator has selected in the scanner.
-        $venueName = ExaminationSchool::with('school')->find($venueId)?->school?->name;
+        $venueName = $assignment->examinationSchool?->school?->name;
 
-        $existing = OepAttendance::where('examination_school_id', $venueId)
-            ->where('other_examination_personnel_id', $oep->id)
-            ->first();
+        $attendance = OepAttendance::firstOrCreate(
+            [
+                'other_examination_personnel_id' => $oep->id,
+                'examination_school_id' => $venueId,
+            ],
+            [
+                'status' => 'present',
+                'scan_method' => 'qr',
+                'scanned_at' => now(),
+                'scanned_by' => $user->id,
+            ],
+        );
 
-        if ($existing) {
+        if (! $attendance->wasRecentlyCreated) {
             return [
                 'outcome' => 'already_confirmed',
-                'confirmed_at' => $existing->scanned_at->format('M d, Y H:i'),
+                'confirmed_at' => $attendance->scanned_at->format('M d, Y H:i'),
                 'venue' => $venueName,
             ];
         }
-
-        $attendance = OepAttendance::create([
-            'other_examination_personnel_id' => $oep->id,
-            'examination_school_id' => $venueId,
-            'status' => 'present',
-            'scan_method' => 'qr',
-            'scanned_at' => now(),
-            'scanned_by' => $user->id,
-        ]);
 
         return [
             'outcome' => 'confirmed',
@@ -596,7 +599,7 @@ class ScannerController extends Controller
     /**
      * Grouped selector options: examinations and trainings.
      */
-    private function eventOptions(): array
+    private function eventOptions(User $user): array
     {
         return [
             'examinations' => Examination::orderByDesc('exam_date')->limit(10)
@@ -605,7 +608,10 @@ class ScannerController extends Controller
                     'value' => $exam->id,
                     'label' => "{$exam->title} — {$exam->exam_date->format('M d, Y')}",
                 ]),
-            'trainings' => Training::whereNull('completed_at')->orderByDesc('training_date')->limit(10)
+            'trainings' => Training::whereNull('completed_at')
+                ->when($user->role === UserRole::FoAdmin,
+                    fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->orderByDesc('training_date')->limit(10)
                 ->get(['id', 'title', 'training_date'])
                 ->map(fn (Training $training) => [
                     'value' => $training->id,

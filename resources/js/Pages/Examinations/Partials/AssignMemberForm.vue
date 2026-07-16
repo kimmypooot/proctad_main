@@ -106,6 +106,7 @@ const assign = () => assignForm
                     placeholder="Select role"
                     :options="roles"
                     :error="assignForm.errors.role"
+                    hint="REC, LEC, and CE for Investigation are 'coverage' roles — stationed at one venue but also responsible for monitoring other schools. REC roles are the only ones that can be assigned with no venue at all."
                 />
                 <SelectInput
                     v-model="assignForm.examination_school_id"

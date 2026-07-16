@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\BlacklistStatus;
 use App\Enums\CertificateType;
 use App\Enums\TrainingType;
+use App\Models\Examination;
 use App\Models\Member;
 use App\Models\Training;
 use App\Models\TrainingAssignment;
 use App\Services\CertificateService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -22,8 +24,13 @@ class TrainingController extends Controller
     {
         Gate::authorize('viewAny', Training::class);
 
+        $user = $request->user();
+        $foScoped = $user->role->isFieldOfficeScoped();
+
         return Inertia::render('Trainings/Index', [
             'trainings' => Training::withCount('assignments')
+                ->with('fieldOffice:id,name', 'exam:id,title,exam_date')
+                ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->orderByDesc('training_date')
                 ->get()
                 ->map(fn (Training $training) => [
@@ -32,10 +39,21 @@ class TrainingController extends Controller
                     'type_label' => $training->type->shortLabel(),
                     'training_date' => $training->training_date->toDateString(),
                     'completed' => $training->completed_at !== null,
+                    'field_office' => $training->relationLoaded('fieldOffice') ? $training->fieldOffice?->only('id', 'name') : null,
+                    'exam' => $training->relationLoaded('exam') && $training->exam
+                        ? $training->exam->only('id', 'title', 'exam_date')
+                        : null,
                 ]),
             'types' => collect(TrainingType::cases())
                 ->map(fn ($type) => ['value' => $type->value, 'label' => $type->label()])->all(),
-            'can' => ['manage' => $request->user()->can('create', Training::class)],
+            'exams' => Examination::where('is_active', true)
+                ->orderByDesc('exam_date')
+                ->get(['id', 'title', 'exam_date'])
+                ->map(fn (Examination $exam) => [
+                    'value' => $exam->id,
+                    'label' => "{$exam->title} — {$exam->exam_date->format('F j, Y')}",
+                ]),
+            'can' => ['manage' => $user->can('create', Training::class)],
         ]);
     }
 
@@ -43,14 +61,22 @@ class TrainingController extends Controller
     {
         Gate::authorize('create', Training::class);
 
-        Training::create($this->validated($request));
+        $data = $this->validated($request);
+
+        if ($request->user()->role->isFieldOfficeScoped()) {
+            $data['field_office_id'] = $request->user()->field_office_id;
+        }
+
+        Training::create($data);
 
         return back()->with('success', 'Training created.');
     }
 
-    public function show(Request $request, Training $training): Response
+    public function modal(Request $request, Training $training): JsonResponse
     {
         Gate::authorize('view', $training);
+
+        $training->load('fieldOffice:id,name', 'exam:id,title,exam_date');
 
         $user = $request->user();
         $foScoped = $user->role->isFieldOfficeScoped();
@@ -86,21 +112,37 @@ class TrainingController extends Controller
                 ])
             : [];
 
-        return Inertia::render('Trainings/Show', [
+        return response()->json([
             'training' => [
-                ...$training->only('id', 'title', 'venue'),
+                'id' => $training->id,
+                'title' => $training->title,
                 'type_label' => $training->type->label(),
                 'training_date' => $training->training_date->toDateString(),
+                'end_date' => $training->end_date?->toDateString(),
+                'venue' => $training->venue,
                 'completed' => $training->completed_at !== null,
                 'completed_at' => $training->completed_at?->format('M d, Y'),
+                'field_office_id' => $training->field_office_id,
+                'field_office' => $training->relationLoaded('fieldOffice') ? $training->fieldOffice?->only('id', 'name') : null,
+                'exam' => $training->relationLoaded('exam') && $training->exam
+                    ? $training->exam->only('id', 'title', 'exam_date')
+                    : null,
             ],
             'assignments' => $assignments,
             'assignableMembers' => $assignable,
             'can' => [
                 'assign' => $user->can('create', TrainingAssignment::class),
+                'manage' => $user->can('update', $training),
                 'complete' => $user->can('complete', $training) && $training->completed_at === null,
             ],
         ]);
+    }
+
+    public function show(Training $training): RedirectResponse
+    {
+        Gate::authorize('view', $training);
+
+        return redirect()->route('trainings.index')->with('info', 'Training details are now available from the list.');
     }
 
     public function update(Request $request, Training $training): RedirectResponse
@@ -157,6 +199,7 @@ class TrainingController extends Controller
             'training_date' => ['required', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:training_date'],
             'venue' => ['nullable', 'string', 'max:255'],
+            'exam_id' => ['required', 'integer', 'exists:examinations,id'],
         ]);
     }
 }

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
+import ViewMemberModal from './Partials/ViewMemberModal.vue';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -22,6 +23,14 @@ const props = defineProps({
 });
 
 const { push: pushToast } = useToasts();
+
+const viewingMemberId = ref(null);
+const showMemberModal = ref(false);
+
+const viewMember = (id) => {
+    viewingMemberId.value = id;
+    showMemberModal.value = true;
+};
 
 const search = ref(props.filters.search ?? '');
 const status = ref(props.filters.status ?? '');
@@ -121,12 +130,6 @@ const downloadSelectedIdCards = async () => {
 
     <DashboardLayout>
         <DashboardPageHeader title="PROCTAD Members" subtitle="Master registry of accredited test administrators.">
-            <template v-if="can.create" #actions>
-                <BaseButton href="/members/create" variant="primary" size="sm">
-                    <AppIcon name="user-plus" class="h-4 w-4" />
-                    Add Member
-                </BaseButton>
-            </template>
         </DashboardPageHeader>
 
         <!-- Filters -->
@@ -212,14 +215,14 @@ const downloadSelectedIdCards = async () => {
                             >
                         </td>
                         <td class="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-brand-700">
-                            <Link :href="`/members/${member.id}`" class="hover:underline">
+                            <button @click="viewMember(member.id)" class="hover:underline">
                                 {{ member.proctad_id }}
-                            </Link>
+                            </button>
                         </td>
                         <td class="px-3 py-2 font-medium text-slate-900">
-                            <Link :href="`/members/${member.id}`" class="hover:underline">
+                            <button @click="viewMember(member.id)" class="hover:underline text-left">
                                 {{ member.name }}
-                            </Link>
+                            </button>
                             <p class="text-xs font-normal text-slate-400 sm:hidden">{{ member.field_office?.name ?? '—' }}</p>
                         </td>
                         <td class="hidden max-w-[14rem] truncate px-3 py-2 text-slate-600 md:table-cell" :title="member.agency">{{ member.agency }}</td>
@@ -250,5 +253,10 @@ const downloadSelectedIdCards = async () => {
         <div class="mt-6">
             <BasePagination :links="members.links" />
         </div>
+        <ViewMemberModal
+            :show="showMemberModal"
+            :member-id="viewingMemberId"
+            @close="showMemberModal = false"
+        />
     </DashboardLayout>
 </template>

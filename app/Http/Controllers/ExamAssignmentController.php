@@ -6,13 +6,16 @@ use App\Enums\AssignmentStatus;
 use App\Enums\BlacklistStatus;
 use App\Enums\ConfirmationAction;
 use App\Enums\ExamRole;
+use App\Enums\MemberStatus;
 use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
+use App\Models\Blacklist;
 use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
 use App\Models\Member;
+use App\Models\User;
 use App\Services\AssignmentConfirmationSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -202,6 +205,7 @@ class ExamAssignmentController extends Controller
         // to know their venue and role at assignment time — which room they
         // staff is decided later via Step 3 (see RoomAssignmentPanel).
         $assigned = 0;
+        $assignedIds = [];
         foreach ($members as $member) {
             if (in_array($member->id, $alreadyAssigned, true)) {
                 continue;
@@ -223,15 +227,60 @@ class ExamAssignmentController extends Controller
             }
 
             $assigned++;
+            $assignedIds[] = $member->id;
         }
 
-        $skipped = count($validated['member_ids']) - $assigned;
         $message = "Assigned {$assigned} member(s).";
-        if ($skipped > 0) {
-            $message .= " Skipped {$skipped} already assigned or ineligible.";
+
+        $skippedIds = array_diff($validated['member_ids'], $assignedIds);
+        if ($skippedIds) {
+            $message .= ' Skipped '.count($skippedIds).': '.$this->describeSkippedMembers($skippedIds, $alreadyAssigned, $user).'.';
         }
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * One name-and-reason per skipped member (capped so the flash toast stays
+     * readable for large batches) — replaces the old collapsed "N skipped,
+     * already assigned or ineligible" message, which gave no way to tell
+     * which member was skipped or why.
+     */
+    private function describeSkippedMembers(array $skippedIds, array $alreadyAssigned, User $user): string
+    {
+        $blacklistedIds = Blacklist::whereIn('member_id', $skippedIds)
+            ->where('status', BlacklistStatus::Active)
+            ->pluck('member_id')
+            ->all();
+
+        $skippedMembers = Member::whereIn('id', $skippedIds)
+            ->get(['id', 'first_name', 'middle_name', 'last_name', 'suffix', 'status', 'field_office_id'])
+            ->keyBy('id');
+
+        $descriptions = collect($skippedIds)->map(function ($id) use ($skippedMembers, $alreadyAssigned, $blacklistedIds, $user) {
+            $member = $skippedMembers->get($id);
+            $name = $member?->name ?? "member #{$id}";
+
+            $reason = match (true) {
+                in_array($id, $alreadyAssigned, true) => 'already assigned',
+                in_array($id, $blacklistedIds, true) => 'blacklisted',
+                $member === null => 'not found',
+                $member->status !== MemberStatus::Active => 'inactive',
+                $user->role === UserRole::FoAdmin && $member->field_office_id !== $user->field_office_id => 'different field office',
+                default => 'ineligible',
+            };
+
+            return "{$name} ({$reason})";
+        });
+
+        $limit = 10;
+        if ($descriptions->count() > $limit) {
+            $remaining = $descriptions->count() - $limit;
+
+            return $descriptions->take($limit)->implode(', ')." and {$remaining} more";
+        }
+
+        return $descriptions->implode(', ');
     }
 
     /**
@@ -326,7 +375,21 @@ class ExamAssignmentController extends Controller
      */
     public function assignRoom(Request $request, ExamAssignment $assignment): RedirectResponse
     {
-        Gate::authorize('update', $assignment);
+        // Room staffing is a venue-level action (same boundary as the Rooms
+        // page and the staffing randomizer), not an assignment-record edit —
+        // deliberately NOT gated by ExamAssignmentPolicy::manage(), which
+        // checks the assignee's own field office. That normally matches the
+        // venue's via venueJurisdictionRule, but isn't guaranteed for every
+        // row (e.g. legacy data), and a venue's FO admin must always be able
+        // to room-assign whoever the venue's own unassigned pool shows them.
+        $assignment->loadMissing('examinationSchool.school');
+        $venueFieldOfficeId = $assignment->examinationSchool?->school?->field_office_id;
+
+        abort_unless(
+            $request->user()->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
+                || ($request->user()->role === UserRole::FoAdmin && $request->user()->field_office_id === $venueFieldOfficeId),
+            403,
+        );
 
         $validated = $request->validate([
             'exam_room_id' => [

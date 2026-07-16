@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -10,6 +10,8 @@ import LoadingSpinner from '@/Components/LoadingSpinner.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
 import TextInput from '@/Components/TextInput.vue';
+import ViewMemberModal from '@/Pages/Members/Partials/ViewMemberModal.vue';
+import ViewOepModal from '@/Pages/Scanner/Partials/ViewOepModal.vue';
 import { useToasts } from '@/Composables/useToasts';
 import { useScanQueue } from '@/Composables/useScanQueue';
 import Tooltip from '@/Components/Tooltip.vue';
@@ -45,6 +47,9 @@ let lastScan = { text: null, at: 0 };
 // manual submit) can fire overlapping requests whose responses may resolve
 // out of order, letting an older response clobber a newer one.
 const scanLocked = ref(false);
+
+const memberModalId = ref(null);
+const oepModalId = ref(null);
 
 const { push: pushToast } = useToasts();
 const { queue: pendingScans, enqueue: enqueuePendingScan, remove: removePendingScan, retryAll } = useScanQueue();
@@ -165,6 +170,7 @@ const lookup = (code) => {
     router.get('/scanner', { code, ...context }, {
         preserveState: true,
         preserveScroll: true,
+        only: ['result', 'oepResult', 'notFound', 'attendance', 'attendanceSummary'],
         onSuccess: (page) => handleScanOutcome(page.props),
         onError: () => {
             enqueuePendingScan(code, context);
@@ -598,12 +604,12 @@ const submitManualFallback = () => {
                                 <BaseBadge :variant="result.status_variant">{{ result.status_label }}</BaseBadge>
                             </div>
                             <div class="mt-4">
-                                <Link
-                                    :href="`/members/${result.id}`"
+                                <button
                                     class="text-sm font-semibold text-brand-700 hover:underline"
+                                    @click="memberModalId = result.id"
                                 >
                                     Open member record →
-                                </Link>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -653,6 +659,14 @@ const submitManualFallback = () => {
                                     {{ oepResult.is_active ? 'Active' : 'Inactive' }}
                                 </BaseBadge>
                             </div>
+                            <div class="mt-4">
+                                <button
+                                    class="text-sm font-semibold text-brand-700 hover:underline"
+                                    @click="oepModalId = oepResult.id"
+                                >
+                                    View record →
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -670,4 +684,16 @@ const submitManualFallback = () => {
             </div>
         </div>
     </DashboardLayout>
+
+    <ViewMemberModal
+        :show="memberModalId !== null"
+        :member-id="memberModalId"
+        @close="memberModalId = null"
+    />
+
+    <ViewOepModal
+        :show="oepModalId !== null"
+        :oep-id="oepModalId"
+        @close="oepModalId = null"
+    />
 </template>

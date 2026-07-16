@@ -267,7 +267,7 @@ const submitBulkConfirm = () => {
                         >
                     </td>
                     <td class="max-w-[10rem] px-3 py-2 sm:max-w-[12rem]">
-                        <Link :href="`/members/${assignment.member.id}`" class="font-medium text-slate-900 hover:underline">
+                        <Link href="/members" class="font-medium text-slate-900 hover:underline">
                             {{ assignment.member.name }}
                         </Link>
                         <p class="font-mono text-xs text-brand-700">{{ assignment.member.proctad_id }}</p>

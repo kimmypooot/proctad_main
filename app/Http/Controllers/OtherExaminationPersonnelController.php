@@ -11,6 +11,7 @@ use App\Models\OtherExaminationPersonnel;
 use App\Models\User;
 use App\Services\IdCardPdfService;
 use App\Support\OepIdCard;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -99,6 +100,24 @@ class OtherExaminationPersonnelController extends Controller
             ],
             'idCard' => OepIdCard::data($otherExaminationPersonnel),
             'can' => ['update' => request()->user()->can('update', $otherExaminationPersonnel)],
+        ]);
+    }
+
+    public function details(OtherExaminationPersonnel $otherExaminationPersonnel): JsonResponse
+    {
+        Gate::authorize('view', $otherExaminationPersonnel);
+
+        return response()->json([
+            'oep' => $this->presentForList($otherExaminationPersonnel) + [
+                'middle_name' => $otherExaminationPersonnel->middle_name,
+                'suffix' => $otherExaminationPersonnel->suffix,
+                'sex' => $otherExaminationPersonnel->sex,
+                'contact_number' => $otherExaminationPersonnel->contact_number,
+                'email' => $otherExaminationPersonnel->email,
+                'position' => $otherExaminationPersonnel->position,
+                'created_at' => $otherExaminationPersonnel->created_at->toDateString(),
+            ],
+            'idCard' => OepIdCard::data($otherExaminationPersonnel),
         ]);
     }
 

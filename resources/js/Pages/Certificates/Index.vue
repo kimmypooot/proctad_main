@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
@@ -10,22 +11,36 @@ import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
+import StatCard from '@/Components/StatCard.vue';
+import StepTabs from '@/Components/StepTabs.vue';
 import TableSkeleton from '@/Components/TableSkeleton.vue';
+import TextInput from '@/Components/TextInput.vue';
 
 const props = defineProps({
     certificates: { type: Object, required: true },
     filters: { type: Object, default: () => ({}) },
-    statuses: { type: Array, required: true },
+    stats: { type: Object, required: true },
     types: { type: Array, required: true },
     signatories: { type: Array, default: () => [] },
     can: { type: Object, default: () => ({}) },
 });
 
+const search = ref(props.filters.search ?? '');
 const status = ref(props.filters.status ?? '');
 const type = ref(props.filters.type ?? '');
 const loading = ref(false);
 
+const statusTabs = computed(() => [
+    { key: '', label: `All (${props.stats.total})` },
+    { key: 'pending', label: `Pending Approval (${props.stats.pending})` },
+    { key: 'released', label: `Released (${props.stats.released})` },
+    { key: 'disapproved', label: `Disapproved (${props.stats.disapproved})` },
+]);
+
+let debounce = null;
+
 const applyFilters = () => router.get('/certificates', {
+    search: search.value || undefined,
     status: status.value || undefined,
     type: type.value || undefined,
 }, {
@@ -35,6 +50,15 @@ const applyFilters = () => router.get('/certificates', {
     onStart: () => (loading.value = true),
     onFinish: () => (loading.value = false),
 });
+
+const onSearchInput = () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(applyFilters, 350);
+};
+
+/* --- PDF preview modal --- */
+const viewing = ref(null);
+const viewCertificate = (certificate) => (viewing.value = certificate);
 
 /* --- Bulk re-sign (super admin only) --- */
 const selected = ref([]);
@@ -68,14 +92,26 @@ const submitResign = () => {
             subtitle="Appearance, Appreciation, Completion certificates, and Designation Orders."
         />
 
+        <!-- Stats -->
+        <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard compact label="Total Certificates" :value="stats.total" icon="document-check" />
+            <StatCard compact label="Released" :value="stats.released" icon="check-badge" accent="emerald" />
+            <StatCard compact label="Pending Approval" :value="stats.pending" icon="clock" accent="amber" />
+            <StatCard compact label="Disapproved" :value="stats.disapproved" icon="x-circle" accent="slate" />
+        </div>
+
+        <!-- Status tabs -->
+        <div class="mt-6">
+            <StepTabs v-model="status" :steps="statusTabs" aria-label="Certificate status filter" @update:model-value="applyFilters" />
+        </div>
+
         <!-- Filters -->
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
-            <SelectInput
-                v-model="status"
-                label="Status"
-                placeholder="All statuses"
-                :options="[{ value: '', label: 'All statuses' }, ...statuses]"
-                @update:model-value="applyFilters"
+        <div class="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+            <TextInput
+                v-model="search"
+                label="Search"
+                placeholder="Certificate no., name, or PROCTAD ID"
+                @update:model-value="onSearchInput"
             />
             <SelectInput
                 v-model="type"
@@ -85,13 +121,14 @@ const submitResign = () => {
                 @update:model-value="applyFilters"
             />
         </div>
+        <p class="mt-2 text-sm text-slate-500">{{ certificates.total }} certificate(s) found.</p>
 
-        <div v-if="can.bulkResign && selected.length" class="mt-6 flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
+        <div v-if="can.bulkResign && selected.length" class="mt-4 flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
             <p class="text-sm font-medium text-brand-800">{{ selected.length }} certificate(s) selected</p>
             <BaseButton variant="secondary" size="sm" @click="showResign = true">Re-sign Selected</BaseButton>
         </div>
 
-        <div v-if="loading || certificates.data.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div v-if="loading || certificates.data.length" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
@@ -108,12 +145,13 @@ const submitResign = () => {
                         <th class="px-3 py-2">Member</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Testing Center</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Source</th>
+                        <th class="hidden px-3 py-2 lg:table-cell">Released</th>
                         <th class="px-3 py-2">Status</th>
-                        <th class="w-10 px-3 py-2 text-center">Actions</th>
+                        <th class="w-16 px-3 py-2 text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <TableSkeleton v-if="loading" :columns="can.bulkResign ? 8 : 7" />
+                    <TableSkeleton v-if="loading" :columns="can.bulkResign ? 9 : 8" />
                     <tr v-for="certificate in loading ? [] : certificates.data" :key="certificate.id" class="transition-colors hover:bg-brand-50/40">
                         <td v-if="can.bulkResign" class="px-3 py-2">
                             <input
@@ -135,6 +173,7 @@ const submitResign = () => {
                         </td>
                         <td class="hidden max-w-[10rem] truncate px-3 py-2 text-slate-600 xl:table-cell" :title="certificate.field_office ?? ''">{{ certificate.field_office ?? '—' }}</td>
                         <td class="hidden px-3 py-2 text-slate-600 xl:table-cell">{{ certificate.source }}</td>
+                        <td class="hidden px-3 py-2 text-slate-500 lg:table-cell">{{ certificate.released_at ?? '—' }}</td>
                         <td class="px-3 py-2">
                             <BaseBadge :variant="certificate.status_variant">{{ certificate.status_label }}</BaseBadge>
                             <p
@@ -146,20 +185,22 @@ const submitResign = () => {
                             </p>
                         </td>
                         <td class="px-3 py-2 text-center">
-                            <IconButton
-                                v-if="certificate.downloadable"
-                                icon="arrow-down-tray"
-                                label="Download"
-                                external
-                                :href="`/certificates/${certificate.id}/download`"
-                            />
+                            <div v-if="certificate.downloadable" class="inline-flex gap-1">
+                                <IconButton icon="eye" label="View" @click="viewCertificate(certificate)" />
+                                <IconButton
+                                    icon="arrow-down-tray"
+                                    label="Download"
+                                    external
+                                    :href="`/certificates/${certificate.id}/download`"
+                                />
+                            </div>
                         </td>
                     </tr>
                 </tbody>
             </table>
         </div>
 
-        <div v-else class="mt-6">
+        <div v-else class="mt-4">
             <EmptyState
                 icon="document-check"
                 title="No certificates found"
@@ -170,6 +211,31 @@ const submitResign = () => {
         <div class="mt-6">
             <BasePagination :links="certificates.links" />
         </div>
+
+        <!-- View certificate modal -->
+        <BaseModal :show="!!viewing" :title="viewing?.certificate_no ?? 'Certificate'" max-width="3xl" @close="viewing = null">
+            <div v-if="viewing" class="-mx-6 -my-5 overflow-hidden rounded-b-xl bg-slate-100">
+                <iframe
+                    :key="viewing.id"
+                    :src="`/certificates/${viewing.id}/view`"
+                    :title="`${viewing.certificate_no ?? 'Certificate'} preview`"
+                    class="h-[75vh] w-full border-0"
+                />
+            </div>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="viewing = null">Close</BaseButton>
+                <BaseButton
+                    v-if="viewing"
+                    variant="primary"
+                    size="sm"
+                    external
+                    :href="`/certificates/${viewing.id}/download`"
+                >
+                    <AppIcon name="arrow-down-tray" class="h-4 w-4" />
+                    Download
+                </BaseButton>
+            </template>
+        </BaseModal>
 
         <!-- Bulk re-sign modal -->
         <BaseModal :show="showResign" title="Re-sign Selected Certificates" @close="showResign = false">

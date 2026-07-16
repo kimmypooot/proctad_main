@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
@@ -19,12 +19,18 @@ const props = defineProps({
     can: { type: Object, required: true },
 });
 
-/* --- Filter: All / Upcoming --- */
+/* --- Filter: All / Upcoming / Ongoing / Completed --- */
 const filter = ref('all');
 const filteredExaminations = computed(() => {
-    if (filter.value === 'upcoming') return props.examinations.filter((e) => e.upcoming);
-    return props.examinations;
+    if (filter.value === 'all') return props.examinations;
+    return props.examinations.filter((e) => e.status === filter.value);
 });
+
+const statusBadge = (status) => {
+    if (status === 'ongoing') return { variant: 'success', label: 'Ongoing' };
+    if (status === 'upcoming') return { variant: 'brand', label: 'Upcoming' };
+    return { variant: 'neutral', label: 'Completed' };
+};
 
 const staffingVariant = (exam) => {
     if (exam.staffing_ratio === null) return 'neutral';
@@ -82,10 +88,11 @@ const submit = () => {
         </DashboardPageHeader>
 
         <!-- At-a-glance stats -->
-        <div class="mt-6 grid gap-4 sm:grid-cols-3">
+        <div class="mt-6 grid gap-4 sm:grid-cols-4">
             <StatCard label="Total Examinations" :value="stats.total" icon="calendar" />
             <StatCard label="Upcoming" :value="stats.upcoming" icon="clock" hint="Scheduled for a future date" />
-            <StatCard label="Fully Staffed" :value="stats.fully_staffed" icon="check-circle" hint="Every assignment confirmed" />
+            <StatCard label="Ongoing" :value="stats.ongoing" icon="check-circle" hint="Examination day" />
+            <StatCard label="Completed" :value="stats.completed" icon="flag" hint="Past examinations" />
         </div>
 
         <!-- Filter -->
@@ -106,6 +113,22 @@ const submit = () => {
             >
                 Upcoming
             </button>
+            <button
+                type="button"
+                class="rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors"
+                :class="filter === 'ongoing' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                @click="filter = 'ongoing'"
+            >
+                Ongoing
+            </button>
+            <button
+                type="button"
+                class="rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors"
+                :class="filter === 'completed' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                @click="filter = 'completed'"
+            >
+                Completed
+            </button>
         </div>
 
         <div v-if="filteredExaminations.length" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -113,20 +136,26 @@ const submit = () => {
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
                         <th class="px-3 py-2">Examination</th>
+                        <th class="px-3 py-2">Status</th>
                         <th class="px-3 py-2">Date</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Venues / Rooms</th>
                         <th class="hidden px-3 py-2 md:table-cell">Staffing</th>
-                        <th class="w-16 px-3 py-2 text-center">Actions</th>
+                        <th class="w-24 px-3 py-2 text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <tr v-for="exam in filteredExaminations" :key="exam.id" class="transition-colors hover:bg-brand-50/40">
+                    <tr v-for="exam in filteredExaminations" :key="exam.id" class="transition-colors hover:bg-brand-50/40" :class="{ 'opacity-50': !exam.is_active }">
                         <td class="px-3 py-2">
-                            <Link :href="`/examinations/${exam.id}`" class="font-medium text-slate-900 hover:underline">
-                                {{ exam.title }}
-                            </Link>
+                            <div class="flex items-center gap-1.5">
+                                <Link :href="`/examinations/${exam.id}`" class="font-medium text-slate-900 hover:underline">
+                                    {{ exam.title }}
+                                </Link>
+                                <span v-if="!exam.is_active" class="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hidden</span>
+                            </div>
                             <p class="text-xs text-slate-500">{{ exam.type }}</p>
-                            <BaseBadge v-if="exam.upcoming" variant="brand" class="mt-1">Upcoming</BaseBadge>
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2">
+                            <BaseBadge :variant="statusBadge(exam.status).variant">{{ statusBadge(exam.status).label }}</BaseBadge>
                         </td>
                         <td class="whitespace-nowrap px-3 py-2 text-slate-600">{{ exam.exam_date }}</td>
                         <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 xl:table-cell">
@@ -160,6 +189,7 @@ const submit = () => {
                             <div class="inline-flex gap-1">
                                 <IconButton :href="`/examinations/${exam.id}`" icon="eye" label="Manage" />
                                 <IconButton v-if="can.manage" icon="pencil" label="Edit" @click="openEdit(exam)" />
+                                <IconButton v-if="can.manage" :icon="exam.is_active ? 'eye-slash' : 'eye'" :label="exam.is_active ? 'Hide from dropdowns' : 'Show in dropdowns'" @click="router.patch(`/examinations/${exam.id}/toggle-visibility`)" />
                             </div>
                         </td>
                     </tr>
@@ -170,7 +200,11 @@ const submit = () => {
         <div v-else class="mt-4">
             <EmptyState
                 icon="calendar"
-                :title="filter === 'upcoming' ? 'No upcoming examinations' : 'No examinations yet'"
+                :title="{
+                    upcoming: 'No upcoming examinations',
+                    ongoing: 'No ongoing examinations',
+                    completed: 'No completed examinations',
+                }[filter] ?? 'No examinations yet'"
                 description="Examination events appear here once created by the Examination Services Division."
             />
         </div>

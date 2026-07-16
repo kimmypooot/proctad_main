@@ -20,22 +20,31 @@ class TrainingPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
     }
 
     public function update(User $user, Training $training): bool
     {
-        return $this->create($user);
+        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
+            return true;
+        }
+
+        return $user->hasRole(UserRole::FoAdmin)
+            && $training->field_office_id === $user->field_office_id;
     }
 
     public function delete(User $user, Training $training): bool
     {
-        return $this->create($user);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin);
     }
 
-    /** Marking as completed auto-issues Certificates of Completion. */
     public function complete(User $user, Training $training): bool
     {
-        return $this->create($user);
+        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
+            return true;
+        }
+
+        return $user->hasRole(UserRole::FoAdmin)
+            && $training->field_office_id === $user->field_office_id;
     }
 }

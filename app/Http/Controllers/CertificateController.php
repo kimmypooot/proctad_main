@@ -25,10 +25,23 @@ class CertificateController extends Controller
 
         $user = $request->user();
 
-        $certificates = Certificate::with('member:id,proctad_id,first_name,middle_name,last_name,suffix',
-            'fieldOffice:id,name,code', 'certifiable')
-            ->when($user->role->isFieldOfficeScoped(),
-                fn ($q) => $q->where('field_office_id', $user->field_office_id))
+        $foScoped = $user->role->isFieldOfficeScoped();
+
+        $baseQuery = Certificate::query()
+            ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id));
+
+        $certificates = (clone $baseQuery)
+            ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix',
+                'fieldOffice:id,name,code', 'certifiable')
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $term = $request->string('search')->trim();
+                $q->where(fn ($q) => $q
+                    ->where('certificate_no', 'like', "%{$term}%")
+                    ->orWhereHas('member', fn ($m) => $m
+                        ->where('proctad_id', 'like', "%{$term}%")
+                        ->orWhere('first_name', 'like', "%{$term}%")
+                        ->orWhere('last_name', 'like', "%{$term}%")));
+            })
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')))
             ->latest('id')
@@ -55,9 +68,13 @@ class CertificateController extends Controller
 
         return Inertia::render('Certificates/Index', [
             'certificates' => $certificates,
-            'filters' => $request->only('status', 'type'),
-            'statuses' => collect(CertificateStatus::cases())
-                ->map(fn ($status) => ['value' => $status->value, 'label' => $status->label()])->all(),
+            'filters' => $request->only('search', 'status', 'type'),
+            'stats' => [
+                'total' => (clone $baseQuery)->count(),
+                'released' => (clone $baseQuery)->where('status', CertificateStatus::Released)->count(),
+                'pending' => (clone $baseQuery)->where('status', CertificateStatus::Pending)->count(),
+                'disapproved' => (clone $baseQuery)->where('status', CertificateStatus::Disapproved)->count(),
+            ],
             'types' => collect(CertificateType::cases())
                 ->map(fn ($type) => ['value' => $type->value, 'label' => $type->label()])->all(),
             'signatories' => Signatory::where('active', true)->orderBy('name')->get(['id', 'name', 'position']),

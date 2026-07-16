@@ -19,7 +19,7 @@ export default defineConfig({
         vue(),
     ],
     server: {
-        host: '0.0.0.0',
+        host: 'localhost',
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },

@@ -8,6 +8,7 @@ use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
 use App\Exports\RoomAssignmentsExport;
+use App\Models\AuditLog;
 use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
@@ -37,22 +38,37 @@ class ExaminationController extends Controller
     {
         Gate::authorize('viewAny', Examination::class);
 
+        $user = $request->user();
+        $foScoped = $user->role->isFieldOfficeScoped();
+
         $examinations = Examination::withCount([
-            'assignments',
-            'assignments as confirmed_assignments_count' => fn ($q) => $q->where('status', 'confirmed'),
+            'assignments' => fn ($q) => $q->when($foScoped, fn ($q2) => $q2->where('field_office_id', $user->field_office_id)),
+            'assignments as confirmed_assignments_count' => fn ($q) => $q->where('status', 'confirmed')
+                ->when($foScoped, fn ($q2) => $q2->where('field_office_id', $user->field_office_id)),
         ])
-            ->with('venues.rooms:id,examination_school_id')
+            ->with(['venues' => function ($query) use ($foScoped, $user) {
+                $query->with('rooms:id,examination_school_id')
+                    ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->where('field_office_id', $user->field_office_id)));
+            }])
             ->orderByDesc('exam_date')
             ->get();
 
+        $now = now()->startOfDay();
+
         return Inertia::render('Examinations/Index', [
-            'examinations' => $examinations->map(function (Examination $exam) {
+            'examinations' => $examinations->map(function (Examination $exam) use ($now) {
                 $roomsCount = $exam->venues->sum(fn ($venue) => $venue->rooms->count());
 
+                $status = match (true) {
+                    $exam->exam_date->isFuture() => 'upcoming',
+                    $exam->exam_date->isToday() => 'ongoing',
+                    default => 'completed',
+                };
+
                 return [
-                    ...$exam->only('id', 'title', 'type', 'exam_type_id', 'assignments_count'),
+                    ...$exam->only('id', 'title', 'type', 'exam_type_id', 'assignments_count', 'is_active'),
                     'exam_date' => $exam->exam_date->toDateString(),
-                    'upcoming' => $exam->exam_date->isFuture(),
+                    'status' => $status,
                     'venues_count' => $exam->venues->count(),
                     'rooms_count' => $roomsCount,
                     'confirmed_count' => $exam->confirmed_assignments_count,
@@ -64,6 +80,8 @@ class ExaminationController extends Controller
             'stats' => [
                 'total' => $examinations->count(),
                 'upcoming' => $examinations->filter(fn ($exam) => $exam->exam_date->isFuture())->count(),
+                'ongoing' => $examinations->filter(fn ($exam) => $exam->exam_date->isToday())->count(),
+                'completed' => $examinations->filter(fn ($exam) => $exam->exam_date->isPast())->count(),
                 'fully_staffed' => $examinations->filter(fn ($exam) => $exam->assignments_count > 0
                     && $exam->confirmed_assignments_count === $exam->assignments_count)->count(),
             ],
@@ -273,6 +291,10 @@ class ExaminationController extends Controller
             'venues' => $venues,
             'availableSchools' => $availableSchools,
             'availableOep' => $availableOep,
+            'reportsGenerated' => AuditLog::where('auditable_type', Examination::class)
+                ->where('auditable_id', $examination->id)
+                ->where('action', 'report_generated')
+                ->exists(),
             'can' => [
                 'assign' => $user->can('create', ExamAssignment::class),
                 'manageOep' => $user->can('create', OepAssignment::class),
@@ -361,6 +383,15 @@ class ExaminationController extends Controller
         return back()->with('success', 'Examination updated.');
     }
 
+    public function toggleVisibility(Request $request, Examination $examination): RedirectResponse
+    {
+        Gate::authorize('update', $examination);
+
+        $examination->update(['is_active' => ! $examination->is_active]);
+
+        return back()->with('success', $examination->is_active ? 'Examination is now visible in dropdowns.' : 'Examination hidden from dropdowns.');
+    }
+
     public function destroy(Examination $examination): RedirectResponse
     {
         Gate::authorize('delete', $examination);
@@ -376,6 +407,7 @@ class ExaminationController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'exam_type_id' => ['required', 'integer', 'exists:exam_types,id'],
             'exam_date' => ['required', 'date'],
+            'is_active' => ['nullable', 'boolean'],
         ]);
 
         $data['type'] = ExamType::findOrFail($data['exam_type_id'])->name;

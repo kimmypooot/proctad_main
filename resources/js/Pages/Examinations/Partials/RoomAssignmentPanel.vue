@@ -6,6 +6,7 @@ import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import SelectInput from '@/Components/SelectInput.vue';
+import Tooltip from '@/Components/Tooltip.vue';
 
 const props = defineProps({
     examination: { type: Object, required: true },
@@ -150,8 +151,26 @@ const clearRoom = (room, fieldKey) => {
                             <tr>
                                 <th class="px-3 py-2">Room</th>
                                 <th class="hidden px-3 py-2 sm:table-cell">Designation</th>
-                                <th v-for="field in ROOM_ROLE_FIELDS" :key="field.key" class="px-3 py-2">{{ field.label }}</th>
-                                <th class="px-3 py-2 text-center">Status</th>
+                                <th v-for="field in ROOM_ROLE_FIELDS" :key="field.key" class="px-3 py-2">
+                                    <span class="inline-flex items-center gap-1">
+                                        {{ field.label }}
+                                        <Tooltip
+                                            v-if="field.key === 'supervising_examiner'"
+                                            wrap
+                                            text="A Supervising Examiner oversees a group of up to 5 rooms. Only the group's first ('anchor') room is editable here — the others just display the same name, read-only."
+                                        >
+                                            <AppIcon name="information-circle" class="h-3.5 w-3.5 cursor-help text-slate-400 hover:text-slate-600" />
+                                        </Tooltip>
+                                    </span>
+                                </th>
+                                <th class="px-3 py-2 text-center">
+                                    <span class="inline-flex items-center gap-1">
+                                        Status
+                                        <Tooltip wrap text="Complete means this room has all three roles filled: Proctor, Room Examiner, and its group's Supervising Examiner.">
+                                            <AppIcon name="information-circle" class="h-3.5 w-3.5 cursor-help text-slate-400 hover:text-slate-600" />
+                                        </Tooltip>
+                                    </span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">

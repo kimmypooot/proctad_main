@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
@@ -10,15 +10,18 @@ import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
+import ViewTrainingModal from './Partials/ViewTrainingModal.vue';
 
 const props = defineProps({
     trainings: { type: Array, required: true },
     types: { type: Array, required: true },
+    exams: { type: Array, required: true },
     can: { type: Object, required: true },
 });
 
 const showForm = ref(false);
 const editing = ref(null);
+const viewing = ref(null);
 
 const form = useForm({
     title: '',
@@ -26,6 +29,7 @@ const form = useForm({
     training_date: '',
     end_date: '',
     venue: '',
+    exam_id: '',
 });
 
 const openCreate = () => {
@@ -43,6 +47,7 @@ const openEdit = (training) => {
     form.training_date = training.training_date;
     form.end_date = '';
     form.venue = training.venue ?? '';
+    form.exam_id = training.exam?.id ?? '';
     showForm.value = true;
 };
 
@@ -77,6 +82,8 @@ const submit = () => {
                     <tr>
                         <th class="px-3 py-2">Training</th>
                         <th class="hidden px-3 py-2 sm:table-cell">Type</th>
+                        <th class="hidden px-3 py-2 lg:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 xl:table-cell">Connected Exam</th>
                         <th class="px-3 py-2">Date</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Venue</th>
                         <th class="hidden px-3 py-2 md:table-cell">Participants</th>
@@ -85,14 +92,14 @@ const submit = () => {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <tr v-for="training in trainings" :key="training.id" class="transition-colors hover:bg-brand-50/40">
+                    <tr v-for="training in trainings" :key="training.id" class="cursor-pointer transition-colors hover:bg-brand-50/40" @click="viewing = training">
                         <td class="px-3 py-2">
-                            <Link :href="`/trainings/${training.id}`" class="font-medium text-slate-900 hover:underline">
-                                {{ training.title }}
-                            </Link>
+                            <span class="font-medium text-slate-900 hover:underline">{{ training.title }}</span>
                             <p class="text-xs text-slate-400 sm:hidden">{{ training.type_label }}</p>
                         </td>
                         <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 sm:table-cell">{{ training.type_label }}</td>
+                        <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 lg:table-cell">{{ training.field_office?.name ?? '—' }}</td>
+                        <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 xl:table-cell">{{ training.exam?.title ?? '—' }}</td>
                         <td class="whitespace-nowrap px-3 py-2 text-slate-600">{{ training.training_date }}</td>
                         <td class="hidden px-3 py-2 text-slate-600 xl:table-cell">{{ training.venue ?? '—' }}</td>
                         <td class="hidden px-3 py-2 text-slate-600 md:table-cell">{{ training.assignments_count }}</td>
@@ -102,7 +109,7 @@ const submit = () => {
                             </BaseBadge>
                         </td>
                         <td class="px-3 py-2 text-center">
-                            <IconButton v-if="can.manage && !training.completed" icon="pencil" label="Edit" @click="openEdit(training)" />
+                            <IconButton v-if="can.manage && !training.completed" icon="pencil" label="Edit" @click.stop="openEdit(training)" />
                         </td>
                     </tr>
                 </tbody>
@@ -117,6 +124,8 @@ const submit = () => {
             />
         </div>
 
+        <ViewTrainingModal :show="!!viewing" :training-id="viewing?.id" @close="viewing = null" @saved="viewing = null" />
+
         <BaseModal :show="showForm" :title="editing ? 'Edit Training' : 'Add Training'" @close="showForm = false">
             <form id="training-form" class="space-y-4" novalidate @submit.prevent="submit">
                 <TextInput v-model="form.title" label="Title" required placeholder="e.g. PROCTAD Orientation" :error="form.errors.title" />
@@ -124,6 +133,7 @@ const submit = () => {
                 <TextInput v-model="form.training_date" label="Training Date" type="date" required :error="form.errors.training_date" />
                 <TextInput v-model="form.end_date" label="End Date" type="date" optional :error="form.errors.end_date" />
                 <TextInput v-model="form.venue" label="Venue" optional :error="form.errors.venue" />
+                <SelectInput v-model="form.exam_id" label="Connected Exam" required placeholder="Select an exam" :options="exams" :error="form.errors.exam_id" />
             </form>
             <template #footer>
                 <BaseButton variant="outline" size="sm" @click="showForm = false">Cancel</BaseButton>

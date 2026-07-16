@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\IdCardPdfService;
 use App\Services\PerformanceRatingCalculator;
 use App\Support\MemberIdCard;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -68,40 +69,6 @@ class MemberController extends Controller
         ]);
     }
 
-    public function create(Request $request): Response
-    {
-        Gate::authorize('create', Member::class);
-
-        return Inertia::render('Members/Create', [
-            'fieldOffices' => $this->assignableFieldOffices($request->user()),
-            'prefill' => $this->prefillFromUnlinkedUser($request),
-        ]);
-    }
-
-    /**
-     * Jumping here from the Users page's "unlinked member accounts" worklist
-     * (?from_user=ID) prefills the form from that self-registered account —
-     * submitting normally still goes through resolveAccount()'s email match,
-     * which will find and link this exact account rather than creating a new one.
-     */
-    private function prefillFromUnlinkedUser(Request $request): ?array
-    {
-        if (! $request->filled('from_user')) {
-            return null;
-        }
-
-        $user = User::where('id', $request->integer('from_user'))
-            ->where('role', UserRole::Member)
-            ->doesntHave('member')
-            ->first();
-
-        if (! $user) {
-            return null;
-        }
-
-        return $user->only('first_name', 'middle_name', 'last_name', 'suffix', 'email', 'mobile_number', 'field_office_id');
-    }
-
     public function store(StoreMemberRequest $request): RedirectResponse
     {
         Gate::authorize('create', Member::class);
@@ -122,11 +89,18 @@ class MemberController extends Controller
         });
 
         return redirect()
-            ->route('members.show', $member)
+            ->route('members.index')
             ->with('success', "Member registered with PROCTAD ID {$member->proctad_id}.");
     }
 
-    public function show(Member $member, PerformanceRatingCalculator $ratingCalculator): Response
+    public function show(Member $member): RedirectResponse
+    {
+        Gate::authorize('view', $member);
+
+        return redirect()->route('members.index');
+    }
+
+    public function details(Member $member, PerformanceRatingCalculator $ratingCalculator): JsonResponse
     {
         Gate::authorize('view', $member);
 
@@ -149,7 +123,7 @@ class MemberController extends Controller
             ];
         });
 
-        return Inertia::render('Members/Show', [
+        return response()->json([
             'member' => $this->presentForList($member) + [
                 'middle_name' => $member->middle_name,
                 'suffix' => $member->suffix,
@@ -157,6 +131,8 @@ class MemberController extends Controller
                 'position' => $member->position,
                 'disqualification_remarks' => $member->disqualification_remarks,
                 'created_at' => $member->created_at->toDateString(),
+                'photo_url' => $member->user?->google_avatar
+                    ?? ($member->photo_path ? route('members.photo', $member) : null),
             ],
             'requirements' => $requirements,
             'compliedCount' => $requirements->where('complied', true)->count(),
@@ -210,11 +186,18 @@ class MemberController extends Controller
         );
     }
 
-    public function edit(Request $request, Member $member): Response
+    public function edit(Request $request, Member $member): RedirectResponse
     {
         Gate::authorize('update', $member);
 
-        return Inertia::render('Members/Edit', [
+        return redirect()->route('members.index');
+    }
+
+    public function editData(Request $request, Member $member): JsonResponse
+    {
+        Gate::authorize('update', $member);
+
+        return response()->json([
             'member' => $member->only([
                 'id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix',
                 'sex', 'email', 'mobile_number', 'agency', 'position', 'field_office_id',
@@ -238,7 +221,7 @@ class MemberController extends Controller
         $member->update($validated);
 
         return redirect()
-            ->route('members.show', $member)
+            ->route('members.index')
             ->with('success', 'Member record updated.');
     }
 

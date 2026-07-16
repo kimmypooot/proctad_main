@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\Examination;
 use App\Services\Reports\PayrollPostingReportService;
 use App\Services\Reports\PayrollReportService;
@@ -22,10 +23,14 @@ class ExaminationReportController extends Controller
         $venueId = $this->validatedVenueId($request, $examination);
 
         try {
-            return $service->build($examination, $venueId);
+            $response = $service->build($examination, $venueId);
         } catch (ReportPreconditionException $e) {
             return back()->with('error', $e->getMessage());
         }
+
+        $this->logReportGenerated($request, $examination, 'room_assignment');
+
+        return $response;
     }
 
     public function roomAssignmentPrecheck(Request $request, Examination $examination, RoomAssignmentReportService $service): JsonResponse
@@ -42,10 +47,14 @@ class ExaminationReportController extends Controller
         $venueId = $this->validatedVenueId($request, $examination);
 
         try {
-            return $service->build($examination, $venueId);
+            $response = $service->build($examination, $venueId);
         } catch (ReportPreconditionException $e) {
             return back()->with('error', $e->getMessage());
         }
+
+        $this->logReportGenerated($request, $examination, 'payroll');
+
+        return $response;
     }
 
     public function payrollPrecheck(Request $request, Examination $examination, PayrollReportService $service): JsonResponse
@@ -62,10 +71,14 @@ class ExaminationReportController extends Controller
         $venueId = $this->validatedVenueId($request, $examination);
 
         try {
-            return $service->build($examination, $venueId);
+            $response = $service->build($examination, $venueId);
         } catch (ReportPreconditionException $e) {
             return back()->with('error', $e->getMessage());
         }
+
+        $this->logReportGenerated($request, $examination, 'payroll_posting');
+
+        return $response;
     }
 
     public function payrollPostingPrecheck(Request $request, Examination $examination, PayrollPostingReportService $service): JsonResponse
@@ -83,6 +96,19 @@ class ExaminationReportController extends Controller
         ]);
 
         return isset($validated['venue_id']) ? (int) $validated['venue_id'] : null;
+    }
+
+    /** Drives the "Generate Reports" step's completion indicator on the wizard — see ExaminationController::show(). */
+    private function logReportGenerated(Request $request, Examination $examination, string $reportType): void
+    {
+        AuditLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'report_generated',
+            'auditable_type' => Examination::class,
+            'auditable_id' => $examination->id,
+            'field_office_id' => $request->user()->field_office_id,
+            'changes' => ['report_type' => $reportType],
+        ]);
     }
 
     /**

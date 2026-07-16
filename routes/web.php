@@ -181,6 +181,10 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
 
     Route::middleware('role:super_admin,esd_admin,management,field_director,fo_admin')->group(function () {
         Route::resource('members', MemberController::class);
+        Route::get('/members/{member}/details', [MemberController::class, 'details'])
+            ->name('members.details');
+        Route::get('/members/{member}/edit-data', [MemberController::class, 'editData'])
+            ->name('members.edit-data');
         Route::get('/members/{member}/id-card/download', [MemberController::class, 'downloadIdCard'])
             ->name('members.id-card.download');
         Route::post('/members/id-cards/download-bulk', [MemberController::class, 'downloadIdCardBulk'])
@@ -208,6 +212,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::resource('schools', SchoolController::class)->only('index', 'store', 'update', 'destroy');
 
         Route::resource('other-examination-personnel', OtherExaminationPersonnelController::class);
+        Route::get('/other-examination-personnel/{otherExaminationPersonnel}/details', [OtherExaminationPersonnelController::class, 'details'])
+            ->name('other-examination-personnel.details');
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/photo', [OtherExaminationPersonnelController::class, 'photo'])
             ->name('other-examination-personnel.photo');
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/id-card/download', [OtherExaminationPersonnelController::class, 'downloadIdCard'])
@@ -223,6 +229,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->only('index', 'store', 'show', 'update', 'destroy');
         Route::get('/examinations/{examination}/room-assignments/export', [ExaminationController::class, 'exportRoomAssignments'])
             ->name('examinations.room-assignments.export');
+        Route::patch('/examinations/{examination}/toggle-visibility', [ExaminationController::class, 'toggleVisibility'])
+            ->name('examinations.toggle-visibility');
         Route::post('/examinations/{examination}/venues', [ExamVenueController::class, 'store'])
             ->name('examinations.venues.store');
         Route::delete('/venues/{venue}', [ExamVenueController::class, 'destroy'])
@@ -280,7 +288,11 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('examinations.reports.payroll-posting.precheck');
 
         Route::resource('trainings', TrainingController::class)
-            ->only('index', 'store', 'show', 'update', 'destroy');
+            ->only('index', 'store', 'update', 'destroy');
+        Route::get('/trainings/{training}/modal', [TrainingController::class, 'modal'])
+            ->name('trainings.modal');
+        Route::get('/trainings/{training}', [TrainingController::class, 'show'])
+            ->name('trainings.show');
         Route::post('/trainings/{training}/complete', [TrainingController::class, 'complete'])
             ->name('trainings.complete');
         Route::post('/trainings/{training}/assignments', [TrainingAssignmentController::class, 'store'])

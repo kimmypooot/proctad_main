@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['title', 'type', 'exam_type_id', 'exam_date'])]
+#[Fillable(['title', 'type', 'exam_type_id', 'exam_date', 'is_active'])]
 class Examination extends Model
 {
     /** @use HasFactory<\Database\Factories\ExaminationFactory> */
@@ -21,6 +21,7 @@ class Examination extends Model
     {
         return [
             'exam_date' => 'date',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -45,5 +46,10 @@ class Examination extends Model
         return $this->belongsToMany(School::class, 'examination_school')
             ->withPivot(['id', 'assigned_by', 'is_active'])
             ->withTimestamps();
+    }
+
+    public function trainings(): HasMany
+    {
+        return $this->hasMany(Training::class);
     }
 }

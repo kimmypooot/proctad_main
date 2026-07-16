@@ -12,6 +12,7 @@ import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
 import TextInput from '@/Components/TextInput.vue';
+import Tooltip from '@/Components/Tooltip.vue';
 
 const props = defineProps({
     examination: { type: Object, required: true },
@@ -29,6 +30,7 @@ const breakdownFor = (room) => props.roomBreakdown.find((b) => b.id === room.id)
 const ROOM_ROLES = ['proctor', 'room_examiner', 'supervising_examiner'];
 const ROOM_ROLE_LABELS = { proctor: 'Proctor', room_examiner: 'Room Examiner', supervising_examiner: 'Supervising Examiner' };
 const designationOptions = computed(() => props.designations);
+const DESIGNATION_HINT = 'Which exam category this room is used for. Purely descriptive — printed on room assignment reports, doesn\'t affect staffing or eligibility.';
 
 /* ---------------------------------------------------------------------- */
 /* Stats + staffing progress                                              */
@@ -78,7 +80,9 @@ const submitGenerate = () => {
 };
 
 /* ---------------------------------------------------------------------- */
-/* Add more rooms (additive, no confirmation)                             */
+/* Add more rooms (additive — no confirmation needed, but the numbering    */
+/* continues from the highest existing room number, which isn't obvious   */
+/* if rooms were manually renamed/deleted, so the preview spells it out)  */
 /* ---------------------------------------------------------------------- */
 const showAddMore = ref(false);
 const addMoreForm = useForm({ count: 5, capacity: 25, designation: '' });
@@ -87,10 +91,23 @@ const openAddMore = () => {
     addMoreForm.clearErrors();
     showAddMore.value = true;
 };
-const addMorePreview = computed(() => ({
-    rooms: addMoreForm.count || 0,
-    seats: (addMoreForm.count || 0) * (addMoreForm.capacity || 0),
-}));
+/** Mirrors ExamRoomController::bulkAdd's numbering (max digits found in any existing room number, +1). */
+const nextRoomNumber = computed(() => {
+    if (!props.rooms.length) return 1;
+    return Math.max(...props.rooms.map((r) => parseInt(r.room_number.replace(/\D/g, ''), 10) || 0)) + 1;
+});
+const formatRoomNumber = (n) => `Room-${String(n).padStart(3, '0')}`;
+const addMorePreview = computed(() => {
+    const count = addMoreForm.count || 0;
+    const start = nextRoomNumber.value;
+    return {
+        rooms: count,
+        seats: count * (addMoreForm.capacity || 0),
+        rangeLabel: count > 0
+            ? (count === 1 ? formatRoomNumber(start) : `${formatRoomNumber(start)} – ${formatRoomNumber(start + count - 1)}`)
+            : null,
+    };
+});
 const submitAddMore = () => addMoreForm.post(`/venues/${props.venue.id}/rooms/add-more`, {
     preserveScroll: true,
     onSuccess: () => (showAddMore.value = false),
@@ -156,15 +173,23 @@ const perRoomDesignations = ref({});
 const initPerRoomDesignations = () => {
     perRoomDesignations.value = Object.fromEntries(props.rooms.map((r) => [r.id, r.designation ?? '']));
 };
+const changedPerRoomDesignations = computed(() => props.rooms.filter(
+    (r) => (perRoomDesignations.value[r.id] ?? '') !== (r.designation ?? ''),
+));
 const perRoomForm = useForm({});
 const savingPerRoom = ref(false);
+const confirmingSaveAll = ref(false);
 const savePerRoomDesignations = () => {
-    const changed = props.rooms.filter((r) => (perRoomDesignations.value[r.id] ?? '') !== (r.designation ?? ''));
-    if (!changed.length) return;
+    if (!changedPerRoomDesignations.value.length) return;
+
+    if (!confirmingSaveAll.value) {
+        confirmingSaveAll.value = true;
+        return;
+    }
 
     savingPerRoom.value = true;
-    let remaining = changed.length;
-    changed.forEach((room) => {
+    let remaining = changedPerRoomDesignations.value.length;
+    changedPerRoomDesignations.value.forEach((room) => {
         perRoomForm
             .transform(() => ({
                 room_number: room.room_number,
@@ -175,7 +200,10 @@ const savePerRoomDesignations = () => {
                 preserveScroll: true,
                 onFinish: () => {
                     remaining -= 1;
-                    if (remaining <= 0) savingPerRoom.value = false;
+                    if (remaining <= 0) {
+                        savingPerRoom.value = false;
+                        confirmingSaveAll.value = false;
+                    }
                 },
             });
     });
@@ -351,10 +379,18 @@ const exportSupervisingExaminers = () => exportCsv(
 
             <!-- Room Staffing Map -->
             <div class="mt-4 border-t border-slate-100 pt-3">
-                <button type="button" class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500" @click="showStaffingMap = !showStaffingMap">
-                    <AppIcon :name="showStaffingMap ? 'chevron-down' : 'chevron-right'" class="h-3.5 w-3.5" />
-                    Room Staffing Map
-                </button>
+                <div class="flex items-center gap-1.5">
+                    <button type="button" class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500" @click="showStaffingMap = !showStaffingMap">
+                        <AppIcon :name="showStaffingMap ? 'chevron-down' : 'chevron-right'" class="h-3.5 w-3.5" />
+                        Room Staffing Map
+                    </button>
+                    <Tooltip
+                        wrap
+                        text="Supervising Examiners oversee a group of up to 5 rooms, not one room each. Only the group's first ('anchor') room is editable for that role — every other room in the group just displays the same name, read-only."
+                    >
+                        <AppIcon name="information-circle" class="h-3.5 w-3.5 cursor-help text-slate-400 hover:text-slate-600" />
+                    </Tooltip>
+                </div>
                 <div v-if="showStaffingMap" class="mt-2 overflow-x-auto">
                     <table class="w-full table-fixed divide-y divide-slate-200 text-sm">
                         <colgroup>
@@ -416,7 +452,14 @@ const exportSupervisingExaminers = () => exportCsv(
                         <th class="w-8 px-3 py-2">#</th>
                         <th class="px-3 py-2">Room</th>
                         <th class="px-3 py-2">Capacity</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Designation</th>
+                        <th class="hidden px-3 py-2 md:table-cell">
+                            <span class="inline-flex items-center gap-1">
+                                Designation
+                                <Tooltip wrap text="Which exam category this room is used for (e.g. Professional, Sub-Professional). Purely descriptive — printed on room assignment reports, doesn't affect staffing or eligibility.">
+                                    <AppIcon name="information-circle" class="h-3.5 w-3.5 cursor-help text-slate-400 hover:text-slate-600" />
+                                </Tooltip>
+                            </span>
+                        </th>
                         <th class="hidden px-3 py-2 md:table-cell">Added On</th>
                         <th class="px-3 py-2 text-center">Actions</th>
                     </tr>
@@ -509,9 +552,11 @@ const exportSupervisingExaminers = () => exportCsv(
                     placeholder="No designation"
                     :options="designationOptions"
                     :error="addMoreForm.errors.designation"
+                    :hint="DESIGNATION_HINT"
                 />
                 <div class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
                     {{ addMorePreview.rooms }} room(s) · {{ addMorePreview.seats }} additional seats
+                    <template v-if="addMorePreview.rangeLabel"> · numbered {{ addMorePreview.rangeLabel }}</template>
                 </div>
             </div>
             <template #footer>
@@ -532,6 +577,7 @@ const exportSupervisingExaminers = () => exportCsv(
                     placeholder="No designation"
                     :options="designationOptions"
                     :error="editForm.errors.designation"
+                    :hint="DESIGNATION_HINT"
                 />
             </form>
             <template #footer>
@@ -592,7 +638,7 @@ const exportSupervisingExaminers = () => exportCsv(
         </BaseModal>
 
         <!-- Designation Override -->
-        <BaseModal :show="showDesignationOverride" title="Override Room Designations" max-width="lg" @close="showDesignationOverride = false; confirmingBulkDesignation = false">
+        <BaseModal :show="showDesignationOverride" title="Override Room Designations" max-width="lg" @close="showDesignationOverride = false; confirmingBulkDesignation = false; confirmingSaveAll = false">
             <div class="space-y-5">
                 <div class="rounded-lg border border-slate-200 p-4">
                     <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Bulk Apply</p>
@@ -646,11 +692,23 @@ const exportSupervisingExaminers = () => exportCsv(
                             </tbody>
                         </table>
                     </div>
+                    <p v-if="confirmingSaveAll" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        Update the designation for {{ changedPerRoomDesignations.length }} room(s)?
+                        <button type="button" class="ml-1 font-semibold underline" @click="confirmingSaveAll = false">Cancel</button>
+                    </p>
                 </div>
             </div>
             <template #footer>
                 <BaseButton variant="outline" size="sm" @click="showDesignationOverride = false">Close</BaseButton>
-                <BaseButton variant="primary" size="sm" :loading="savingPerRoom" @click="savePerRoomDesignations">Save All</BaseButton>
+                <BaseButton
+                    variant="primary"
+                    size="sm"
+                    :loading="savingPerRoom"
+                    :disabled="!changedPerRoomDesignations.length"
+                    @click="savePerRoomDesignations"
+                >
+                    {{ confirmingSaveAll ? `Yes, Save ${changedPerRoomDesignations.length}` : 'Save All' }}
+                </BaseButton>
             </template>
         </BaseModal>
 

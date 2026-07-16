@@ -21,6 +21,7 @@ const props = defineProps({
     venues: { type: Array, required: true },
     availableSchools: { type: Array, required: true },
     availableOep: { type: Array, required: true },
+    reportsGenerated: { type: Boolean, default: false },
     roles: { type: Array, required: true },
     ratings: { type: Array, required: true },
     can: { type: Object, required: true },
@@ -97,7 +98,7 @@ const steps = computed(() => [
         label: 'Generate Reports',
         description: 'Room assignment, payroll, payroll posting',
         hint: 'Generate the final printable and payroll documents for this examination — Room Assignment, Payroll, and Payroll Posting. Each has its own filters and downloads directly as an Excel file.',
-        complete: false,
+        complete: props.reportsGenerated,
     },
 ].filter(Boolean));
 
@@ -128,7 +129,7 @@ const jumpTo = (key) => (currentStep.value = key);
         </DashboardPageHeader>
 
         <div class="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:px-5">
-            <StepTabs v-model="currentStep" :steps="steps" />
+            <StepTabs v-model="currentStep" :steps="steps" aria-label="Examination workflow steps" />
         </div>
 
         <VenuesRoomsPanel

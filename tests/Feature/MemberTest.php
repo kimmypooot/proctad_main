@@ -139,7 +139,7 @@ class MemberTest extends TestCase
         foreach ([UserRole::Management, UserRole::FieldDirector] as $role) {
             $user = $this->staff($role, $role->isFieldOfficeScoped() ? $this->leyte : null);
 
-            $this->actingAs($user)->get("/members/{$member->id}")->assertOk();
+            $this->actingAs($user)->get("/members/{$member->id}")->assertRedirect('/members');
             $this->actingAs($user)->post('/members', $this->memberPayload($this->leyte, ['email' => "x{$role->value}@example.com"]))
                 ->assertForbidden();
             $this->actingAs($user)->delete("/members/{$member->id}")->assertForbidden();

@@ -192,7 +192,7 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
                                     v-if="user.has_member_record === false"
                                     icon="user-plus"
                                     label="Register as PROCTAD Member"
-                                    :href="`/members/create?from_user=${user.id}`"
+                                    :href="`/members`"
                                 />
                                 <IconButton icon="pencil" label="Edit" @click="openEdit(user)" />
                                 <IconButton

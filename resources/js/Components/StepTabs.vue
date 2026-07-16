@@ -7,6 +7,7 @@ const model = defineModel({ type: String, required: true });
 const props = defineProps({
     /** [{ key, label, description?, hint?, complete?: boolean }] */
     steps: { type: Array, required: true },
+    ariaLabel: { type: String, default: 'Steps' },
 });
 
 const activeStep = computed(() => props.steps.find((step) => step.key === model.value));
@@ -15,7 +16,7 @@ const activeStep = computed(() => props.steps.find((step) => step.key === model.
 <template>
     <div>
         <!-- Step indicator -->
-        <nav role="tablist" aria-label="Examination workflow steps" class="flex gap-1 overflow-x-auto border-b border-slate-200">
+        <nav role="tablist" :aria-label="ariaLabel" class="flex gap-1 overflow-x-auto border-b border-slate-200">
             <button
                 v-for="step in steps"
                 :key="step.key"

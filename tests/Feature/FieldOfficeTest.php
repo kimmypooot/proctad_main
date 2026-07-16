@@ -41,6 +41,7 @@ class FieldOfficeTest extends TestCase
             'name' => 'Leyte Field Office',
             'code' => 'LEY',
             'address' => 'Palo, Leyte',
+            'is_active' => true,
         ])->assertRedirect();
 
         $office = FieldOffice::firstOrFail();
@@ -50,6 +51,7 @@ class FieldOfficeTest extends TestCase
             'name' => 'Leyte Field Office (Renamed)',
             'code' => 'LEY',
             'address' => 'Tacloban City, Leyte',
+            'is_active' => true,
         ])->assertRedirect();
 
         $office->refresh();

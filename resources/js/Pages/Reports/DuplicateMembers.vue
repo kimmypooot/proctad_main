@@ -43,7 +43,7 @@ defineProps({
                             <tr v-for="member in group.members" :key="member.id" class="transition-colors hover:bg-brand-50/40">
                                 <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-brand-700">{{ member.proctad_id }}</td>
                                 <td class="px-3 py-2">
-                                    <Link :href="`/members/${member.id}`" class="font-medium text-slate-900 hover:underline">
+                                    <Link href="/members" class="font-medium text-slate-900 hover:underline">
                                         {{ member.name }}
                                     </Link>
                                 </td>
@@ -81,7 +81,7 @@ defineProps({
                         <tbody class="divide-y divide-slate-100">
                             <tr v-for="member in group.members" :key="member.id" class="transition-colors hover:bg-brand-50/40">
                                 <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-brand-700">
-                                    <Link :href="`/members/${member.id}`" class="hover:underline">{{ member.proctad_id }}</Link>
+                                    <Link href="/members" class="hover:underline">{{ member.proctad_id }}</Link>
                                 </td>
                                 <td class="px-3 py-2 text-slate-600">{{ member.email }}</td>
                                 <td class="hidden px-3 py-2 text-slate-600 sm:table-cell">{{ member.field_office }}</td>

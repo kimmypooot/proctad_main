@@ -140,8 +140,14 @@ const groupOepAssignments = (assignments) => {
                 </div>
 
                 <div class="mt-3 flex items-center gap-3 text-xs text-slate-500">
-                    <span>{{ venue.rooms_count }} room{{ venue.rooms_count === 1 ? '' : 's' }}</span>
-                    <span v-if="venue.rooms_count">· {{ venue.total_capacity }} seats</span>
+                    <template v-if="venue.rooms_count">
+                        <span>{{ venue.rooms_count }} room{{ venue.rooms_count === 1 ? '' : 's' }}</span>
+                        <span>· {{ venue.total_capacity }} seats</span>
+                    </template>
+                    <BaseBadge v-else variant="warning">
+                        <AppIcon name="exclamation-triangle" class="h-3.5 w-3.5" />
+                        No rooms yet — add rooms before assigning Proctor/Examiner roles
+                    </BaseBadge>
                 </div>
 
                 <div class="mt-3">

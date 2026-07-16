@@ -50,7 +50,7 @@ const approvalCopy = computed(() =>
 const quickActions = computed(() => {
     if (props.role === 'fo_admin') {
         return [
-            { label: 'Add PROCTAD Member', icon: 'user-plus', href: '/members/create' },
+            { label: 'Member Registry', icon: 'users', href: '/members' },
             { label: 'Scan QR Code', icon: 'qr-code', href: '/scanner' },
             { label: 'Request Certificate Issuance', icon: 'paper-airplane', href: '/certificates' },
             { label: 'Update Signatories', icon: 'identification', href: '/signatories' },
@@ -189,7 +189,7 @@ const applyFeedFilter = () => {
                             <TableSkeleton v-if="feedLoading" :columns="4" />
                             <tr v-for="member in feedLoading ? [] : analytics.recentRegistrations" :key="member.id">
                                 <td class="py-2.5 pr-3">
-                                    <Link :href="`/members/${member.id}`" class="font-medium text-slate-900 hover:text-brand-700 hover:underline">
+                                    <Link href="/members" class="font-medium text-slate-900 hover:text-brand-700 hover:underline">
                                         {{ member.name }}
                                     </Link>
                                     <p class="font-mono text-xs text-brand-700">{{ member.proctad_id }}</p>
