@@ -21,6 +21,18 @@ class GoogleAuthController extends Controller
         return Socialite::driver('google')->redirect();
     }
 
+    /**
+     * "Not you?" on the registration completion form — abandons the pending
+     * Google identity so a stale one doesn't resurface if the visitor lands
+     * back on /register without reconnecting.
+     */
+    public function cancel(Request $request): RedirectResponse
+    {
+        $request->session()->forget('google_pending_registration');
+
+        return redirect()->route('login');
+    }
+
     public function callback(Request $request): RedirectResponse
     {
         try {

@@ -21,6 +21,7 @@ class StoreMemberRequest extends FormRequest
             'last_name' => ['required', 'string', 'max:100'],
             'suffix' => ['nullable', 'string', 'max:20'],
             'sex' => ['required', Rule::in(['male', 'female'])],
+            'date_of_birth' => ['required', 'date', 'before:-18 years'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', $this->emailUniqueRule()],
             'mobile_number' => ['required', 'string', 'regex:/^(\+639|09)\d{9}$/'],
             'agency' => ['required', 'string', 'max:255'],
@@ -34,6 +35,7 @@ class StoreMemberRequest extends FormRequest
     {
         return [
             'mobile_number.regex' => 'Enter a valid Philippine mobile number (e.g. 09171234567).',
+            'date_of_birth.before' => 'Member must be at least 18 years old.',
         ];
     }
 

@@ -13,6 +13,24 @@ class RegistrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function googlePending(array $overrides = []): array
+    {
+        return array_merge([
+            'google_id' => 'google-123',
+            'email' => 'juan@example.test',
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'avatar' => 'https://example.test/avatar.png',
+        ], $overrides);
+    }
+
+    private function withGooglePending(array $overrides = []): self
+    {
+        $this->withSession(['google_pending_registration' => $this->googlePending($overrides)]);
+
+        return $this;
+    }
+
     private function validPayload(FieldOffice $fieldOffice, array $overrides = []): array
     {
         return array_merge([
@@ -21,13 +39,11 @@ class RegistrationTest extends TestCase
             'last_name' => 'Dela Cruz',
             'suffix' => '',
             'sex' => 'male',
-            'email' => 'juan@example.test',
+            'date_of_birth' => '1990-05-15',
             'mobile_number' => '09171234567',
             'agency' => 'DepEd Division Office',
             'position' => 'Teacher III',
             'field_office_id' => $fieldOffice->id,
-            'password' => 'Password123',
-            'password_confirmation' => 'Password123',
             'terms' => true,
         ], $overrides);
     }
@@ -36,12 +52,14 @@ class RegistrationTest extends TestCase
     {
         $fieldOffice = FieldOffice::factory()->create();
 
-        $this->post('/register', $this->validPayload($fieldOffice))
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice))
             ->assertRedirect(route('dashboard'));
 
         $user = User::where('email', 'juan@example.test')->first();
         $this->assertNotNull($user);
         $this->assertSame(UserRole::Member, $user->role);
+        $this->assertNotNull($user->google_id);
         $this->assertAuthenticatedAs($user);
 
         $member = Member::where('user_id', $user->id)->first();
@@ -49,18 +67,32 @@ class RegistrationTest extends TestCase
         $this->assertNotNull($member->proctad_id);
         $this->assertSame($fieldOffice->id, $member->field_office_id);
         $this->assertSame('male', $member->sex->value ?? $member->sex);
+        $this->assertSame('1990-05-15', $member->date_of_birth);
         $this->assertTrue($member->requirements()->exists());
     }
 
-    public function test_registration_requires_sex_agency_and_testing_center(): void
+    public function test_registration_requires_connecting_google_first(): void
     {
         $fieldOffice = FieldOffice::factory()->create();
 
-        $this->post('/register', $this->validPayload($fieldOffice, [
-            'sex' => '',
-            'agency' => '',
-            'field_office_id' => '',
-        ]))->assertSessionHasErrors(['sex', 'agency', 'field_office_id']);
+        $this->post('/register', $this->validPayload($fieldOffice))
+            ->assertForbidden();
+
+        $this->assertGuest();
+        $this->assertSame(0, User::count());
+    }
+
+    public function test_registration_requires_sex_agency_date_of_birth_and_testing_center(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice, [
+                'sex' => '',
+                'agency' => '',
+                'date_of_birth' => '',
+                'field_office_id' => '',
+            ]))->assertSessionHasErrors(['sex', 'agency', 'date_of_birth', 'field_office_id']);
 
         $this->assertGuest();
         $this->assertSame(0, User::count());
@@ -78,7 +110,8 @@ class RegistrationTest extends TestCase
             'field_office_id' => $fieldOffice->id,
         ]);
 
-        $this->post('/register', $this->validPayload($fieldOffice))
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice))
             ->assertSessionHasErrors('email');
 
         $this->assertGuest();
@@ -99,7 +132,8 @@ class RegistrationTest extends TestCase
             'field_office_id' => $fieldOffice->id,
         ]);
 
-        $this->post('/register', $this->validPayload($fieldOffice))
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice))
             ->assertSessionHasErrors('email');
 
         $this->assertGuest();
@@ -119,7 +153,8 @@ class RegistrationTest extends TestCase
             'field_office_id' => $fieldOffice->id,
         ]);
 
-        $this->post('/register', $this->validPayload($fieldOffice))
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice))
             ->assertRedirect(route('dashboard'));
 
         $this->assertAuthenticated();

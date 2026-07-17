@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, useId } from 'vue';
 import AppIcon from './AppIcon.vue';
+import Tooltip from './Tooltip.vue';
 
 const model = defineModel({ type: [String, Number], default: '' });
 
@@ -14,9 +15,13 @@ const props = defineProps({
     autocomplete: { type: String, default: null },
     placeholder: { type: String, default: null },
     inputmode: { type: String, default: null },
+    min: { type: String, default: null },
+    max: { type: String, default: null },
     /** Extra classes for the `<input>` itself — plain `class` on this component lands on the outer wrapper instead. */
     inputClass: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
+    /** Tooltip text shown beside the label via an info icon. */
+    tooltip: { type: String, default: null },
 });
 
 const id = useId();
@@ -33,10 +38,13 @@ const describedBy = computed(() => {
 
 <template>
     <div>
-        <label :for="id" class="mb-1.5 block text-sm font-medium text-slate-700">
+        <label :for="id" class="mb-1.5 inline-flex items-center gap-1 text-sm font-medium text-slate-700">
             {{ label }}
             <span v-if="required" class="text-accent-600" aria-hidden="true">*</span>
             <span v-if="optional" class="font-normal text-slate-400">(optional)</span>
+            <Tooltip v-if="tooltip" :text="tooltip" position="top" wrap class="-ml-0.5">
+                <AppIcon name="information-circle" class="h-4 w-4 text-slate-400" />
+            </Tooltip>
         </label>
 
         <div class="relative">
@@ -49,6 +57,8 @@ const describedBy = computed(() => {
                 :autocomplete="autocomplete ?? undefined"
                 :placeholder="placeholder ?? undefined"
                 :inputmode="inputmode ?? undefined"
+                :min="min ?? undefined"
+                :max="max ?? undefined"
                 :aria-invalid="!!error || undefined"
                 :aria-describedby="describedBy"
                 class="block w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 min-h-[2.75rem] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"

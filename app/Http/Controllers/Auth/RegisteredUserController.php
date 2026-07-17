@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,10 +20,11 @@ use Inertia\Response;
 class RegisteredUserController extends Controller
 {
     /**
-     * Show the registration page. If arriving from a Google sign-in with no
-     * matching account (see GoogleAuthController::callback()), the pending
-     * Google identity is surfaced so the form can prefill/lock the email and
-     * skip the password fields — Google already supplies the credential.
+     * Show the registration page. Registration is Google-only: until the
+     * visitor has connected via Google (see GoogleAuthController::callback(),
+     * which stashes the pending identity in the session), the page shows
+     * just the "Continue with Google" prompt. Once `google` is present, the
+     * frontend reveals the details form, prefilled from the Google identity.
      */
     public function create(Request $request): Response
     {
@@ -42,52 +42,47 @@ class RegisteredUserController extends Controller
     }
 
     /**
-     * Handle an incoming registration request — either the standard
-     * email/password form, or completing a Google-initiated signup (identity
-     * trusted from the session set by GoogleAuthController, never from the
-     * request body). Creates the login account AND the PROCTAD Member record
-     * together, immediately: there is no separate staff-approval step, so
-     * everything the Member record needs is collected right here.
+     * Handle an incoming registration request. Registration always begins
+     * with Google sign-in (see GoogleAuthController) — the identity is
+     * trusted from the session set there, never from the request body.
+     * Creates the login account AND the PROCTAD Member record together,
+     * immediately: there is no separate staff-approval step, so everything
+     * the Member record needs is collected right here.
      */
     public function store(Request $request): RedirectResponse
     {
         $googlePending = $request->session()->get('google_pending_registration');
 
-        $rules = [
+        abort_unless($googlePending, 403, 'Please connect your Google account before registering.');
+
+        $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
             'middle_name' => ['nullable', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'suffix' => ['nullable', 'string', 'max:20'],
             'sex' => ['required', Rule::in(['male', 'female'])],
+            'date_of_birth' => ['required', 'date', 'before:-18 years'],
             'mobile_number' => ['required', 'string', 'regex:/^(\+639|09)\d{9}$/'],
             'agency' => ['required', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],
             'field_office_id' => ['required', 'exists:field_offices,id'],
             'terms' => ['accepted'],
-        ];
-
-        if (! $googlePending) {
-            $rules['email'] = ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'];
-            $rules['password'] = ['required', 'confirmed', Password::min(8)->letters()->numbers()];
-        }
-
-        $validated = $request->validate($rules, [
+        ], [
             'mobile_number.regex' => 'Enter a valid Philippine mobile number (e.g. 09171234567).',
+            'date_of_birth.before' => 'You must be at least 18 years old to register.',
             'field_office_id.required' => 'Please select your Testing Center.',
             'terms.accepted' => 'You must accept the Terms and Conditions to register.',
         ]);
 
-        $email = $googlePending['email'] ?? $validated['email'];
+        $email = $googlePending['email'];
 
-        if ($googlePending) {
-            // The email was already unique when the Google identity was captured,
-            // but re-check here in case another registration completed meanwhile.
-            abort_if(
-                User::where('email', $email)->exists(),
-                422,
-                'An account with this email already exists. Please sign in instead.',
-            );
-        }
+        // The email was already unique when the Google identity was captured,
+        // but re-check here in case another registration completed meanwhile.
+        abort_if(
+            User::where('email', $email)->exists(),
+            422,
+            'An account with this email already exists. Please sign in instead.',
+        );
 
         // A matching PROCTAD Member record may already exist (e.g. a Testing
         // Center registered this person directly) even though no login account
@@ -134,16 +129,14 @@ class RegisteredUserController extends Controller
                 'field_office_id' => $validated['field_office_id'],
                 // Google-registered accounts sign in via Google only — this random
                 // value just satisfies the required, non-nullable column.
-                'password' => $googlePending ? Str::random(40) : $validated['password'],
+                'password' => Str::random(40),
             ]);
 
-            if ($googlePending) {
-                $user->forceFill([
-                    'google_id' => $googlePending['google_id'],
-                    'google_avatar' => $googlePending['avatar'],
-                    'email_verified_at' => now(),
-                ])->save();
-            }
+            $user->forceFill([
+                'google_id' => $googlePending['google_id'],
+                'google_avatar' => $googlePending['avatar'],
+                'email_verified_at' => now(),
+            ])->save();
 
             $memberData = [
                 'first_name' => $validated['first_name'],
@@ -151,6 +144,7 @@ class RegisteredUserController extends Controller
                 'last_name' => $validated['last_name'],
                 'suffix' => $validated['suffix'] ?? null,
                 'sex' => $validated['sex'],
+                'date_of_birth' => $validated['date_of_birth'],
                 'email' => $email,
                 'mobile_number' => $validated['mobile_number'],
                 'agency' => $validated['agency'],
@@ -168,9 +162,7 @@ class RegisteredUserController extends Controller
             return $member;
         });
 
-        if ($googlePending) {
-            $request->session()->forget('google_pending_registration');
-        }
+        $request->session()->forget('google_pending_registration');
 
         Auth::login($member->user);
 

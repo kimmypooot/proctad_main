@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
-    'first_name', 'middle_name', 'last_name', 'suffix', 'sex', 'email',
+    'first_name', 'middle_name', 'last_name', 'suffix', 'sex', 'date_of_birth', 'email',
     'mobile_number', 'agency', 'position', 'photo_path', 'field_office_id',
     'status', 'disqualification_remarks', 'user_id',
 ])]
@@ -31,6 +31,9 @@ class Member extends Model
     {
         return [
             'status' => MemberStatus::class,
+            // PII (RA 10173) — encrypted at rest; stored/read as a plain
+            // 'Y-m-d' string, not a Carbon instance.
+            'date_of_birth' => 'encrypted',
         ];
     }
 

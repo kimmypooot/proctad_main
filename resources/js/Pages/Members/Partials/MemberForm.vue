@@ -19,6 +19,14 @@ const sexOptions = [
     { value: 'male', label: 'Male' },
     { value: 'female', label: 'Female' },
 ];
+
+/** Members must be at least 18 — matches StoreMemberRequest's `before:-18 years` rule. */
+const maxDateOfBirth = (() => {
+    const eighteenYearsAgo = new Date();
+    eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
+
+    return eighteenYearsAgo.toISOString().slice(0, 10);
+})();
 </script>
 
 <template>
@@ -58,6 +66,17 @@ const sexOptions = [
                     :error="form.errors.sex"
                 />
             </div>
+        </div>
+
+        <div class="grid gap-5 sm:grid-cols-2">
+            <TextInput
+                v-model="form.date_of_birth"
+                label="Date of Birth"
+                type="date"
+                required
+                :max="maxDateOfBirth"
+                :error="form.errors.date_of_birth"
+            />
         </div>
 
         <div class="grid gap-5 sm:grid-cols-2">

@@ -38,7 +38,18 @@ const highlights = [
 <template>
     <div class="flex min-h-screen bg-white">
         <!-- Branding panel -->
-        <aside class="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-brand-800 p-12 text-white lg:flex" aria-hidden="false">
+        <aside class="relative hidden w-1/2 flex-col overflow-hidden bg-brand-800 px-12 pb-12 pt-10 text-white lg:flex" aria-hidden="false">
+            <!-- CSC facade background -->
+            <div class="absolute inset-0" aria-hidden="true">
+                <img
+                    :src="'/images/cscbg_facade.jpeg'"
+                    alt=""
+                    class="h-full w-full scale-110 object-cover opacity-20"
+                    aria-hidden="true"
+                />
+            </div>
+            <div class="absolute inset-0 bg-gradient-to-b from-brand-900/80 via-brand-900/70 to-brand-900/85" aria-hidden="true" />
+
             <!-- Subtle geometric background -->
             <div class="pointer-events-none absolute inset-0 opacity-10" aria-hidden="true">
                 <svg class="h-full w-full" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice">
@@ -56,28 +67,30 @@ const highlights = [
                 <AppLogo variant="light" />
             </Link>
 
-            <div class="relative z-10 max-w-md space-y-10">
-                <div>
-                    <h2 class="text-3xl font-bold leading-tight tracking-tight">
-                        Professionalized Corps of Test Administrators
-                    </h2>
-                    <p class="mt-4 leading-relaxed text-brand-100">
-                        The official portal of the Civil Service Commission Regional Office VIII
-                        for accrediting and developing professional examination administrators.
-                    </p>
-                </div>
+            <div class="relative z-10 flex flex-1 flex-col justify-center">
+                <div class="max-w-md space-y-10">
+                    <div>
+                        <h2 class="text-3xl font-bold leading-tight tracking-tight">
+                            Professionalized Corps of Test Administrators
+                        </h2>
+                        <p class="mt-4 leading-relaxed text-brand-100">
+                            The official portal of the Civil Service Commission Regional Office VIII
+                            for accrediting and developing professional examination administrators.
+                        </p>
+                    </div>
 
-                <ul class="space-y-6">
-                    <li v-for="item in highlights" :key="item.title" class="flex gap-4">
-                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/10">
-                            <AppIcon :name="item.icon" class="h-5 w-5 text-brand-100" />
-                        </span>
-                        <div>
-                            <p class="font-semibold">{{ item.title }}</p>
-                            <p class="mt-1 text-sm leading-relaxed text-brand-200">{{ item.text }}</p>
-                        </div>
-                    </li>
-                </ul>
+                    <ul class="space-y-6">
+                        <li v-for="item in highlights" :key="item.title" class="flex gap-4">
+                            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                                <AppIcon :name="item.icon" class="h-5 w-5 text-brand-100" />
+                            </span>
+                            <div>
+                                <p class="font-semibold">{{ item.title }}</p>
+                                <p class="mt-1 text-sm leading-relaxed text-brand-200">{{ item.text }}</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
             </div>
 
             <p class="relative z-10 text-xs text-brand-300">

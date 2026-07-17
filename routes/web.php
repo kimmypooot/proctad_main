@@ -34,6 +34,7 @@ use App\Http\Controllers\OepAssignmentController;
 use App\Http\Controllers\OtherExaminationPersonnelController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ScannerController;
+use App\Http\Controllers\ServiceHistoryController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SignatoryController;
 use App\Http\Controllers\StaffingController;
@@ -94,6 +95,7 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [RegisteredUserController::class, 'store'])->name('register.store');
     Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->name('google.redirect');
     Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('google.callback');
+    Route::get('/auth/google/cancel', [GoogleAuthController::class, 'cancel'])->name('google.cancel');
 
     Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
     Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])
@@ -208,12 +210,17 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::get('/evaluation-monitoring', [EvaluationMonitoringController::class, 'index'])->name('evaluation-monitoring.index');
         Route::get('/evaluation-monitoring/{evaluation}', [EvaluationMonitoringController::class, 'show'])->name('evaluation-monitoring.show');
 
+        Route::get('/service-history', [ServiceHistoryController::class, 'index'])->name('service-history.index');
+        Route::get('/service-history/{member}', [ServiceHistoryController::class, 'show'])->name('service-history.show');
+
         Route::resource('signatories', SignatoryController::class)->only('index', 'store', 'update', 'destroy');
         Route::resource('schools', SchoolController::class)->only('index', 'store', 'update', 'destroy');
 
         Route::resource('other-examination-personnel', OtherExaminationPersonnelController::class);
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/details', [OtherExaminationPersonnelController::class, 'details'])
             ->name('other-examination-personnel.details');
+        Route::get('/other-examination-personnel/{otherExaminationPersonnel}/edit-data', [OtherExaminationPersonnelController::class, 'editData'])
+            ->name('other-examination-personnel.edit-data');
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/photo', [OtherExaminationPersonnelController::class, 'photo'])
             ->name('other-examination-personnel.photo');
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/id-card/download', [OtherExaminationPersonnelController::class, 'downloadIdCard'])

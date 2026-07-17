@@ -116,6 +116,7 @@ const printCard = () => window.print();
 
 const detailItems = (m) => [
     ['Sex', m.sex === 'male' ? 'Male' : 'Female'],
+    ['Date of Birth', m.date_of_birth ?? '—'],
     ['Email', m.email],
     ['Mobile Number', m.mobile_number],
     ['Agency', m.agency],

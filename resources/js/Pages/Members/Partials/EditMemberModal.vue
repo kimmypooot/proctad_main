@@ -23,6 +23,7 @@ const form = useForm({
     last_name: '',
     suffix: '',
     sex: '',
+    date_of_birth: '',
     email: '',
     mobile_number: '',
     agency: '',
@@ -57,6 +58,7 @@ const fetchEditData = async () => {
         form.last_name = json.member.last_name ?? '';
         form.suffix = json.member.suffix ?? '';
         form.sex = json.member.sex ?? '';
+        form.date_of_birth = json.member.date_of_birth ?? '';
         form.email = json.member.email ?? '';
         form.mobile_number = json.member.mobile_number ?? '';
         form.agency = json.member.agency ?? '';

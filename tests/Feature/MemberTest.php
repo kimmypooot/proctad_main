@@ -46,6 +46,7 @@ class MemberTest extends TestCase
             'last_name' => 'Dela Cruz',
             'suffix' => null,
             'sex' => 'male',
+            'date_of_birth' => '1990-05-15',
             'email' => 'juan.delacruz@example.com',
             'mobile_number' => '09171234567',
             'agency' => 'DepEd Division Office',

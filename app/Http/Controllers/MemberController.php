@@ -128,6 +128,7 @@ class MemberController extends Controller
                 'middle_name' => $member->middle_name,
                 'suffix' => $member->suffix,
                 'sex' => $member->sex,
+                'date_of_birth' => $member->date_of_birth,
                 'position' => $member->position,
                 'disqualification_remarks' => $member->disqualification_remarks,
                 'created_at' => $member->created_at->toDateString(),
@@ -200,7 +201,7 @@ class MemberController extends Controller
         return response()->json([
             'member' => $member->only([
                 'id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix',
-                'sex', 'email', 'mobile_number', 'agency', 'position', 'field_office_id',
+                'sex', 'date_of_birth', 'email', 'mobile_number', 'agency', 'position', 'field_office_id',
                 'status', 'disqualification_remarks',
             ]),
             'fieldOffices' => $this->assignableFieldOffices($request->user(), $member->field_office_id),
