@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AssignmentStatus;
 use App\Enums\BlacklistStatus;
 use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
 use App\Enums\EligibilityRequirement;
+use App\Enums\ExamRole;
 use App\Enums\MemberStatus;
+use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
 use App\Models\Blacklist;
 use App\Models\Certificate;
@@ -40,7 +43,46 @@ class DashboardController extends Controller
             'stats' => $this->statsFor($role, $user, $member),
             'memberSummary' => $role === UserRole::Member ? $this->memberSummary($member) : null,
             'analytics' => $this->adminAnalytics($role, $user, $request),
+            'pendingApprovals' => $this->pendingApprovals($role, $user),
         ]);
+    }
+
+    /**
+     * Real pending-approval queue preview for the dashboard's Approvals
+     * panel (Management/Field Director) — mirrors CertificateApprovalController's
+     * type-scoping so the count and preview match what /approvals actually shows.
+     * Previously this panel was a hardcoded empty state regardless of the
+     * real backlog.
+     */
+    private function pendingApprovals(UserRole $role, User $user): ?array
+    {
+        if (! in_array($role, [UserRole::Management, UserRole::FieldDirector], true)) {
+            return null;
+        }
+
+        $types = $role === UserRole::Management
+            ? [CertificateType::Appreciation]
+            : [CertificateType::Appearance, CertificateType::DesignationOrder, CertificateType::Appreciation];
+
+        $base = Certificate::where('status', CertificateStatus::Pending)
+            ->whereIn('type', $types)
+            ->when(! $role->isRegionWide(), fn ($q) => $q->where('field_office_id', $user->field_office_id));
+
+        return [
+            'total' => (clone $base)->count(),
+            'items' => (clone $base)
+                ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix', 'fieldOffice:id,name,code')
+                ->oldest('id')
+                ->limit(5)
+                ->get()
+                ->map(fn (Certificate $certificate) => [
+                    'id' => $certificate->id,
+                    'type_label' => $certificate->type->label(),
+                    'member_name' => $certificate->member->name,
+                    'field_office' => $certificate->fieldOffice?->name,
+                    'requested_at' => $certificate->created_at->diffForHumans(),
+                ]),
+        ];
     }
 
     /**
@@ -92,6 +134,7 @@ class DashboardController extends Controller
                         ->count(),
                     'calendar',
                     null,
+                    '/examinations',
                 ),
                 $this->stat(
                     'Certificates Issued (Month)',
@@ -102,6 +145,7 @@ class DashboardController extends Controller
                         ->count(),
                     'document-check',
                     null,
+                    '/certificates',
                 ),
                 $this->stat(
                     'Upcoming Trainings',
@@ -111,6 +155,7 @@ class DashboardController extends Controller
                         ->count(),
                     'academic-cap',
                     null,
+                    '/trainings',
                 ),
                 $this->stat(
                     'Active Blacklist Entries',
@@ -119,8 +164,97 @@ class DashboardController extends Controller
                         ->count(),
                     'exclamation-triangle',
                     null,
+                    '/blacklists',
                 ),
             ],
+            'upcomingExaminations' => $this->upcomingExaminations($scopeFieldOfficeId),
+            'performanceRatingBreakdown' => $this->performanceRatingBreakdown($scopeFieldOfficeId),
+            'evaluationCompliance' => $this->evaluationCompliance($scopeFieldOfficeId),
+        ];
+    }
+
+    /**
+     * Next 5 upcoming exams with their assignment-confirmation progress —
+     * the dashboard previously only showed a bare count with no way to see
+     * which exams need attention or drill into them.
+     */
+    private function upcomingExaminations(?int $fieldOfficeId): array
+    {
+        return Examination::where('exam_date', '>=', today())
+            ->when($fieldOfficeId, fn ($q) => $q->whereHas('assignments', fn ($q2) => $q2->where('field_office_id', $fieldOfficeId)))
+            ->orderBy('exam_date')
+            ->limit(5)
+            ->get()
+            ->map(function (Examination $exam) use ($fieldOfficeId) {
+                $assignments = ExamAssignment::where('examination_id', $exam->id)
+                    ->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId));
+
+                return [
+                    'id' => $exam->id,
+                    'title' => $exam->title,
+                    'exam_date' => $exam->exam_date->format('M d, Y'),
+                    'assignments_total' => (clone $assignments)->count(),
+                    'assignments_confirmed' => (clone $assignments)->where('status', AssignmentStatus::Confirmed)->count(),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Distribution of post-exam performance ratings across assignments —
+     * surfaces administrator-quality trends the dashboard didn't show at all.
+     */
+    private function performanceRatingBreakdown(?int $fieldOfficeId): array
+    {
+        $scoped = fn () => ExamAssignment::query()
+            ->whereNotNull('performance_rating')
+            ->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId));
+
+        return collect(PerformanceRating::cases())
+            ->map(fn (PerformanceRating $rating) => [
+                'key' => $rating->value,
+                'label' => $rating->label(),
+                'value' => (clone $scoped())->where('performance_rating', $rating)->count(),
+                'color' => match ($rating) {
+                    PerformanceRating::Outstanding, PerformanceRating::VerySatisfactory => 'good',
+                    PerformanceRating::Satisfactory => 'neutral',
+                    PerformanceRating::Unsatisfactory, PerformanceRating::Poor => 'critical',
+                },
+            ])
+            ->all();
+    }
+
+    /**
+     * Post-Examination Evaluation submission compliance for the most
+     * recently dated exam (mirrors EvaluationMonitoringController's default
+     * exam selection) — the Evaluation Monitoring module already computes
+     * this, but the dashboard never surfaced it.
+     */
+    private function evaluationCompliance(?int $fieldOfficeId): ?array
+    {
+        $examination = Examination::query()->orderByDesc('exam_date')->first(['id', 'title']);
+
+        if (! $examination) {
+            return null;
+        }
+
+        $eligibleRoles = [
+            ExamRole::ChiefExaminer, ExamRole::SupervisingExaminer, ExamRole::Proctor, ExamRole::RoomExaminer,
+        ];
+
+        $base = ExamAssignment::query()
+            ->whereIn('role', array_column($eligibleRoles, 'value'))
+            ->where('examination_id', $examination->id)
+            ->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId));
+
+        $total = (clone $base)->count();
+        $submitted = (clone $base)->whereHas('evaluation')->count();
+
+        return [
+            'examination_title' => $examination->title,
+            'total' => $total,
+            'submitted' => $submitted,
+            'percentage' => $total > 0 ? round($submitted / $total * 100, 1) : 0.0,
         ];
     }
 
@@ -246,10 +380,10 @@ class DashboardController extends Controller
 
         return match ($role) {
             UserRole::SuperAdmin, UserRole::EsdAdmin => [
-                $this->stat('Active PROCTAD Members', $activeMembers()->count(), 'users', 'Region-wide'),
-                $this->stat('Examinations', Examination::count(), 'clipboard-check', 'All exam events'),
-                $this->stat('Testing Centers', FieldOffice::count(), 'building-office', 'RO VIII'),
-                $this->stat('System Users', User::where('role', '!=', UserRole::Member)->count(), 'user-circle', 'Staff accounts'),
+                $this->stat('Active PROCTAD Members', $activeMembers()->count(), 'users', 'Region-wide', '/members'),
+                $this->stat('Examinations', Examination::count(), 'clipboard-check', 'All exam events', '/examinations'),
+                $this->stat('Testing Centers', FieldOffice::count(), 'building-office', 'RO VIII', '/field-offices'),
+                $this->stat('System Users', User::where('role', '!=', UserRole::Member)->count(), 'user-circle', 'Staff accounts', '/users'),
             ],
             UserRole::Management => [
                 $this->stat(
@@ -258,14 +392,16 @@ class DashboardController extends Controller
                         ->where('type', CertificateType::Appreciation)->count(),
                     'clipboard-check',
                     'Awaiting your action',
+                    '/approvals',
                 ),
-                $this->stat('Active PROCTAD Members', $activeMembers()->count(), 'users', 'Region-wide'),
-                $this->stat('Examinations', Examination::count(), 'calendar', 'All exam events'),
+                $this->stat('Active PROCTAD Members', $activeMembers()->count(), 'users', 'Region-wide', '/members'),
+                $this->stat('Examinations', Examination::count(), 'calendar', 'All exam events', '/examinations'),
                 $this->stat(
                     'Certificates Issued',
                     Certificate::where('status', CertificateStatus::Released)->count(),
                     'document-check',
                     'Region-wide, all types',
+                    '/certificates',
                 ),
             ],
             UserRole::FieldDirector => [
@@ -276,8 +412,9 @@ class DashboardController extends Controller
                         ->where('field_office_id', $user->field_office_id)->count(),
                     'clipboard-check',
                     'Appearance & Designation Orders',
+                    '/approvals',
                 ),
-                $this->stat('Active Members in Testing Center', $foMembers()->count(), 'users', $user->fieldOffice?->name),
+                $this->stat('Active Members in Testing Center', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
                 $this->stat('Service Records', ExamAssignment::where('field_office_id', $user->field_office_id)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Approved This Month',
@@ -289,10 +426,11 @@ class DashboardController extends Controller
                         ->count(),
                     'check-circle',
                     'Appearance & Designation Orders',
+                    '/approvals',
                 ),
             ],
             UserRole::FoAdmin => [
-                $this->stat('Active Members in Testing Center', $foMembers()->count(), 'users', $user->fieldOffice?->name),
+                $this->stat('Active Members in Testing Center', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
                 $this->stat('Service Records', ExamAssignment::where('field_office_id', $user->field_office_id)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Issuance Requests',
@@ -300,6 +438,7 @@ class DashboardController extends Controller
                         ->where('field_office_id', $user->field_office_id)->count(),
                     'paper-airplane',
                     'Awaiting approval',
+                    '/certificates',
                 ),
                 $this->stat(
                     'Upcoming Trainings',
@@ -309,6 +448,7 @@ class DashboardController extends Controller
                         ->count(),
                     'academic-cap',
                     null,
+                    '/trainings',
                 ),
             ],
             UserRole::Member => [
@@ -317,31 +457,35 @@ class DashboardController extends Controller
                     $member ? ExamAssignment::whereNotNull('attendance_confirmed_at')->where('member_id', $member->id)->count() : 0,
                     'clipboard-check',
                     'Attendance-confirmed assignments',
+                    '/my/service-history',
                 ),
                 $this->stat(
                     'Certificates',
                     $member ? Certificate::where('status', CertificateStatus::Released)->where('member_id', $member->id)->count() : 0,
                     'document-check',
                     'Available for download',
+                    '/my/certificates',
                 ),
                 $this->stat(
                     'Trainings Attended',
                     $member ? TrainingAssignment::whereNotNull('attendance_confirmed_at')->where('member_id', $member->id)->count() : 0,
                     'academic-cap',
                     null,
+                    '/my/trainings',
                 ),
                 $this->stat(
                     'Eligibility Requirements Complied',
                     $member?->requirements->where('complied', true)->count() ?? 0,
                     'shield-check',
                     $member?->status->label() ?? 'Not yet registered',
+                    '/my/profile',
                 ),
             ],
         };
     }
 
-    private function stat(string $label, int $value, string $icon, ?string $hint): array
+    private function stat(string $label, int $value, string $icon, ?string $hint, ?string $href = null): array
     {
-        return ['label' => $label, 'value' => $value, 'icon' => $icon, 'hint' => $hint];
+        return ['label' => $label, 'value' => $value, 'icon' => $icon, 'hint' => $hint, 'href' => $href];
     }
 }

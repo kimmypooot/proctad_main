@@ -80,27 +80,15 @@ class OtherExaminationPersonnelController extends Controller
         ]);
 
         return redirect()
-            ->route('other-examination-personnel.show', $oep)
+            ->route('other-examination-personnel.index')
             ->with('success', "Other examination personnel registered with ID {$oep->oep_id}.");
     }
 
-    public function show(OtherExaminationPersonnel $otherExaminationPersonnel): Response
+    public function show(OtherExaminationPersonnel $otherExaminationPersonnel): RedirectResponse
     {
         Gate::authorize('view', $otherExaminationPersonnel);
 
-        return Inertia::render('OtherExaminationPersonnel/Show', [
-            'oep' => $this->presentForList($otherExaminationPersonnel) + [
-                'middle_name' => $otherExaminationPersonnel->middle_name,
-                'suffix' => $otherExaminationPersonnel->suffix,
-                'sex' => $otherExaminationPersonnel->sex,
-                'contact_number' => $otherExaminationPersonnel->contact_number,
-                'email' => $otherExaminationPersonnel->email,
-                'position' => $otherExaminationPersonnel->position,
-                'created_at' => $otherExaminationPersonnel->created_at->toDateString(),
-            ],
-            'idCard' => OepIdCard::data($otherExaminationPersonnel),
-            'can' => ['update' => request()->user()->can('update', $otherExaminationPersonnel)],
-        ]);
+        return redirect()->route('other-examination-personnel.index');
     }
 
     public function details(OtherExaminationPersonnel $otherExaminationPersonnel): JsonResponse
@@ -118,14 +106,22 @@ class OtherExaminationPersonnelController extends Controller
                 'created_at' => $otherExaminationPersonnel->created_at->toDateString(),
             ],
             'idCard' => OepIdCard::data($otherExaminationPersonnel),
+            'can' => ['update' => request()->user()->can('update', $otherExaminationPersonnel)],
         ]);
     }
 
-    public function edit(Request $request, OtherExaminationPersonnel $otherExaminationPersonnel): Response
+    public function edit(Request $request, OtherExaminationPersonnel $otherExaminationPersonnel): RedirectResponse
     {
         Gate::authorize('update', $otherExaminationPersonnel);
 
-        return Inertia::render('OtherExaminationPersonnel/Edit', [
+        return redirect()->route('other-examination-personnel.index');
+    }
+
+    public function editData(Request $request, OtherExaminationPersonnel $otherExaminationPersonnel): JsonResponse
+    {
+        Gate::authorize('update', $otherExaminationPersonnel);
+
+        return response()->json([
             'oep' => $otherExaminationPersonnel->only([
                 'id', 'oep_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'sex',
                 'contact_number', 'email', 'agency', 'position', 'personnel_type',
@@ -145,7 +141,7 @@ class OtherExaminationPersonnelController extends Controller
         $otherExaminationPersonnel->update($validated);
 
         return redirect()
-            ->route('other-examination-personnel.show', $otherExaminationPersonnel)
+            ->route('other-examination-personnel.index')
             ->with('success', 'Record updated.');
     }
 

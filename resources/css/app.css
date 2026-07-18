@@ -19,9 +19,10 @@
  */
 
 @theme {
-    /* Typography — Poppins everywhere */
+    /* Typography — Poppins (primary) + Playfair Display (accent serif for pull-quotes, ROP branding) */
     --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-serif: 'Playfair Display', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
 
     /* Brand — CSC RO VIII */
     --color-brand-50: #eef0fb;
@@ -47,6 +48,18 @@
     --color-accent-800: #7e0c14;
     --color-accent-900: #5c090f;
 
+    /* Gold — CSC seal accent */
+    --color-gold-50: #faf6eb;
+    --color-gold-100: #f2e9c9;
+    --color-gold-200: #e8d7a0;
+    --color-gold-300: #dbc16f;
+    --color-gold-400: #d0aa47;
+    --color-gold-500: #C9A84C;
+    --color-gold-600: #b8942f;
+    --color-gold-700: #9a7a28;
+    --color-gold-800: #7d6220;
+    --color-gold-900: #5f4919;
+
     /* Motion */
     --animate-fade-in: fade-in 0.25s ease-out both;
     --animate-fade-up: fade-up 0.3s ease-out both;
@@ -59,6 +72,25 @@
     @keyframes fade-up {
         from { opacity: 0; transform: translateY(12px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+
+    --animate-fade-in-left: fade-in-left 0.4s ease-out both;
+    --animate-fade-in-right: fade-in-right 0.4s ease-out both;
+    --animate-scale-in: scale-in 0.35s ease-out both;
+
+    @keyframes fade-in-left {
+        from { opacity: 0; transform: translateX(-24px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes fade-in-right {
+        from { opacity: 0; transform: translateX(24px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes scale-in {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
     }
 }
 

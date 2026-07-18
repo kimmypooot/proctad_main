@@ -202,29 +202,62 @@ class CertificateService
 
     private function renderPdf(Certificate $certificate): string
     {
+        $bytes = $this->renderBytes($certificate);
+        $path = "certificates/{$certificate->certificate_no}.pdf";
+
+        Storage::disk('local')->put($path, $bytes);
+
+        return $path;
+    }
+
+    /**
+     * Render a live, non-persisted preview of what this certificate's PDF
+     * would look like right now — before it's approved/released, so an
+     * approver isn't deciding blind. Fills in the certificate number, current
+     * active signatory, and issue date that release() would normally
+     * mint/snapshot, on an in-memory clone so nothing is written to the
+     * database or disk. Watermarked so it can never pass for the real thing.
+     */
+    public function previewPdf(Certificate $certificate): string
+    {
+        $preview = clone $certificate;
+        $preview->certificate_no = $preview->certificate_no ?: $this->mintNumber($certificate);
+
+        if (! $preview->signatory_name) {
+            $signatory = Signatory::currentFor($certificate->field_office_id);
+            $preview->signatory_name = $signatory?->name;
+            $preview->signatory_position = $signatory?->position;
+        }
+
+        $preview->released_at ??= now();
+
+        return $this->renderBytes($preview, watermark: true);
+    }
+
+    private function renderBytes(Certificate $certificate, bool $watermark = false): string
+    {
         $certificate->loadMissing('member.fieldOffice', 'certifiable');
 
         $letterhead = Letterhead::active();
-        $path = "certificates/{$certificate->certificate_no}.pdf";
 
         // A PDF letterhead (e.g. the official CSC RO VIII template) can't be
         // composited as an HTML <img> background, so it gets its own FPDI
         // renderer that imports the real PDF page and draws content on top.
         // Image letterheads (or none) keep the existing dompdf/HTML path.
         if ($letterhead?->isPdf() && Storage::disk('local')->exists($letterhead->file_path)) {
-            $bytes = $this->renderPdfWithPdfLetterhead($certificate, $letterhead);
-        } else {
-            $bytes = Pdf::loadView('certificates.certificate', [
-                'certificate' => $certificate,
-                'qrDataUri' => $this->qrDataUri(route('verify-certificate', $certificate->certificate_no)),
-                'verifyUrl' => route('verify-certificate', $certificate->certificate_no),
-                'letterheadDataUri' => $this->letterheadDataUri(),
-            ])->setPaper('a4', 'landscape')->output();
+            return $this->renderPdfWithPdfLetterhead($certificate, $letterhead, $watermark);
         }
 
-        Storage::disk('local')->put($path, $bytes);
-
-        return $path;
+        // A4 portrait, matching both the official CSC letterhead's own page
+        // geometry and the FPDI path above (which draws on a 210x297mm page).
+        return Pdf::loadView('certificates.certificate', [
+            'certificate' => $certificate,
+            'qrDataUri' => $this->qrDataUri(route('verify-certificate', $certificate->certificate_no)),
+            'verifyUrl' => route('verify-certificate', $certificate->certificate_no),
+            'letterheadDataUri' => $this->letterheadDataUri(),
+            'watermark' => $watermark,
+            'fontDir' => $this->fontDir(),
+        ])->setPaper('a4', 'portrait')->output();
     }
 
     /**
@@ -238,7 +271,7 @@ class CertificateService
      * functional upgrade the legacy system never had, kept in the same visual
      * slot/size legacy used for its QR.
      */
-    private function renderPdfWithPdfLetterhead(Certificate $certificate, Letterhead $letterhead): string
+    private function renderPdfWithPdfLetterhead(Certificate $certificate, Letterhead $letterhead, bool $watermark = false): string
     {
         $member = $certificate->member;
         $source = $certificate->certifiable;
@@ -277,7 +310,7 @@ class CertificateService
         match ($certificate->type->value) {
             'appreciation' => $this->drawAppreciation($pdf, $putCtr, $multiCtr, $member, $certificate, $source, $black),
             'appearance' => $this->drawAppearance($pdf, $putCtr, $multiCtr, $member, $certificate, $source, $ML, $cw, $black),
-            'completion' => $this->drawCompletion($pdf, $putCtr, $member, $certificate, $source, $black),
+            'completion' => $this->drawCompletion($pdf, $putCtr, $multiCtr, $member, $certificate, $source, $ML, $cw, $black),
             'designation_order' => $this->drawDesignationOrder($pdf, $putCtr, $multiCtr, $member, $certificate, $source, $black),
         };
 
@@ -285,7 +318,7 @@ class CertificateService
         // only), so unlike legacy this block is text-only — nothing to draw above it.
         if ($certificate->signatory_name) {
             $putCtr($this->signatureY, 'B', $this->signatureFontSize, $black, mb_strtoupper($certificate->signatory_name));
-            $putCtr($this->signatureY + 5.7, '', $this->signatureFontSize - 1, $black, (string) $certificate->signatory_position);
+            $putCtr($this->signatureY + 3, '', $this->signatureFontSize - 1, $black, (string) $certificate->signatory_position);
         }
 
         // Verification QR in the same slot/size legacy used for its feedback QR.
@@ -297,14 +330,35 @@ class CertificateService
         $pdf->Image($qrFile, $qrX, 205, $maxW, $maxH);
         @unlink($qrFile);
 
-        $pdf->SetTextColor(80, 80, 80);
-        $pdf->SetFont('Times', 'I', 8.5);
-        $pdf->SetXY($ML, 242);
+        $pdf->SetTextColor(61, 61, 61);
+        $pdf->SetFont('Times', 'I', 7.5);
+        $pdf->SetXY($ML, 240);
         $pdf->MultiCell($cw, 4, $this->latin1(
             "Scan to verify this certificate's authenticity.\n{$certificate->certificate_no}"
         ), 0, 'C');
 
+        if ($watermark) {
+            $this->drawPreviewWatermark($pdf, $PW);
+        }
+
         return $pdf->Output('S');
+    }
+
+    /**
+     * Top banner stamp so a not-yet-approved render can never be mistaken
+     * for (or passed off as) the real issued certificate. Deliberately drawn
+     * with plain FPDF primitives only (Rect fill + text) — this project's
+     * FPDF/FPDI build has neither the rotation nor alpha-transparency
+     * extensions, so a diagonal translucent watermark isn't available.
+     */
+    private function drawPreviewWatermark(Fpdi $pdf, float $pageWidth): void
+    {
+        $pdf->SetFillColor(200, 0, 0);
+        $pdf->Rect(0, 0, $pageWidth, 12, 'F');
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('Times', 'B', 14);
+        $pdf->SetXY(0, 2.5);
+        $pdf->Cell($pageWidth, 7, $this->latin1('PREVIEW ONLY - NOT YET APPROVED OR ISSUED'), 0, 0, 'C');
     }
 
     private float $signatureY = 0.0;
@@ -347,13 +401,54 @@ class CertificateService
 
     private function drawAppearance($pdf, callable $putCtr, callable $multiCtr, $member, Certificate $certificate, $source, float $ML, float $cw, array $black): void
     {
-        $name = $this->nameLastFirst($member);
+        $this->drawCertifyStatement(
+            $pdf, $putCtr, $multiCtr, $certificate, $member, $ML, $cw, $black,
+            title: 'CERTIFICATE OF APPEARANCE',
+            name: $this->nameLastFirst($member),
+            segThanks: ' attended and appeared in the ',
+            segRest: $certificate->sourceDescription().' on '.$certificate->sourceDate().'.',
+        );
+    }
 
-        $putCtr(65.6, 'B', 18, $black, 'CERTIFICATE OF APPEARANCE');
+    /**
+     * Completion mirrors Appearance's layout (spec: the two share one look):
+     * the participant's name is packed inline into a "This is to certify
+     * that NAME has successfully completed the ..." sentence — Times BU 20,
+     * with the same smart wrapping and "Issued this ..." line — rather than
+     * the stacked, mixed-case block the legacy completion builder used.
+     */
+    private function drawCompletion($pdf, callable $putCtr, callable $multiCtr, $member, Certificate $certificate, $source, float $ML, float $cw, array $black): void
+    {
+        $this->drawCertifyStatement(
+            $pdf, $putCtr, $multiCtr, $certificate, $member, $ML, $cw, $black,
+            title: 'CERTIFICATE OF COMPLETION',
+            name: $this->nameFirstMiLast($member, comma: false),
+            segThanks: ' has successfully completed the ',
+            segRest: $certificate->sourceDescription()
+                .' conducted onsite by the Civil Service Commission Regional Office VIII on '
+                .$certificate->sourceDate().'.',
+        );
+    }
 
-        $segCertify = 'This is to certify that ';
-        $segThanks = ' attended and appeared in the ';
-        $segRest = $certificate->sourceDescription().' on '.$certificate->sourceDate().'.';
+    /**
+     * Shared "This is to certify that NAME <connective> REST." layout for the
+     * Appearance and Completion certificates. The name is packed inline into
+     * the certifying sentence (Times BU 20) with the remainder wrapping only
+     * when it overflows the text column, followed by a centred "Issued this
+     * Nth day of Month Year at <office> for whatever lawful purpose this may
+     * serve." line. Sets $this->signatureY / signatureFontSize for the caller.
+     */
+    private function drawCertifyStatement($pdf, callable $putCtr, callable $multiCtr, Certificate $certificate, $member, float $ML, float $cw, array $black, string $title, string $name, string $segThanks, string $segRest): void
+    {
+        // Small "This" lead-in above the title so the certificate reads as one
+        // sentence ("This CERTIFICATE OF … is to certify that NAME …") and stays
+        // consistent with the Appreciation/Designation renderers and the Blade
+        // template, all of which open with a standalone "This". The body's
+        // opener therefore drops its own "This" to avoid repeating it.
+        $putCtr(59.6, '', 12, $black, 'This');
+        $putCtr(65.6, 'B', 18, $black, $title);
+
+        $segCertify = 'is to certify that ';
 
         $yStart = 86.0;
         $lh = 7.5;
@@ -412,35 +507,6 @@ class CertificateService
         $this->signatureFontSize = 14;
     }
 
-    private function drawCompletion($pdf, callable $putCtr, $member, Certificate $certificate, $source, array $black): void
-    {
-        $name = $this->nameFirstMiLast($member, comma: true);
-
-        $y = 65.0;
-        $lh = 16.0;
-        $putCtr($y, '', 14, $black, 'This');
-        $y += $lh;
-        $putCtr($y, 'B', 33, $black, 'Certificate of Completion');
-        $y += $lh;
-        $putCtr($y, '', 14, $black, 'is awarded to');
-        $y += $lh - 5;
-        $putCtr($y, 'B', 27, $black, $name);
-        $y += $lh;
-        $putCtr($y, '', 14, $black, 'for having successfully completed');
-        $y += $lh - 5;
-        $putCtr($y, 'B', 27, $black, $certificate->sourceDescription());
-        $y += $lh;
-        $putCtr($y, '', 14, $black, 'conducted onsite by the');
-        $y += $lh - 8;
-        $putCtr($y, '', 14, $black, 'Civil Service Commission Regional Office VIII on');
-        $y += $lh - 8;
-        $putCtr($y, '', 14, $black, (string) $certificate->sourceDate());
-        $y += $lh - 8;
-
-        $this->signatureY = max($y + 12, 220.0);
-        $this->signatureFontSize = 14;
-    }
-
     private function drawDesignationOrder($pdf, callable $putCtr, callable $multiCtr, $member, Certificate $certificate, $source, array $black): void
     {
         $name = $this->nameFirstMiLast($member, comma: false);
@@ -476,9 +542,32 @@ class CertificateService
         return mb_strtoupper($member->first_name).$mi.' '.mb_strtoupper($member->last_name).$sfx;
     }
 
-    /** FPDF core fonts are Latin-1 — convert all DB-sourced display strings. */
+    /**
+     * FPDF core fonts are Latin-1 — convert all DB-sourced display strings.
+     * Common “smart” punctuation (en/em dashes, curly quotes, ellipsis,
+     * bullet) lives outside Latin-1, so mb_convert_encoding would otherwise
+     * turn each into a literal "?" (e.g. a source title "TEA Batch 1 – 2026").
+     * Transliterate those to their closest ASCII equivalents first so they
+     * render as intended.
+     */
     private function latin1(string $text): string
     {
+        $text = strtr($text, [
+            "\u{2013}" => '-',    // – en dash
+            "\u{2014}" => '-',    // — em dash
+            "\u{2012}" => '-',    // ‒ figure dash
+            "\u{2015}" => '-',    // ― horizontal bar
+            "\u{2018}" => "'",    // ‘ left single quote
+            "\u{2019}" => "'",    // ’ right single quote / apostrophe
+            "\u{201A}" => "'",    // ‚ single low quote
+            "\u{201C}" => '"',    // “ left double quote
+            "\u{201D}" => '"',    // ” right double quote
+            "\u{201E}" => '"',    // „ double low quote
+            "\u{2022}" => '-',    // • bullet
+            "\u{2026}" => '...',  // … ellipsis
+            "\u{00A0}" => ' ',    // non-breaking space
+        ]);
+
         return mb_convert_encoding($text, 'ISO-8859-1', 'UTF-8');
     }
 
@@ -495,6 +584,19 @@ class CertificateService
         }
 
         return $n.$s;
+    }
+
+    /**
+     * Absolute path to the bundled certificate fonts, for the template's
+     * @font-face rules. Slashes are normalized because base_path() yields
+     * backslashes on Windows, and a backslash is an escape character inside
+     * a CSS url() — dompdf would silently fail to load the font and fall
+     * back to a default face. Must stay inside dompdf's chroot (base_path),
+     * and must be a local path: config `enable_remote` is false.
+     */
+    private function fontDir(): string
+    {
+        return str_replace('\\', '/', base_path('resources/fonts'));
     }
 
     /**

@@ -10,7 +10,6 @@ const quickLinks = [
     { label: 'Benefits', href: '/benefits' },
     { label: 'Qualifications', href: '/qualifications' },
     { label: 'Application Process', href: '/application-process' },
-    { label: 'News & Announcements', href: '/news' },
     { label: 'FAQs', href: '/faqs' },
 ];
 
@@ -21,9 +20,9 @@ const legalLinks = [
 ];
 
 const socials = [
-    { label: 'Facebook', icon: 'facebook', href: '#' },
+    { label: 'Facebook', icon: 'facebook', href: 'https://www.facebook.com/cscro8' },
     { label: 'X (Twitter)', icon: 'twitter-x', href: '#' },
-    { label: 'YouTube', icon: 'youtube', href: '#' },
+    { label: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/@cscro8' },
 ];
 </script>
 
@@ -49,6 +48,12 @@ const socials = [
                             </a>
                         </li>
                     </ul>
+
+                    <div class="flex items-center gap-3 pt-1">
+                        <img :src="'/images/govph_seal.png'" alt="GOV PH Seal" class="h-23 w-auto opacity-80" />
+                        <img :src="'/images/CORSeal_CSC2.png'" alt="NPC DPO Registration" class="h-25 w-auto opacity-80" />
+                        <img :src="'/images/transparency-seal.png'" alt="Transparency Seal" class="h-22 w-auto opacity-80" />
+                    </div>
                 </div>
 
                 <!-- Quick links -->
@@ -103,9 +108,14 @@ const socials = [
                 <p class="text-xs text-brand-300">
                     &copy; {{ year }} Civil Service Commission Regional Office VIII. All rights reserved.
                 </p>
-                <p class="text-xs text-brand-300">
-                    Republic of the Philippines
-                </p>
+                <div class="flex flex-col items-center gap-1 sm:items-end">
+                    <p class="font-serif text-xs font-semibold uppercase tracking-widest text-gold-400">
+                        Republic of the Philippines
+                    </p>
+                    <p class="text-xs text-brand-300">
+                        All content is publicly accessible in accordance with the Ease of Doing Business Act.
+                    </p>
+                </div>
             </div>
         </div>
     </footer>

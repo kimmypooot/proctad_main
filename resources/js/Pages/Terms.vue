@@ -64,15 +64,32 @@ const sections = [
         />
 
         <section class="py-16 sm:py-24">
-            <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-                <p class="text-sm text-slate-500">Last updated: July 2026</p>
+            <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:grid lg:max-w-7xl lg:grid-cols-[1fr_14rem] lg:gap-12 lg:px-8">
+                <div>
+                    <p class="text-sm text-slate-500">Last updated: July 2026</p>
 
-                <div class="mt-8 space-y-10">
-                    <section v-for="section in sections" :key="section.heading">
-                        <h2 class="text-lg font-semibold text-slate-900">{{ section.heading }}</h2>
-                        <p class="mt-3 leading-relaxed text-slate-600">{{ section.body }}</p>
-                    </section>
+                    <div class="mt-8 space-y-10">
+                        <section v-for="section in sections" :key="section.heading" :id="`section-${section.heading.split('.')[0]}`">
+                            <h2 class="text-lg font-semibold text-slate-900">{{ section.heading }}</h2>
+                            <p class="mt-3 leading-relaxed text-slate-600">{{ section.body }}</p>
+                        </section>
+                    </div>
                 </div>
+
+                <!-- Sticky table of contents (desktop) -->
+                <nav class="hidden lg:block" aria-label="On this page">
+                    <div class="sticky top-24 space-y-2 border-l-2 border-slate-100 pl-4">
+                        <p class="text-xs font-semibold uppercase tracking-widest text-slate-400">On this page</p>
+                        <a
+                            v-for="section in sections"
+                            :key="section.heading"
+                            :href="`#section-${section.heading.split('.')[0]}`"
+                            class="block text-sm leading-relaxed text-slate-500 transition-colors duration-200 hover:text-brand-700"
+                        >
+                            {{ section.heading }}
+                        </a>
+                    </div>
+                </nav>
             </div>
         </section>
     </PublicLayout>

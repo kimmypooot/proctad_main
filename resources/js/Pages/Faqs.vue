@@ -81,9 +81,29 @@ const groups = [
             :breadcrumbs="[{ label: 'FAQs' }]"
         />
 
+        <!-- Anchor navigation -->
+        <nav class="sticky top-16 z-20 border-b border-slate-200 bg-white/95 py-3 backdrop-blur-sm" aria-label="FAQ categories">
+            <div class="mx-auto flex max-w-3xl items-center gap-6 overflow-x-auto px-4 sm:px-6 lg:px-8">
+                <span class="shrink-0 text-xs font-semibold uppercase tracking-widest text-slate-400">Jump to:</span>
+                <a
+                    v-for="group in groups"
+                    :key="group.heading"
+                    :href="`#faq-${group.heading.toLowerCase().replace(/\s+/g, '-')}`"
+                    class="shrink-0 rounded-full bg-slate-100 px-4 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:bg-brand-100 hover:text-brand-700"
+                >
+                    {{ group.heading }}
+                </a>
+            </div>
+        </nav>
+
         <section class="py-16 sm:py-24">
             <div class="mx-auto max-w-3xl space-y-12 px-4 sm:px-6 lg:px-8">
-                <div v-for="group in groups" :key="group.heading" class="reveal">
+                <div
+                    v-for="group in groups"
+                    :key="group.heading"
+                    :id="`faq-${group.heading.toLowerCase().replace(/\s+/g, '-')}`"
+                    class="reveal"
+                >
                     <h2 class="mb-4 text-xl font-semibold text-slate-900">{{ group.heading }}</h2>
                     <BaseAccordion :items="group.items" />
                 </div>

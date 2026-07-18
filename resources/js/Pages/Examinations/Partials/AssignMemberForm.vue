@@ -4,6 +4,7 @@ import { useForm } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
+import Tooltip from '@/Components/Tooltip.vue';
 import { useVenueOptions } from '@/Composables/useVenueOptions';
 
 const props = defineProps({
@@ -106,8 +107,15 @@ const assign = () => assignForm
                     placeholder="Select role"
                     :options="roles"
                     :error="assignForm.errors.role"
-                    hint="REC, LEC, and CE for Investigation are 'coverage' roles — stationed at one venue but also responsible for monitoring other schools. REC roles are the only ones that can be assigned with no venue at all."
-                />
+                >
+                    <template #label>
+                        Role (applies to all selected)
+                        <span class="text-accent-600">*</span>
+                        <Tooltip text="REC, LEC, and CE for Investigation are 'coverage' roles — stationed at one venue but also responsible for monitoring other schools. REC roles are the only ones that can be assigned with no venue at all." wrap>
+                            <span class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-300 text-[10px] font-bold text-white hover:bg-slate-400">?</span>
+                        </Tooltip>
+                    </template>
+                </SelectInput>
                 <SelectInput
                     v-model="assignForm.examination_school_id"
                     label="Venue"

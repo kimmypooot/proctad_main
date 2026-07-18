@@ -99,18 +99,26 @@ class OtherExaminationPersonnelTest extends TestCase
         $this->actingAs($admin)->get("/other-examination-personnel/{$oep->id}/photo")->assertOk();
     }
 
-    public function test_show_page_includes_id_card_data(): void
+    public function test_show_redirects_to_index(): void
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $oep = OtherExaminationPersonnel::factory()->create();
 
         $this->actingAs($admin)
             ->get("/other-examination-personnel/{$oep->id}")
+            ->assertRedirect('/other-examination-personnel');
+    }
+
+    public function test_details_endpoint_includes_id_card_data(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $oep = OtherExaminationPersonnel::factory()->create();
+
+        $this->actingAs($admin)
+            ->getJson("/other-examination-personnel/{$oep->id}/details")
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('OtherExaminationPersonnel/Show')
-                ->where('idCard.oep_id', $oep->oep_id)
-                ->where('idCard.qr_value', "OEP:{$oep->oep_id}"));
+            ->assertJsonPath('idCard.oep_id', $oep->oep_id)
+            ->assertJsonPath('idCard.qr_value', "OEP:{$oep->oep_id}");
     }
 
     public function test_admin_can_update_and_delete_personnel(): void

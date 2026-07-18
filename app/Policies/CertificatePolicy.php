@@ -48,6 +48,21 @@ class CertificatePolicy
     }
 
     /**
+     * Live, non-persisted preview render — same visibility scope as the
+     * certificates list (viewAny + FO scoping), available regardless of
+     * status so staff can check a request before it's decided.
+     */
+    public function preview(User $user, Certificate $certificate): bool
+    {
+        if ($user->role->isRegionWide()) {
+            return true;
+        }
+
+        return $user->role->isFieldOfficeScoped()
+            && $user->field_office_id === $certificate->field_office_id;
+    }
+
+    /**
      * Download the released PDF: staff within scope, or the owning member.
      */
     public function download(User $user, Certificate $certificate): bool
@@ -58,6 +73,27 @@ class CertificatePolicy
 
         if ($certificate->member?->user_id === $user->id) {
             return true;
+        }
+
+        if ($user->role->isRegionWide()) {
+            return true;
+        }
+
+        return $user->role->isFieldOfficeScoped()
+            && $user->field_office_id === $certificate->field_office_id;
+    }
+
+    /**
+     * Re-render an already-issued certificate's stored PDF (same number,
+     * signatory, and release date — only the rendering is refreshed, e.g.
+     * after a letterhead or template change). Released certificates only;
+     * region-wide admins region-wide, FO-scoped staff within their own
+     * Testing Center — mirroring the download scope minus the owning member.
+     */
+    public function regenerate(User $user, Certificate $certificate): bool
+    {
+        if ($certificate->status !== CertificateStatus::Released) {
+            return false;
         }
 
         if ($user->role->isRegionWide()) {

@@ -67,15 +67,17 @@ const steps = [
                         v-for="(step, index) in steps"
                         :key="step.title"
                         class="reveal relative flex gap-6 pb-12 last:pb-0"
+                        :style="{ transitionDelay: `${index * 100}ms` }"
                     >
-                        <!-- Connector line -->
+                        <!-- Connector line (animated on scroll) -->
                         <span
                             v-if="index < steps.length - 1"
-                            class="absolute left-7 top-14 h-[calc(100%-3.5rem)] w-px bg-brand-100"
+                            class="absolute left-7 top-14 h-0 w-px bg-gradient-to-b from-brand-400 to-brand-100 transition-all duration-700 ease-out"
+                            :class="index < steps.length - 1 ? 'h-[calc(100%-3.5rem)]' : ''"
                             aria-hidden="true"
                         />
 
-                        <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-brand-100 bg-white text-brand-600">
+                        <span class="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-brand-100 bg-gradient-to-br from-white to-brand-50 text-brand-600 shadow-sm">
                             <AppIcon :name="step.icon" class="h-6 w-6" />
                         </span>
 

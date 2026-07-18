@@ -8,6 +8,10 @@ import BaseButton from '@/Components/BaseButton.vue';
 import BaseAccordion from '@/Components/BaseAccordion.vue';
 import StatCounter from '@/Components/StatCounter.vue';
 
+defineProps({
+    stats: { type: Array, required: true },
+});
+
 const aboutCards = [
     {
         icon: 'shield-check',
@@ -69,14 +73,6 @@ const steps = [
     { icon: 'check-badge', title: 'Get Certified', text: 'Become a Certified Test Administrator.' },
 ];
 
-const stats = [
-    { value: 1250, suffix: '+', label: 'Registered Members' },
-    { value: 890, suffix: '+', label: 'Certified Test Administrators' },
-    { value: 120, suffix: '+', label: 'Trainings Conducted' },
-    { value: 45, suffix: '+', label: 'Partner Agencies' },
-    { value: 300, suffix: '+', label: 'Completed Assessments' },
-];
-
 const faqs = [
     {
         question: 'What is ProCTAD?',
@@ -120,9 +116,10 @@ const faqs = [
 
                 <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3 lg:gap-8">
                     <article
-                        v-for="card in aboutCards"
+                        v-for="(card, idx) in aboutCards"
                         :key="card.title"
-                        class="reveal rounded-xl border border-slate-200 bg-white p-8 transition-shadow duration-300 hover:shadow-md"
+                        class="reveal group rounded-xl border border-slate-100 bg-gradient-to-br from-white to-brand-50/20 p-8 transition-all duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-md"
+                        :style="{ transitionDelay: `${idx * 100}ms` }"
                     >
                         <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
                             <AppIcon :name="card.icon" class="h-6 w-6" />
@@ -152,9 +149,10 @@ const faqs = [
 
                 <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3 lg:gap-8">
                     <article
-                        v-for="benefit in benefits"
+                        v-for="(benefit, idx) in benefits"
                         :key="benefit.title"
-                        class="reveal group rounded-xl border border-slate-200 bg-white p-8 transition-all duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-md"
+                        class="reveal group rounded-xl border border-slate-100 bg-white p-8 transition-all duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-md"
+                        :style="{ transitionDelay: `${idx * 80}ms` }"
                     >
                         <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-50 text-brand-600 transition-colors duration-300 group-hover:bg-brand-600 group-hover:text-white">
                             <AppIcon :name="benefit.icon" class="h-6 w-6" />
@@ -180,6 +178,7 @@ const faqs = [
                         v-for="(step, index) in steps"
                         :key="step.title"
                         class="reveal relative flex flex-col items-center text-center"
+                        :style="{ transitionDelay: `${index * 60}ms` }"
                     >
                         <!-- Connector line (desktop) -->
                         <span
@@ -255,8 +254,10 @@ const faqs = [
                     description="Quick answers to the most common questions about ProCTAD."
                 />
 
-                <div class="reveal mt-12">
-                    <BaseAccordion :items="faqs" />
+                <div class="mt-12">
+                    <div class="reveal" :style="{ transitionDelay: '0ms' }">
+                        <BaseAccordion :items="faqs" />
+                    </div>
                 </div>
 
                 <div class="reveal mt-8 text-center">

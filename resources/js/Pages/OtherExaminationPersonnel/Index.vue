@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
+import ViewOepModal from './Partials/ViewOepModal.vue';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -19,6 +20,14 @@ const props = defineProps({
     personnelTypes: { type: Array, required: true },
     can: { type: Object, required: true },
 });
+
+const viewingOepId = ref(null);
+const showOepModal = ref(false);
+
+const viewOep = (id) => {
+    viewingOepId.value = id;
+    showOepModal.value = true;
+};
 
 const search = ref(props.filters.search ?? '');
 const personnelType = ref(props.filters.personnel_type ?? '');
@@ -98,10 +107,10 @@ watch([personnelType, fieldOfficeId], applyFilters);
                     <TableSkeleton v-if="loading" :columns="5" />
                     <tr v-for="oep in loading ? [] : personnel.data" :key="oep.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-brand-700">
-                            <Link :href="`/other-examination-personnel/${oep.id}`" class="hover:underline">{{ oep.oep_id }}</Link>
+                            <button @click="viewOep(oep.id)" class="hover:underline">{{ oep.oep_id }}</button>
                         </td>
                         <td class="px-3 py-2 font-medium text-slate-900">
-                            <Link :href="`/other-examination-personnel/${oep.id}`" class="hover:underline">{{ oep.name }}</Link>
+                            <button @click="viewOep(oep.id)" class="text-left hover:underline">{{ oep.name }}</button>
                             <p class="text-xs font-normal text-slate-400 sm:hidden">{{ oep.personnel_type_label }}</p>
                         </td>
                         <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 sm:table-cell">{{ oep.personnel_type_label }}</td>
@@ -127,5 +136,11 @@ watch([personnelType, fieldOfficeId], applyFilters);
         <div class="mt-6">
             <BasePagination :links="personnel.links" />
         </div>
+
+        <ViewOepModal
+            :show="showOepModal"
+            :oep-id="viewingOepId"
+            @close="showOepModal = false"
+        />
     </DashboardLayout>
 </template>

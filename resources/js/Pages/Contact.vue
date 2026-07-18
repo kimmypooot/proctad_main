@@ -100,18 +100,23 @@ const submit = () => {
                         </li>
                     </ul>
 
-                    <!-- Map placeholder -->
-                    <div
-                        class="flex aspect-[4/3] items-center justify-center rounded-xl border border-slate-200 bg-slate-50"
-                        role="img"
-                        aria-label="Map placeholder — CSC Regional Office VIII, Palo, Leyte"
-                    >
-                        <div class="text-center">
-                            <AppIcon name="map-pin" class="mx-auto h-10 w-10 text-slate-300" />
-                            <p class="mt-2 text-sm font-medium text-slate-400">Google Map placeholder</p>
-                            <p class="text-xs text-slate-400">Government Center, Candahug, Palo, Leyte</p>
-                        </div>
+                    <!-- Google Map embed -->
+                    <div class="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                        <iframe
+                            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1234!2d124.987!3d11.155!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3309e3b3b3b3b3b3%3A0x3b3b3b3b3b3b3b3b!2sCSC%20Regional%20Office%20VIII!5e0!3m2!1sen!2sph!4v1"
+                            width="100%"
+                            height="280"
+                            style="border:0;"
+                            allowfullscreen=""
+                            loading="lazy"
+                            referrerpolicy="no-referrer-when-downgrade"
+                            title="CSC Regional Office VIII location on Google Maps"
+                            class="w-full"
+                        />
                     </div>
+                    <p class="mt-2 text-xs text-slate-400">
+                        Government Center, Candahug, Palo, Leyte
+                    </p>
                 </div>
 
                 <!-- Form -->

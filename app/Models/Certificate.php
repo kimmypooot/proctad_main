@@ -72,11 +72,22 @@ class Certificate extends Model
 
     public function sourceDate(): ?string
     {
+        return $this->sourceDateRaw()?->format('M d, Y');
+    }
+
+    /**
+     * The raw date of the source event (exam or training), for callers that
+     * need to format it themselves — e.g. the certificate's "Issued this Nth
+     * of Month Year" line, which needs the ordinal-day format rather than the
+     * 'M d, Y' string sourceDate() returns.
+     */
+    public function sourceDateRaw(): ?\Illuminate\Support\Carbon
+    {
         $source = $this->certifiable;
 
         return match (true) {
-            $source instanceof ExamAssignment => $source->examination?->exam_date?->format('M d, Y'),
-            $source instanceof TrainingAssignment => $source->training?->training_date?->format('M d, Y'),
+            $source instanceof ExamAssignment => $source->examination?->exam_date,
+            $source instanceof TrainingAssignment => $source->training?->training_date,
             default => null,
         };
     }

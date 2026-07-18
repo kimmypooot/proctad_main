@@ -46,6 +46,14 @@ const importance = [
         text: 'ProCTAD ensures Region VIII always has a ready, qualified pool of administrators for examinations of any scale.',
     },
 ];
+
+const milestones = [
+    { year: '2024', event: 'ProCTAD program conceptualized and developed by CSC RO VIII' },
+    { year: '2025 Q1', event: 'Pilot implementation with initial batch of test administrators' },
+    { year: '2025 Q3', event: 'Full rollout across Region VIII field offices' },
+    { year: '2026', event: 'Digital transformation with the ProCTAD online portal' },
+    { year: '2026+', event: 'Continued expansion and professional development programs' },
+];
 </script>
 
 <template>
@@ -68,9 +76,10 @@ const importance = [
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="grid gap-6 sm:grid-cols-2 lg:gap-8">
                     <article
-                        v-for="pillar in pillars"
+                        v-for="(pillar, idx) in pillars"
                         :key="pillar.title"
-                        class="reveal rounded-xl border border-slate-200 bg-white p-8 transition-shadow duration-300 hover:shadow-md"
+                        class="reveal group rounded-xl border border-slate-100 bg-gradient-to-br from-white to-brand-50/20 p-8 transition-all duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-md"
+                        :style="{ transitionDelay: `${idx * 100}ms` }"
                     >
                         <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
                             <AppIcon :name="pillar.icon" class="h-6 w-6" />
@@ -82,7 +91,42 @@ const importance = [
             </div>
         </section>
 
-        <section class="bg-slate-50 py-16 sm:py-24">
+        <!-- Program timeline -->
+        <section class="bg-slate-50 py-16 sm:py-24" aria-labelledby="timeline-heading">
+            <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+                <SectionHeader
+                    eyebrow="Program Milestones"
+                    title="The ProCTAD Journey"
+                    description="Key milestones in the development of the Professionalized Corps of Test Administrators."
+                />
+
+                <ol class="relative mt-12 space-y-8 border-l-2 border-brand-200 pl-8 sm:pl-10">
+                    <li
+                        v-for="(milestone, idx) in milestones"
+                        :key="milestone.year"
+                        class="reveal relative"
+                        :style="{ transitionDelay: `${idx * 100}ms` }"
+                    >
+                        <span
+                            class="absolute -left-[2.85rem] flex h-6 w-6 items-center justify-center rounded-full border-2 border-brand-300 bg-white sm:-left-[3.35rem]"
+                            aria-hidden="true"
+                        >
+                            <span class="h-2 w-2 rounded-full bg-brand-600" />
+                        </span>
+                        <div class="rounded-xl border border-slate-100 bg-white p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-sm sm:p-6">
+                            <p class="text-xs font-bold uppercase tracking-widest text-accent-500">
+                                {{ milestone.year }}
+                            </p>
+                            <p class="mt-1 text-sm leading-relaxed text-slate-700 sm:text-base">
+                                {{ milestone.event }}
+                            </p>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+        </section>
+
+        <section class="py-16 sm:py-24">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <SectionHeader
                     eyebrow="Why It Matters"
@@ -92,9 +136,10 @@ const importance = [
 
                 <div class="mt-12 grid gap-6 lg:mt-16 lg:grid-cols-3 lg:gap-8">
                     <article
-                        v-for="item in importance"
+                        v-for="(item, idx) in importance"
                         :key="item.title"
-                        class="reveal rounded-xl border border-slate-200 bg-white p-8"
+                        class="reveal group rounded-xl border border-slate-100 bg-gradient-to-br from-white to-brand-50/20 p-8 transition-all duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-md"
+                        :style="{ transitionDelay: `${idx * 100}ms` }"
                     >
                         <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
                             <AppIcon :name="item.icon" class="h-6 w-6" />

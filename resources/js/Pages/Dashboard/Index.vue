@@ -26,6 +26,7 @@ const props = defineProps({
     stats: { type: Array, required: true },
     memberSummary: { type: Object, default: null },
     analytics: { type: Object, default: null },
+    pendingApprovals: { type: Object, default: null },
 });
 
 const page = usePage();
@@ -61,6 +62,9 @@ const quickActions = computed(() => {
         { label: 'Generate Report', icon: 'chart-bar', href: '/reports' },
         { label: 'Scan QR Code', icon: 'qr-code', href: '/scanner' },
         { label: 'Manage User Accounts', icon: 'user-group', href: '/users' },
+        { label: 'Examinations', icon: 'calendar', href: '/examinations' },
+        { label: 'Evaluation Monitoring', icon: 'document-check', href: '/evaluation-monitoring' },
+        { label: 'Certificate Approvals', icon: 'clipboard-check', href: '/approvals' },
     ];
 });
 
@@ -121,6 +125,7 @@ const applyFeedFilter = () => {
                 :value="stat.value.toLocaleString()"
                 :icon="stat.icon"
                 :hint="stat.hint"
+                :href="stat.href"
                 :accent="statAccents[i % statAccents.length]"
             />
         </div>
@@ -135,7 +140,17 @@ const applyFeedFilter = () => {
                     :label="stat.label"
                     :value="stat.value.toLocaleString()"
                     :icon="stat.icon"
+                    :href="stat.href"
                     :accent="secondaryStatAccents[i % secondaryStatAccents.length]"
+                />
+                <StatCard
+                    v-if="analytics.evaluationCompliance"
+                    compact
+                    label="Evaluation Compliance"
+                    :value="`${analytics.evaluationCompliance.percentage}%`"
+                    icon="document-check"
+                    href="/evaluation-monitoring"
+                    :accent="secondaryStatAccents[analytics.secondaryStats.length % secondaryStatAccents.length]"
                 />
             </div>
 
@@ -148,6 +163,34 @@ const applyFeedFilter = () => {
                     />
                 </div>
                 <StatusBreakdownBar title="Member Status Breakdown" :segments="analytics.statusBreakdown" />
+            </div>
+
+            <div class="mt-4 grid gap-4 xl:grid-cols-3">
+                <!-- Upcoming examinations with assignment-confirmation progress -->
+                <div class="xl:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
+                    <h3 class="text-sm font-semibold text-slate-900">Upcoming Examinations</h3>
+                    <div v-if="!analytics.upcomingExaminations.length" class="mt-4">
+                        <EmptyState icon="calendar" title="No upcoming examinations" description="Scheduled exams will appear here." />
+                    </div>
+                    <ul v-else class="mt-3 divide-y divide-slate-100">
+                        <li v-for="exam in analytics.upcomingExaminations" :key="exam.id" class="flex items-center justify-between gap-4 py-2.5">
+                            <div class="min-w-0">
+                                <Link href="/examinations" class="truncate text-sm font-medium text-slate-900 hover:text-brand-700 hover:underline">
+                                    {{ exam.title }}
+                                </Link>
+                                <p class="text-xs text-slate-500">{{ exam.exam_date }}</p>
+                            </div>
+                            <BaseBadge :variant="exam.assignments_confirmed === exam.assignments_total && exam.assignments_total > 0 ? 'success' : 'warning'">
+                                {{ exam.assignments_confirmed }} / {{ exam.assignments_total }} confirmed
+                            </BaseBadge>
+                        </li>
+                    </ul>
+                </div>
+                <StatusBreakdownBar
+                    title="Performance Ratings"
+                    :segments="analytics.performanceRatingBreakdown"
+                    empty-label="No rated assignments yet."
+                />
             </div>
 
             <div v-if="analytics.registrationsByFieldOffice" class="mt-4">
@@ -210,15 +253,37 @@ const applyFeedFilter = () => {
         <div class="mt-8 rounded-2xl border border-slate-200 bg-slate-50/60 p-6">
             <!-- Approvers: pending approvals queue -->
             <section v-if="isApprover" aria-labelledby="approvals-heading">
-                <h2 id="approvals-heading" class="text-lg font-semibold text-slate-900">
-                    Pending Approvals
-                </h2>
+                <div class="flex items-center justify-between gap-3">
+                    <h2 id="approvals-heading" class="text-lg font-semibold text-slate-900">
+                        Pending Approvals
+                    </h2>
+                    <BaseBadge v-if="pendingApprovals?.total" variant="warning">{{ pendingApprovals.total }} waiting</BaseBadge>
+                </div>
+
                 <div class="mt-4">
                     <EmptyState
+                        v-if="!pendingApprovals?.total"
                         icon="clipboard-check"
                         :title="approvalCopy.title"
                         :description="approvalCopy.description"
                     />
+                    <ul v-else class="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+                        <li v-for="item in pendingApprovals.items" :key="item.id" class="flex items-center justify-between gap-4 px-4 py-3">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium text-slate-900">{{ item.member_name }}</p>
+                                <p class="text-xs text-slate-500">
+                                    {{ item.type_label }}
+                                    <span v-if="item.field_office"> &middot; {{ item.field_office }}</span>
+                                </p>
+                            </div>
+                            <p class="shrink-0 text-xs text-slate-400">{{ item.requested_at }}</p>
+                        </li>
+                    </ul>
+                    <div class="mt-3 text-right">
+                        <Link href="/approvals" class="text-sm font-medium text-brand-700 hover:underline">
+                            View all {{ pendingApprovals.total }} pending &rarr;
+                        </Link>
+                    </div>
                 </div>
             </section>
 

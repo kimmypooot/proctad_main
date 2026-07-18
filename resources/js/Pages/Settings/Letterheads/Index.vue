@@ -53,7 +53,7 @@ const confirmDelete = () => useForm({}).delete(`/letterheads/${deleting.value.id
         <!-- Upload -->
         <div class="mt-6 rounded-xl border border-slate-200 bg-white p-5">
             <h2 class="text-base font-semibold text-slate-900">Upload a Letterhead</h2>
-            <form class="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end" novalidate @submit.prevent="submit">
+            <form class="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-start" novalidate @submit.prevent="submit">
                 <TextInput v-model="form.name" label="Name" required placeholder="e.g. Official Letterhead 2026" :error="form.errors.name" />
 
                 <div>
@@ -64,18 +64,20 @@ const confirmDelete = () => useForm({}).delete(`/letterheads/${deleting.value.id
                         ref="fileInput"
                         type="file"
                         accept="image/png,image/jpeg,image/webp,application/pdf"
-                        class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                        class="block w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium min-h-[2.75rem]"
                         @change="form.file = $event.target.files[0]"
                     >
                     <p v-if="form.errors.file" class="mt-1.5 text-sm text-accent-600" role="alert">{{ form.errors.file }}</p>
                     <p v-else class="mt-1.5 text-xs text-slate-400">PDF, PNG, JPG, or WEBP — full-page portrait, max 5MB.</p>
                 </div>
 
-                <CheckboxInput v-model="form.activate" class="pb-2.5">Set active</CheckboxInput>
+                <CheckboxInput v-model="form.activate" class="sm:mt-7">Set active</CheckboxInput>
 
-                <BaseButton type="submit" variant="primary" size="sm" :loading="form.processing" :disabled="form.processing">
-                    Upload
-                </BaseButton>
+                <div class="sm:mt-7">
+                    <BaseButton type="submit" variant="primary" size="sm" :loading="form.processing" :disabled="form.processing">
+                        Upload
+                    </BaseButton>
+                </div>
             </form>
         </div>
 

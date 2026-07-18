@@ -23,9 +23,9 @@ const props = defineProps({
 });
 
 const variants = {
-    primary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm',
+    primary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm hover:scale-[1.02] transition-all duration-200',
     secondary: 'bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-200',
-    accent: 'bg-accent-500 text-white hover:bg-accent-600 active:bg-accent-700 shadow-sm',
+    accent: 'bg-accent-500 text-white hover:bg-accent-600 active:bg-accent-700 shadow-sm hover:scale-[1.02] transition-all duration-200',
     outline: 'border border-slate-300 bg-white text-slate-700 hover:border-brand-400 hover:text-brand-700 active:bg-slate-50',
     ghost: 'text-brand-700 hover:bg-brand-50 active:bg-brand-100',
     white: 'bg-white text-brand-700 hover:bg-brand-50 active:bg-brand-100 shadow-sm',

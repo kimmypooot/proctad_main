@@ -25,6 +25,7 @@ use App\Http\Controllers\ExaminationReportController;
 use App\Http\Controllers\ExamTypeController;
 use App\Http\Controllers\FeeScheduleController;
 use App\Http\Controllers\FieldOfficeController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LetterheadController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberRequirementController;
@@ -52,13 +53,12 @@ use Inertia\Inertia;
 |--------------------------------------------------------------------------
 */
 
-Route::get('/', fn () => Inertia::render('Home'))->name('home');
+Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/about', fn () => Inertia::render('About'))->name('about');
 Route::get('/benefits', fn () => Inertia::render('Benefits'))->name('benefits');
 Route::get('/qualifications', fn () => Inertia::render('Qualifications'))->name('qualifications');
 Route::get('/application-process', fn () => Inertia::render('ApplicationProcess'))->name('application-process');
 Route::get('/faqs', fn () => Inertia::render('Faqs'))->name('faqs');
-Route::get('/news', fn () => Inertia::render('News'))->name('news');
 Route::get('/contact', fn () => Inertia::render('Contact'))->name('contact');
 Route::get('/privacy-policy', fn () => Inertia::render('PrivacyPolicy'))->name('privacy');
 Route::get('/terms-and-conditions', fn () => Inertia::render('Terms'))->name('terms');
@@ -141,6 +141,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         ->name('certificates.download');
     Route::get('/certificates/{certificate}/view', [CertificateController::class, 'view'])
         ->name('certificates.view');
+    Route::get('/certificates/{certificate}/preview', [CertificateController::class, 'preview'])
+        ->name('certificates.preview');
 
     // Own-record access is allowed by MemberPolicy::view.
     Route::get('/members/{member}/photo', [MemberController::class, 'photo'])->name('members.photo');
@@ -310,6 +312,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('training-assignments.destroy');
 
         Route::get('/certificates', [CertificateController::class, 'index'])->name('certificates.index');
+        Route::post('/certificates/{certificate}/regenerate', [CertificateController::class, 'regenerate'])
+            ->name('certificates.regenerate');
         Route::get('/exam-types', [ExamTypeController::class, 'index'])->name('exam-types.index');
     });
 

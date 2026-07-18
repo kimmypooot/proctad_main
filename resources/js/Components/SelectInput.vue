@@ -37,9 +37,11 @@ const grouped = computed(() => {
 <template>
     <div>
         <label :for="id" class="mb-1.5 block text-sm font-medium text-slate-700">
-            {{ label }}
-            <span v-if="required" class="text-accent-600" aria-hidden="true">*</span>
-            <span v-if="optional" class="font-normal text-slate-400">(optional)</span>
+            <slot name="label">
+                {{ label }}
+                <span v-if="required" class="text-accent-600" aria-hidden="true">*</span>
+                <span v-if="optional" class="font-normal text-slate-400">(optional)</span>
+            </slot>
         </label>
 
         <div class="relative">

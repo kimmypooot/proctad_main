@@ -71,6 +71,7 @@ class ExaminationController extends Controller
                     'status' => $status,
                     'venues_count' => $exam->venues->count(),
                     'rooms_count' => $roomsCount,
+                    'venue_names' => $exam->venues->map(fn ($v) => $v->school?->name)->filter()->values(),
                     'confirmed_count' => $exam->confirmed_assignments_count,
                     'staffing_ratio' => $exam->assignments_count > 0
                         ? round(($exam->confirmed_assignments_count / $exam->assignments_count) * 100)

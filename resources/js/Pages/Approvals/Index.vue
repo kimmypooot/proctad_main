@@ -74,6 +74,10 @@ const toggleOne = (id) => {
 
 const clearSelection = () => (selected.value = []);
 
+/* --- PDF preview --- */
+const previewing = ref(null);
+const openPreview = (certificate) => (previewing.value = certificate);
+
 /* --- Single approve/disapprove --- */
 const approving = ref(null);
 const approveForm = useForm({});
@@ -261,6 +265,7 @@ const confirmBulkDisapprove = () => {
                             </td>
                             <td class="px-3 py-2 text-center">
                                 <div class="inline-flex gap-1">
+                                    <IconButton icon="eye" label="Preview" @click="openPreview(certificate)" />
                                     <IconButton
                                         icon="check-circle"
                                         label="Approve & Release"
@@ -294,6 +299,34 @@ const confirmBulkDisapprove = () => {
                 description="You're all caught up — no approval requests waiting on your decision."
             />
         </div>
+
+        <!-- Preview modal -->
+        <BaseModal :show="!!previewing" title="Certificate Preview (not yet released)" max-width="3xl" @close="previewing = null">
+            <div v-if="previewing" class="-mx-6 -my-5 overflow-hidden rounded-b-xl bg-slate-100">
+                <p class="bg-amber-50 px-4 py-2 text-xs text-amber-800">
+                    Live preview using the current signatory and letterhead — watermarked, and nothing is saved. The
+                    final certificate is only generated once you approve this request.
+                </p>
+                <iframe
+                    :key="previewing.id"
+                    :src="`/certificates/${previewing.id}/preview`"
+                    :title="`${previewing.type_label} preview`"
+                    class="h-[75vh] w-full border-0"
+                />
+            </div>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="previewing = null">Close</BaseButton>
+                <BaseButton
+                    v-if="previewing"
+                    variant="primary"
+                    size="sm"
+                    @click="openApprove(previewing); previewing = null"
+                >
+                    <AppIcon name="check-circle" class="h-4 w-4" />
+                    Approve & Release
+                </BaseButton>
+            </template>
+        </BaseModal>
 
         <!-- Approve modal (single) -->
         <BaseModal :show="!!approving" title="Approve & release certificate" @close="approving = null">

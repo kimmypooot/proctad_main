@@ -1,4 +1,5 @@
 <script setup>
+import { Link } from '@inertiajs/vue3';
 import AppIcon from './AppIcon.vue';
 
 const props = defineProps({
@@ -16,7 +17,11 @@ const props = defineProps({
         default: 'brand',
         validator: (v) => ['brand', 'emerald', 'amber', 'accent', 'slate'].includes(v),
     },
+    /** When set, the whole card becomes a link to the relevant module. */
+    href: { type: String, default: null },
 });
+
+const rootTag = props.href ? Link : 'div';
 
 const chipClasses = {
     brand: 'bg-brand-50 text-brand-600',
@@ -36,7 +41,13 @@ const barClasses = {
 </script>
 
 <template>
-    <div v-if="compact" class="flex items-center gap-3" :class="bordered ? 'rounded-xl border border-slate-200 bg-white p-4' : ''">
+    <component
+        :is="rootTag"
+        v-if="compact"
+        :href="href ?? undefined"
+        class="flex items-center gap-3"
+        :class="bordered ? ['rounded-xl border border-slate-200 bg-white p-4', href ? 'transition-colors duration-200 hover:border-brand-300' : ''] : ''"
+    >
         <span v-if="icon" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg" :class="chipClasses[accent]">
             <AppIcon :name="icon" class="h-5 w-5" />
         </span>
@@ -46,11 +57,13 @@ const barClasses = {
                 <slot>{{ value }}</slot>
             </p>
         </div>
-    </div>
+    </component>
 
-    <div
+    <component
+        :is="rootTag"
         v-else
-        class="group relative overflow-hidden"
+        :href="href ?? undefined"
+        class="group relative block overflow-hidden"
         :class="bordered ? 'rounded-xl border border-slate-200 bg-white p-5 transition-shadow duration-200 hover:shadow-md' : ''"
     >
         <span v-if="bordered" class="absolute inset-x-0 top-0 h-1" :class="barClasses[accent]" aria-hidden="true" />
@@ -68,5 +81,5 @@ const barClasses = {
             <slot>{{ value }}</slot>
         </p>
         <p v-if="hint" class="mt-1 text-xs text-slate-400">{{ hint }}</p>
-    </div>
+    </component>
 </template>

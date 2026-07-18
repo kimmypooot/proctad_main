@@ -10,6 +10,7 @@ use App\Models\Signatory;
 use App\Services\CertificateService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -64,6 +65,8 @@ class CertificateController extends Controller
                 'disapproval_remarks' => $certificate->disapproval_remarks,
                 'released_at' => $certificate->released_at?->format('M d, Y'),
                 'downloadable' => $user->can('download', $certificate),
+                'regenerable' => $user->can('regenerate', $certificate),
+                'previewable' => $certificate->status !== CertificateStatus::Released && $user->can('preview', $certificate),
             ]);
 
         return Inertia::render('Certificates/Index', [
@@ -116,6 +119,22 @@ class CertificateController extends Controller
             .($skipped > 0 ? " Skipped {$skipped} not yet released." : ''));
     }
 
+    /**
+     * Re-render a single released certificate's stored PDF from the current
+     * template and active letterhead, without touching its certificate_no,
+     * status, signatory, or release date. The per-row counterpart to the
+     * `certificates:regenerate-pdfs` command — for refreshing one certificate
+     * after a letterhead/template change straight from the list.
+     */
+    public function regenerate(Certificate $certificate, CertificateService $certificates): RedirectResponse
+    {
+        Gate::authorize('regenerate', $certificate);
+
+        $certificates->regeneratePdf($certificate);
+
+        return back()->with('success', "Regenerated {$certificate->certificate_no}.");
+    }
+
     public function download(Certificate $certificate): StreamedResponse
     {
         Gate::authorize('download', $certificate);
@@ -143,5 +162,24 @@ class CertificateController extends Controller
             $certificate->pdf_path,
             "{$certificate->certificate_no}.pdf",
         );
+    }
+
+    /**
+     * Live preview of a not-yet-released certificate — renders on the fly
+     * with the current signatory/letterhead, watermarked, and nothing is
+     * persisted (no certificate_no minted, no pdf_path saved). Lets an
+     * approver see what they're actually about to release, and lets staff
+     * sanity-check a request before it goes to approval.
+     */
+    public function preview(Certificate $certificate, CertificateService $certificates): HttpResponse
+    {
+        Gate::authorize('preview', $certificate);
+
+        $bytes = $certificates->previewPdf($certificate);
+
+        return response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="preview.pdf"',
+        ]);
     }
 }

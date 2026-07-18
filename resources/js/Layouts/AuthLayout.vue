@@ -8,6 +8,8 @@ import BaseAlert from '@/Components/BaseAlert.vue';
 defineProps({
     title: { type: String, required: true },
     subtitle: { type: String, default: null },
+    /** Widen the form column for pages with multi-field rows (e.g. Register). */
+    wide: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -114,7 +116,7 @@ const highlights = [
             </div>
 
             <div class="flex flex-1 items-center justify-center px-4 pb-12 sm:px-6">
-                <div class="w-full max-w-md animate-fade-up">
+                <div class="w-full animate-fade-up" :class="wide ? 'max-w-xl' : 'max-w-md'">
                     <h1 class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
                         {{ title }}
                     </h1>

@@ -149,6 +149,7 @@ const navByRole = {
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
+                { label: 'Service History', icon: 'clock', href: '/service-history' },
             ],
         },
     ],
@@ -185,6 +186,7 @@ const navByRole = {
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
+                { label: 'Service History', icon: 'clock', href: '/service-history' },
             ],
         },
     ],
@@ -206,6 +208,7 @@ const navByRole = {
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
+                { label: 'Service History', icon: 'clock', href: '/service-history' },
             ],
         },
         {
@@ -274,6 +277,7 @@ const navByRole = {
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
+                { label: 'Service History', icon: 'clock', href: '/service-history' },
             ],
         },
     ],
@@ -343,6 +347,7 @@ navByRole.super_admin = [
         items: [
             { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
             { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
+            { label: 'Service History', icon: 'clock', href: '/service-history' },
             { label: 'Duplicate Members', icon: 'user-group', href: '/reports/duplicate-members' },
         ],
     },

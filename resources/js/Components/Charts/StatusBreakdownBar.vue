@@ -5,6 +5,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 const props = defineProps({
     title: { type: String, required: true },
     segments: { type: Array, required: true }, // [{ key, label, value, color }]
+    emptyLabel: { type: String, default: 'No members recorded yet.' },
 });
 
 const colorHex = {
@@ -46,7 +47,7 @@ const widths = computed(() => {
                 :title="`${segment.label}: ${segment.value}`"
             />
         </div>
-        <p v-else class="mt-4 text-sm text-slate-400">No members recorded yet.</p>
+        <p v-else class="mt-4 text-sm text-slate-400">{{ emptyLabel }}</p>
 
         <ul class="mt-4 grid grid-cols-2 gap-3">
             <li v-for="segment in segments" :key="segment.key" class="flex items-center gap-2 text-sm">

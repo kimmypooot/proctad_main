@@ -16,6 +16,7 @@ use App\Models\Training;
 use App\Models\TrainingAssignment;
 use App\Models\User;
 use App\Services\CertificateService;
+use App\Services\TestAdministratorServiceHistory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -102,6 +103,13 @@ class ScannerController extends Controller
                 $result['venue'] = $attendance['venue'] ?? null;
                 $result['room'] = $attendance['room'] ?? null;
                 $result['designation'] = $attendance['designation'] ?? null;
+            }
+
+            // Service history is only surfaced here, at the point of a live QR
+            // scan during an actual examination — not exposed for identity-only
+            // lookups or training scans.
+            if ($result && $examinationId) {
+                $result['service_history'] = TestAdministratorServiceHistory::forMember($member);
             }
         }
 

@@ -612,6 +612,35 @@ const submitManualFallback = () => {
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Test Administrator service history — shown only while
+                             scanning during an actual examination. -->
+                        <div v-if="result.service_history" class="rounded-lg border border-slate-200 bg-white p-5">
+                            <div class="flex items-center justify-between gap-2">
+                                <h3 class="text-sm font-semibold text-slate-900">Service History</h3>
+                                <span class="shrink-0 text-xs text-slate-400">{{ result.service_history.total_served }} exam(s) served</span>
+                            </div>
+                            <div v-if="result.service_history.designations.length" class="mt-2 flex flex-wrap gap-1.5">
+                                <BaseBadge v-for="d in result.service_history.designations" :key="d.label" variant="neutral" size="xs">
+                                    {{ d.label }}: {{ d.count }}
+                                </BaseBadge>
+                            </div>
+                            <div v-if="result.service_history.records.length" class="mt-3 max-h-56 divide-y divide-slate-100 overflow-y-auto">
+                                <div v-for="record in result.service_history.records" :key="record.id" class="py-2 text-sm">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <p class="truncate font-medium text-slate-800">{{ record.exam_title }}</p>
+                                        <BaseBadge :variant="record.status_variant" size="xs">{{ record.status_label }}</BaseBadge>
+                                    </div>
+                                    <p class="text-xs text-slate-400">
+                                        {{ record.exam_date }} — {{ record.role_label }}
+                                        <template v-if="record.testing_center">
+                                            · {{ record.testing_center }}<template v-if="record.room"> ({{ record.room }})</template>
+                                        </template>
+                                    </p>
+                                </div>
+                            </div>
+                            <p v-else class="mt-3 text-sm text-slate-400">No prior Test Administrator assignments on record.</p>
+                        </div>
                     </div>
 
                     <div v-else-if="oepResult" class="mt-4 space-y-4">

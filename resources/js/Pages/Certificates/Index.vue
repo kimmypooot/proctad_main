@@ -56,9 +56,21 @@ const onSearchInput = () => {
     debounce = setTimeout(applyFilters, 350);
 };
 
-/* --- PDF preview modal --- */
+/* --- PDF view/preview modal --- */
 const viewing = ref(null);
-const viewCertificate = (certificate) => (viewing.value = certificate);
+const viewCertificate = (certificate) => (viewing.value = { certificate, mode: 'view' });
+const previewCertificate = (certificate) => (viewing.value = { certificate, mode: 'preview' });
+
+/* --- Regenerate a single released certificate's PDF --- */
+const regenTarget = ref(null);
+const regenForm = useForm({});
+const submitRegenerate = () => {
+    if (!regenTarget.value) return;
+    regenForm.post(`/certificates/${regenTarget.value.id}/regenerate`, {
+        preserveScroll: true,
+        onSuccess: () => (regenTarget.value = null),
+    });
+};
 
 /* --- Bulk re-sign (super admin only) --- */
 const selected = ref([]);
@@ -193,6 +205,15 @@ const submitResign = () => {
                                     external
                                     :href="`/certificates/${certificate.id}/download`"
                                 />
+                                <IconButton
+                                    v-if="certificate.regenerable"
+                                    icon="arrow-path"
+                                    label="Regenerate PDF"
+                                    @click="regenTarget = certificate"
+                                />
+                            </div>
+                            <div v-else-if="certificate.previewable" class="inline-flex gap-1">
+                                <IconButton icon="eye" label="Preview" @click="previewCertificate(certificate)" />
                             </div>
                         </td>
                     </tr>
@@ -212,27 +233,57 @@ const submitResign = () => {
             <BasePagination :links="certificates.links" />
         </div>
 
-        <!-- View certificate modal -->
-        <BaseModal :show="!!viewing" :title="viewing?.certificate_no ?? 'Certificate'" max-width="3xl" @close="viewing = null">
+        <!-- View/Preview certificate modal -->
+        <BaseModal
+            :show="!!viewing"
+            :title="viewing?.mode === 'preview' ? 'Certificate Preview (not yet released)' : (viewing?.certificate.certificate_no ?? 'Certificate')"
+            max-width="3xl"
+            @close="viewing = null"
+        >
             <div v-if="viewing" class="-mx-6 -my-5 overflow-hidden rounded-b-xl bg-slate-100">
+                <p v-if="viewing.mode === 'preview'" class="bg-amber-50 px-4 py-2 text-xs text-amber-800">
+                    This is a live preview using the current signatory and letterhead — it is watermarked and not
+                    saved. The final certificate is generated only once this request is approved.
+                </p>
                 <iframe
-                    :key="viewing.id"
-                    :src="`/certificates/${viewing.id}/view`"
-                    :title="`${viewing.certificate_no ?? 'Certificate'} preview`"
+                    :key="`${viewing.mode}-${viewing.certificate.id}`"
+                    :src="`/certificates/${viewing.certificate.id}/${viewing.mode}`"
+                    :title="`${viewing.certificate.certificate_no ?? 'Certificate'} ${viewing.mode}`"
                     class="h-[75vh] w-full border-0"
                 />
             </div>
             <template #footer>
                 <BaseButton variant="outline" size="sm" @click="viewing = null">Close</BaseButton>
                 <BaseButton
-                    v-if="viewing"
+                    v-if="viewing?.mode === 'view'"
                     variant="primary"
                     size="sm"
                     external
-                    :href="`/certificates/${viewing.id}/download`"
+                    :href="`/certificates/${viewing.certificate.id}/download`"
                 >
                     <AppIcon name="arrow-down-tray" class="h-4 w-4" />
                     Download
+                </BaseButton>
+            </template>
+        </BaseModal>
+
+        <!-- Regenerate PDF confirmation -->
+        <BaseModal :show="!!regenTarget" title="Regenerate Certificate PDF" @close="regenTarget = null">
+            <p class="text-sm text-slate-600">
+                Re-render the PDF for <strong class="font-mono">{{ regenTarget?.certificate_no }}</strong>
+                using the current template and active letterhead. The certificate number, signatory, and
+                release date stay the same.
+            </p>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="regenTarget = null">Cancel</BaseButton>
+                <BaseButton
+                    variant="primary"
+                    size="sm"
+                    :loading="regenForm.processing"
+                    :disabled="regenForm.processing"
+                    @click="submitRegenerate"
+                >
+                    Regenerate
                 </BaseButton>
             </template>
         </BaseModal>

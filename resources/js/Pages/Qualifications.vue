@@ -58,16 +58,28 @@ const qualifications = [
                         v-for="(item, index) in qualifications"
                         :key="item.title"
                         class="reveal relative"
+                        :style="{ transitionDelay: `${index * 120}ms` }"
                     >
                         <span
-                            class="absolute -left-[3.25rem] flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand-100 bg-white text-sm font-semibold text-brand-600 sm:-left-[3.75rem]"
+                            class="absolute -left-[3.25rem] flex h-9 w-9 items-center justify-center rounded-full border-2 bg-white text-sm font-semibold sm:-left-[3.75rem]"
+                            :class="index < 3
+                                ? 'border-brand-200 text-brand-600'
+                                : 'border-accent-200 text-accent-600'"
                             aria-hidden="true"
                         >
                             {{ index + 1 }}
                         </span>
-                        <div class="rounded-xl border border-slate-200 bg-white p-6 transition-shadow duration-300 hover:shadow-md sm:p-8">
+                        <div
+                            class="rounded-xl border border-slate-100 bg-white p-6 transition-all duration-300 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-sm sm:p-8"
+                            :class="index < 3 ? '' : 'border-l-4 border-l-accent-300'"
+                        >
                             <div class="flex items-start gap-4">
-                                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                                <span
+                                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors duration-300 group-hover:text-white"
+                                    :class="index < 3
+                                        ? 'bg-brand-50 text-brand-600 group-hover:bg-brand-600'
+                                        : 'bg-accent-50 text-accent-600 group-hover:bg-accent-600'"
+                                >
                                     <AppIcon :name="item.icon" class="h-5 w-5" />
                                 </span>
                                 <div>

@@ -69,9 +69,10 @@ const benefits = [
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
                     <article
-                        v-for="benefit in benefits"
+                        v-for="(benefit, idx) in benefits"
                         :key="benefit.title"
-                        class="reveal group rounded-xl border border-slate-200 bg-white p-8 transition-all duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-md"
+                        class="reveal group rounded-xl border border-slate-100 bg-white p-8 transition-all duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-md"
+                        :style="{ transitionDelay: `${idx * 80}ms` }"
                     >
                         <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-50 text-brand-600 transition-colors duration-300 group-hover:bg-brand-600 group-hover:text-white">
                             <AppIcon :name="benefit.icon" class="h-6 w-6" />
@@ -79,6 +80,17 @@ const benefits = [
                         <h2 class="mt-5 text-lg font-semibold text-slate-900">{{ benefit.title }}</h2>
                         <p class="mt-2 text-sm leading-relaxed text-slate-600">{{ benefit.text }}</p>
                     </article>
+                </div>
+
+                <!-- Testimonial pull-quote -->
+                <div class="reveal relative mx-auto mt-16 max-w-2xl border-l-4 border-gold-500 bg-gradient-to-r from-gold-50/50 to-transparent pl-6 sm:pl-8" :style="{ transitionDelay: '300ms' }">
+                    <p class="font-serif text-lg font-semibold leading-relaxed text-slate-800 italic sm:text-xl">
+                        "Being part of ProCTAD has been a rewarding journey. The training, the network, and
+                        the opportunity to serve the public with integrity make this more than just a credential."
+                    </p>
+                    <p class="mt-3 text-sm font-medium text-slate-500">
+                        — Certified Test Administrator, CSC RO VIII
+                    </p>
                 </div>
 
                 <div class="reveal mt-14 text-center">

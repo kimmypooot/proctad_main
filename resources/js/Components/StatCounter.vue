@@ -1,12 +1,18 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps({
     value: { type: Number, required: true },
     label: { type: String, required: true },
     suffix: { type: String, default: '' },
     duration: { type: Number, default: 1200 },
+    /** 'dark' (on dark bg) or 'light' (on light bg) */
+    variant: { type: String, default: 'dark', validator: (v) => ['dark', 'light'].includes(v) },
 });
+
+const labelClass = computed(() =>
+    props.variant === 'dark' ? 'text-brand-100' : 'text-slate-500'
+);
 
 const display = ref(0);
 const root = ref(null);
@@ -56,6 +62,6 @@ onBeforeUnmount(() => observer?.disconnect());
             {{ display.toLocaleString() }}{{ suffix }}
         </p>
         <p class="sr-only">{{ value.toLocaleString() }}{{ suffix }}</p>
-        <p class="mt-2 text-sm font-medium text-brand-100">{{ label }}</p>
+        <p class="mt-2 text-sm font-medium" :class="labelClass">{{ label }}</p>
     </div>
 </template>

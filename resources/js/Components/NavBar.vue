@@ -50,7 +50,7 @@ watch(mobileOpen, (open) => {
         :class="scrolled ? 'border-slate-200 shadow-sm' : 'border-transparent'"
     >
         <!-- Government banner strip -->
-        <div class="bg-brand-800 text-white">
+        <div class="bg-gradient-to-r from-brand-800 via-brand-800 to-brand-700 text-white">
             <div class="mx-auto flex max-w-7xl items-center gap-2 px-4 py-1.5 text-xs sm:px-6 lg:px-8">
                 <AppIcon name="check-badge" class="h-3.5 w-3.5 shrink-0 text-brand-200" />
                 <span class="truncate">An official website of the Civil Service Commission Regional Office VIII</span>
@@ -64,17 +64,22 @@ watch(mobileOpen, (open) => {
 
             <!-- Desktop links -->
             <ul class="hidden items-center gap-1 lg:flex">
-                <li v-for="link in links" :key="link.href">
+                <li v-for="link in links" :key="link.href" class="relative">
                     <Link
                         :href="link.href"
                         class="rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200"
                         :class="isActive(link.href)
-                            ? 'text-brand-700 bg-brand-50'
+                            ? 'text-brand-700 font-semibold'
                             : 'text-slate-600 hover:text-brand-700 hover:bg-slate-50'"
                         :aria-current="isActive(link.href) ? 'page' : undefined"
                     >
                         {{ link.label }}
                     </Link>
+                    <span
+                        v-if="isActive(link.href)"
+                        class="absolute -bottom-[1px] left-3 right-3 h-0.5 rounded-full bg-accent-500"
+                        aria-hidden="true"
+                    />
                 </li>
             </ul>
 

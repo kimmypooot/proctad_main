@@ -19,6 +19,26 @@ const props = defineProps({
     can: { type: Object, required: true },
 });
 
+const nextExamination = computed(() => {
+    const upcoming = props.examinations
+        .filter((e) => e.status === 'upcoming')
+        .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
+    return upcoming.length ? upcoming[0] : null;
+});
+
+const daysUntil = computed(() => {
+    if (!nextExamination.value) return 0;
+    const diff = new Date(nextExamination.value.exam_date) - new Date();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+});
+
+const formattedExamDate = computed(() => {
+    if (!nextExamination.value) return '';
+    return new Date(nextExamination.value.exam_date).toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+});
+
 /* --- Filter: All / Upcoming / Ongoing / Completed --- */
 const filter = ref('all');
 const filteredExaminations = computed(() => {
@@ -93,6 +113,65 @@ const submit = () => {
             <StatCard label="Upcoming" :value="stats.upcoming" icon="clock" hint="Scheduled for a future date" />
             <StatCard label="Ongoing" :value="stats.ongoing" icon="check-circle" hint="Examination day" />
             <StatCard label="Completed" :value="stats.completed" icon="flag" hint="Past examinations" />
+        </div>
+
+        <!-- Next Examination spotlight -->
+        <div v-if="nextExamination" class="mt-6 overflow-hidden rounded-xl border border-brand-200 bg-gradient-to-br from-white to-brand-50 shadow-sm">
+            <div class="p-5 sm:p-6">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div class="min-w-0 space-y-3">
+                        <div class="flex items-center gap-2">
+                            <span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-xs text-white">★</span>
+                            <span class="text-xs font-semibold uppercase tracking-wider text-brand-600">Next Examination</span>
+                        </div>
+
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-900 sm:text-xl">{{ nextExamination.title }}</h2>
+                            <p class="mt-0.5 text-sm text-slate-500">{{ nextExamination.type }}</p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+                            <span class="inline-flex items-center gap-1.5">
+                                <span class="text-base">📅</span>
+                                <span>{{ formattedExamDate }}</span>
+                                <span class="ml-1 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-700">
+                                    {{ daysUntil }} day{{ daysUntil === 1 ? '' : 's' }} away
+                                </span>
+                            </span>
+                            <span v-if="nextExamination.venue_names.length" class="inline-flex items-center gap-1.5">
+                                <span class="text-base">📍</span>
+                                <span>{{ nextExamination.venue_names.join(', ') }}</span>
+                            </span>
+                        </div>
+
+                        <div v-if="nextExamination.assignments_count" class="flex items-center gap-3">
+                            <div class="h-2 w-36 overflow-hidden rounded-full bg-slate-200">
+                                <div
+                                    class="h-full rounded-full transition-all"
+                                    :class="{
+                                        'bg-emerald-500': (nextExamination.staffing_ratio ?? 0) >= 100,
+                                        'bg-amber-500': (nextExamination.staffing_ratio ?? 0) > 0 && (nextExamination.staffing_ratio ?? 0) < 100,
+                                        'bg-slate-300': (nextExamination.staffing_ratio ?? 0) === 0,
+                                    }"
+                                    :style="{ width: `${nextExamination.staffing_ratio ?? 0}%` }"
+                                />
+                            </div>
+                            <span class="text-xs font-medium text-slate-500">
+                                {{ nextExamination.confirmed_count }}/{{ nextExamination.assignments_count }} confirmed
+                            </span>
+                        </div>
+                        <p v-else class="text-xs text-slate-400">No members assigned yet</p>
+                    </div>
+
+                    <Link
+                        :href="`/examinations/${nextExamination.id}`"
+                        class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-brand-700"
+                    >
+                        Manage Examination
+                        <span class="text-base">→</span>
+                    </Link>
+                </div>
+            </div>
         </div>
 
         <!-- Filter -->

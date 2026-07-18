@@ -57,6 +57,7 @@ const submit = () => {
         :subtitle="google
             ? 'Just a few more details to finish setting up your account.'
             : 'Connect your Google account to begin registering as a Certified Test Administrator.'"
+        wide
     >
         <Head title="Register">
             <meta head-key="description" name="description" content="Register for the ProCTAD portal of CSC Regional Office VIII.">
@@ -188,9 +189,9 @@ const submit = () => {
 
             <CheckboxInput v-model="form.terms" :error="form.errors.terms">
                 I have read and agree to the
-                <Link href="/terms-and-conditions" class="font-medium text-brand-700 hover:underline">Terms and Conditions</Link>
+                <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline">Terms and Conditions</a>
                 and
-                <Link href="/privacy-policy" class="font-medium text-brand-700 hover:underline">Privacy Policy</Link>.
+                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline">Privacy Policy</a>.
             </CheckboxInput>
 
             <BaseButton
