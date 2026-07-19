@@ -10,7 +10,7 @@
 | 1 | Exposed files in shared XAMPP `htdocs` webroot | **FLAGGED, not fixed** — see §2 | Decide: move out of webroot, restrict via server config, or accept risk if this host is never network-reachable |
 | 2 | ETL rehearsal on full production copy (with real member rows) | **Blocked** — dev environment only has the reference dump (no member rows by design) | Point `LEGACY_DB_DATABASE` at a production copy and run `php artisan proctad:migrate-legacy --dry-run`; confirm member-dependent counts flip from skipped to imported; document results in `MIGRATION_CHECKPOINT.md` Phase 5 |
 | 3 | Rotate the Gmail SMTP app password | **Owner-handled** — owner will generate and swap in the new app password directly | None from this repo's side; owner confirmed they will rotate it and update the production `.env` (`MAIL_PASSWORD`) themselves. |
-| 4 | Queue worker / scheduler on the production host | **Not yet configured** — this is dev-only | See §4 |
+| 4 | Queue worker / scheduler on the production host | **Not yet configured** — this is dev-only. As of 2026-07-20 the queue worker is no longer optional: bulk assignment queues its confirmation emails, and without a worker they are never sent and nothing reports an error | See §4 |
 
 ## 2. Exposed legacy files — finding (as of 2026-07-10)
 
@@ -72,11 +72,29 @@ No open parity gaps found.
   ```
   * * * * * cd /path-to-app && php artisan schedule:run >> /dev/null 2>&1
   ```
-- **Queue worker**: `QUEUE_CONNECTION=database` is set, and the `jobs` table exists,
-  but **no code currently implements `ShouldQueue`** (all mail/notifications send
-  synchronously). A queue worker is not strictly required for current functionality,
-  but if any future work queues jobs, add a supervisor-managed
-  `php artisan queue:work` process before relying on it.
+- **Queue worker**: `QUEUE_CONNECTION=database` is set and the `jobs` table exists.
+  **A worker is now REQUIRED** — this changed on 2026-07-20 and supersedes the
+  earlier note that it was optional.
+
+  `App\Jobs\SendAssignmentConfirmation` implements `ShouldQueue` and is dispatched
+  by **bulk assignment** (`ExamAssignmentController::bulkStore`) — staffing a whole
+  venue would otherwise make one SMTP round-trip per member inside a single request
+  and time out mid-batch. Without a running worker, those jobs sit in the `jobs`
+  table indefinitely and **members are never sent their confirmation, with no error
+  shown to the staff member who deployed them**. This is a silent failure: the
+  assignments are created and the page reports success.
+
+  Add a supervisor-managed process before go-live:
+  ```
+  php artisan queue:work --tries=3 --sleep=3
+  ```
+  Verify after deploying: run a bulk assign against a test venue, then confirm the
+  `jobs` table drains and `email_logs` gains a `sent` row per member.
+
+  Everything else still sends synchronously and does **not** depend on the worker —
+  the "Send Confirmation" button, single assign, assignment update, certificate
+  release, and the daily reminder command. That split is deliberate: single sends
+  report a bounce back to the user inline, which a queued send cannot do.
 
 ## 5. QR code compatibility
 

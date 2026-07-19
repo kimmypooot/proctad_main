@@ -42,6 +42,14 @@ npm run dev
 php artisan serve
 ```
 
+Bulk assignment queues its confirmation emails, so if you are exercising that
+flow you also need a worker — otherwise the jobs sit in the `jobs` table and no
+mail is sent, with nothing reported in the UI:
+
+```bash
+php artisan queue:work
+```
+
 ## Seeding
 
 ```bash

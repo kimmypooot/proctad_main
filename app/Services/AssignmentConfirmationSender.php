@@ -27,12 +27,16 @@ class AssignmentConfirmationSender
     public function __construct(private readonly NotificationMailer $mailer) {}
 
     /**
+     * @param  string|null  $ipAddress  Recorded against the confirmation. Defaults to
+     *                                  the current request's IP; SendAssignmentConfirmation
+     *                                  passes the dispatching request's IP explicitly,
+     *                                  because a queue worker has no request of its own.
      * @return EmailLog|null the delivery attempt's log row, or null if the member
      *                       has no email on file. Callers that report back to a
      *                       user must check `$log->status` — a returned log can
      *                       still be a 'failed' one.
      */
-    public function send(ExamAssignment $assignment, ?User $sentBy = null): ?EmailLog
+    public function send(ExamAssignment $assignment, ?User $sentBy = null, ?string $ipAddress = null): ?EmailLog
     {
         $assignment->loadMissing('member.user', 'examination');
         $member = $assignment->member;
@@ -80,7 +84,7 @@ class AssignmentConfirmationSender
 
         $assignment->confirmations()->create([
             'action' => ConfirmationAction::Sent,
-            'ip_address' => request()->ip(),
+            'ip_address' => $ipAddress ?? request()->ip(),
             'metadata' => ['sent_by' => $sentBy?->id],
         ]);
 

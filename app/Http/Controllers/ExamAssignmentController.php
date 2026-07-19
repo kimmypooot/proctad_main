@@ -9,6 +9,7 @@ use App\Enums\ExamRole;
 use App\Enums\MemberStatus;
 use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
+use App\Jobs\SendAssignmentConfirmation;
 use App\Models\AuditLog;
 use App\Models\Blacklist;
 use App\Models\ExamAssignment;
@@ -171,7 +172,7 @@ class ExamAssignmentController extends Controller
      * examination are silently skipped (reported back in the flash message)
      * rather than failing the whole batch.
      */
-    public function bulkStore(Request $request, Examination $examination, AssignmentConfirmationSender $confirmationSender): RedirectResponse
+    public function bulkStore(Request $request, Examination $examination): RedirectResponse
     {
         Gate::authorize('create', ExamAssignment::class);
 
@@ -222,8 +223,12 @@ class ExamAssignmentController extends Controller
             // A venue is enough for the member to need to know and confirm —
             // notify them (email + in-app) the moment one is set, rather than
             // waiting on staff to remember to click "Send Confirmation".
+            //
+            // Queued, unlike the single-assignment paths: staffing a whole venue
+            // means one SMTP round-trip per member inside this loop, which is
+            // what makes a large deployment time out mid-batch.
             if ($assignment->examination_school_id) {
-                $confirmationSender->send($assignment, $user);
+                SendAssignmentConfirmation::dispatch($assignment->id, $user->id, $request->ip());
             }
 
             $assigned++;

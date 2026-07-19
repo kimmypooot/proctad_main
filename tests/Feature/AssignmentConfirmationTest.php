@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\AssignmentStatus;
 use App\Enums\ConfirmationAction;
 use App\Enums\UserRole;
+use App\Jobs\SendAssignmentConfirmation;
 use App\Mail\TemplatedMail;
 use App\Models\EmailLog;
 use App\Models\EmailTemplate;
@@ -12,6 +13,7 @@ use App\Models\ExamAssignment;
 use App\Models\FieldOffice;
 use App\Models\Member;
 use App\Models\User;
+use App\Services\AssignmentConfirmationSender;
 use Database\Seeders\EmailTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -293,5 +295,50 @@ class AssignmentConfirmationTest extends TestCase
         $this->assertSame('Confirmation Required: CSE-PPT - August 9, 2026', $rendered['subject']);
         $this->assertStringContainsString('Juan Dela Cruz', $rendered['html']);
         $this->assertStringContainsString('https://example.test/confirm', $rendered['html']);
+    }
+
+    /**
+     * The queued batch path must do exactly what the synchronous one does.
+     * Running the job directly rather than asserting it was pushed is the point:
+     * it proves queueing did not quietly become a no-op.
+     */
+    public function test_queued_confirmation_job_sends_and_stamps_the_assignment(): void
+    {
+        Mail::fake();
+
+        $fo = FieldOffice::factory()->create();
+        $admin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]);
+        $assignment = $this->assignmentFor($fo);
+
+        (new SendAssignmentConfirmation($assignment->id, $admin->id, '203.0.113.9'))
+            ->handle(app(AssignmentConfirmationSender::class));
+
+        $assignment->refresh();
+        $this->assertSame(AssignmentStatus::Pending, $assignment->status);
+        $this->assertNotNull($assignment->confirmation_sent_at);
+        $this->assertSame(1, EmailLog::where('status', 'sent')->count());
+        Mail::assertSent(TemplatedMail::class);
+
+        // The worker has no request of its own, so the dispatching IP is carried
+        // on the job rather than read from request() at send time.
+        $this->assertSame(
+            '203.0.113.9',
+            $assignment->confirmations()->where('action', ConfirmationAction::Sent)->first()->ip_address,
+        );
+    }
+
+    /** A record deleted between dispatch and running must not blow up the worker. */
+    public function test_queued_confirmation_job_is_a_no_op_for_a_deleted_assignment(): void
+    {
+        Mail::fake();
+
+        $fo = FieldOffice::factory()->create();
+        $assignment = $this->assignmentFor($fo);
+        $id = $assignment->id;
+        $assignment->forceDelete();
+
+        (new SendAssignmentConfirmation($id))->handle(app(AssignmentConfirmationSender::class));
+
+        Mail::assertNothingSent();
     }
 }
