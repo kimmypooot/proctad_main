@@ -156,7 +156,17 @@ the browser tooling, not on the app. It remains the single largest gap between
 unchanged apart from item 4, which got stricter (see §4: a queue worker is now
 required rather than optional).
 
-## 8. Member-facing enhancements (post-cutover backlog)
+## 8. Member-facing enhancements
+
+> **All four were implemented on 2026-07-20**, at the owner's direction, rather
+> than deferred as originally proposed below. Each is a separate commit and can
+> be reverted independently if the cutover window tightens. Suite: 353 tests.
+>
+> These add member-facing surface three weeks before the CSE-PPT. **None has
+> been exercised in a browser** — they are covered by feature tests only, and
+> the manual walkthrough in §7 is still outstanding. Treat 8.1 and 8.2 in
+> particular as unverified against real use: both accept member input that
+> changes records staff rely on.
 
 Identified 2026-07-20 by reading the member self-service surface. **None of these
 are cutover blockers** — the member area is functional without them, and each is
@@ -168,7 +178,7 @@ photo, view their QR code, download their ID card, view/print/export service
 history, view and download certificates, view trainings, and receive in-app
 notifications.
 
-### 8.1 No in-app view of assignments — highest value
+### 8.1 No in-app view of assignments — DONE 2026-07-20
 
 A member learns they have been deployed **only by email**. There is no
 `/my/assignments` route and no nav entry; the dashboard's `latest_service`
@@ -185,7 +195,7 @@ Proposed: a "My Assignments" page listing upcoming deployments (examination,
 date, venue, role, status) with a Confirm action, so the operational loop does
 not depend on one email arriving.
 
-### 8.2 Requirements are visible but not actionable
+### 8.2 Requirements are visible but not actionable — DONE 2026-07-20
 
 `MyProctadController::profile()` returns each requirement's label, complied flag
 and remarks, so members can see what is outstanding. Only staff can attach the
@@ -195,7 +205,7 @@ way to submit anything and must deliver it in person or by email.
 The benefit is as much to Testing Center staff — who currently receive every
 document by hand — as to members.
 
-### 8.3 Requirement list asymmetry between the member and staff views
+### 8.3 Requirement list asymmetry between the member and staff views — DONE 2026-07-20
 
 `MemberController::store` creates one row per `EligibilityRequirement` case at
 member creation, so app-created members are complete. But the member profile
@@ -211,7 +221,7 @@ without requirement rows.
 Small and self-contained: have the member view iterate the enum the same way the
 staff view does. This is the only item in §8 worth considering before cutover.
 
-### 8.4 Evaluations are not linked from the signed-in area
+### 8.4 Evaluations are not linked from the signed-in area — DONE 2026-07-20
 
 The post-examination evaluation flow is public: search by name or PROCTAD ID at
 `/evaluation`, resolve the assignment, then fill the form. A signed-in member
