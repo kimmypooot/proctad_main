@@ -44,13 +44,22 @@ class MyProctadController extends Controller
                 'photo_url' => $member->user?->google_avatar
                     ?? ($member->photo_path ? route('members.photo', $member) : null),
             ] : null,
-            'requirements' => $member?->requirements
-                ->map(fn ($record) => [
-                    'label' => $record->requirement->label(),
-                    'complied' => $record->complied,
-                    'remarks' => $record->remarks,
-                ])
-                ->values() ?? [],
+            // Built from the enum rather than from existing rows, matching
+            // MemberController::details(). Mapping only stored rows meant a
+            // member without them saw an empty list — "nothing is required of
+            // you" — while staff saw a full outstanding set. Members created
+            // through the app always have rows, but ETL-imported ones need not.
+            'requirements' => $member === null ? [] : collect(EligibilityRequirement::cases())
+                ->map(function (EligibilityRequirement $requirement) use ($member) {
+                    $record = $member->requirements->firstWhere('requirement', $requirement);
+
+                    return [
+                        'label' => $requirement->label(),
+                        'complied' => (bool) $record?->complied,
+                        'remarks' => $record?->remarks,
+                    ];
+                })
+                ->values(),
             'requirementsTotal' => count(EligibilityRequirement::cases()),
         ]);
     }

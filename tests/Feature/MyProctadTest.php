@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\EligibilityRequirement;
 use App\Enums\UserRole;
 use App\Models\FieldOffice;
 use App\Models\Member;
@@ -189,5 +190,43 @@ class MyProctadTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('records.0.room', null)
                 ->where('records.0.room_withheld', true));
+    }
+
+    /**
+     * A member with no stored requirement rows — as an ETL import may well be —
+     * must still see the full list as outstanding. Mapping stored rows alone
+     * showed them an empty list while staff saw everything as not complied.
+     */
+    public function test_requirements_list_is_complete_even_with_no_stored_rows(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $member->requirements()->delete();
+
+        $this->actingAs($user)
+            ->get('/my/profile')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('requirements', count(EligibilityRequirement::cases()))
+                ->where('requirements.0.complied', false)
+                ->where('requirements.0.label', EligibilityRequirement::cases()[0]->label()));
+    }
+
+    /** The member view and the staff view must agree on what is outstanding. */
+    public function test_member_and_staff_requirement_lists_are_the_same_length(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $admin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $office->id]);
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['field_office_id' => $office->id, 'user_id' => $user->id]);
+        $member->requirements()->delete();
+
+        $staffCount = count($this->actingAs($admin)
+            ->getJson("/members/{$member->id}/details")
+            ->json('requirements'));
+
+        $this->actingAs($user)
+            ->get('/my/profile')
+            ->assertInertia(fn (Assert $page) => $page->has('requirements', $staffCount));
     }
 }
