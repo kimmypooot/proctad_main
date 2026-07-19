@@ -166,4 +166,62 @@ class MaintenanceModeTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('maintenanceMode', true));
     }
+
+    /**
+     * A signed-in member meets the notice on every route, so the notice itself
+     * must offer the way out. It cannot read `auth.user` — this middleware runs
+     * before Inertia's shared props are assembled — hence the explicit flag.
+     * Without it the member is stranded: /login bounces them back here via the
+     * guest redirect, and POST /logout is exempt but unreachable from the page.
+     */
+    public function test_the_notice_tells_a_signed_in_member_they_can_sign_out(): void
+    {
+        $this->close();
+
+        $this->actingAs(User::factory()->create(['role' => UserRole::Member]))
+            ->get('/my/assignments')
+            ->assertStatus(503)
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Maintenance')
+                ->where('authenticated', true));
+    }
+
+    public function test_the_notice_shown_to_a_guest_does_not_claim_they_are_signed_in(): void
+    {
+        $this->close();
+
+        $this->get('/')
+            ->assertStatus(503)
+            ->assertInertia(fn (Assert $page) => $page->where('authenticated', false));
+    }
+
+    /** The way out has to actually work, not merely be offered. */
+    public function test_a_member_can_sign_out_from_the_notice(): void
+    {
+        $this->close();
+
+        $this->actingAs(User::factory()->create(['role' => UserRole::Member]))
+            ->post('/logout')
+            ->assertRedirect();
+
+        $this->assertGuest();
+    }
+
+    /**
+     * The loop that made this a dead end: /login sits behind `guest`, so an
+     * authenticated member is redirected to /dashboard, which is closed, which
+     * returns them to the notice.
+     */
+    public function test_login_link_would_bounce_an_authenticated_member_back(): void
+    {
+        $this->close();
+
+        $this->actingAs(User::factory()->create(['role' => UserRole::Member]))
+            ->get('/login')
+            ->assertRedirect('/dashboard');
+
+        $this->actingAs(User::factory()->create(['role' => UserRole::Member]))
+            ->get('/dashboard')
+            ->assertStatus(503);
+    }
 }

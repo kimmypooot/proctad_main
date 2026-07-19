@@ -53,7 +53,17 @@ class CheckMaintenanceMode
 
         // 503, not a redirect: tells search engines "temporarily unavailable,
         // come back" rather than letting them index the notice as the homepage.
-        return Inertia::render('Maintenance')
+        //
+        // `authenticated` is passed explicitly rather than read from Inertia's
+        // shared props: this middleware runs before HandleInertiaRequests (see
+        // bootstrap/app.php) precisely so a closed site doesn't assemble props
+        // it will never use, which means `auth.user` is not available here.
+        // Without this flag a signed-in member is stranded — every route shows
+        // this notice, and the page has no way to know it should offer a way
+        // out. POST /logout is exempt and works; nothing could reach it.
+        return Inertia::render('Maintenance', [
+            'authenticated' => $request->user() !== null,
+        ])
             ->toResponse($request)
             ->setStatusCode(503);
     }

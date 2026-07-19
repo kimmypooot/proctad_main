@@ -2,6 +2,15 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 
+defineProps({
+    /**
+     * Whether a signed-in user is looking at this. Passed directly by
+     * CheckMaintenanceMode — the middleware runs before Inertia's shared props
+     * are assembled, so `auth.user` is not available on this page.
+     */
+    authenticated: { type: Boolean, default: false },
+});
+
 /**
  * Routes CheckMaintenanceMode deliberately leaves open. Someone landing here on
  * exam day needs to know these still work — otherwise they assume the whole
@@ -97,7 +106,26 @@ const stillAvailable = [
                         </div>
                     </div>
 
-                    <p class="mt-6 text-center text-xs text-slate-400">
+                    <!-- Signed in and still seeing this: they are a member, since
+                         staff pass straight through. /login would bounce them back
+                         here via the guest redirect, so offer the way out instead. -->
+                    <div v-if="authenticated" class="mt-6 border-t border-slate-100 pt-5 text-center">
+                        <p class="text-xs text-slate-500">
+                            You're signed in, but the portal is closed to members during maintenance.
+                        </p>
+                        <Link
+                            href="/logout"
+                            method="post"
+                            as="button"
+                            type="button"
+                            class="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:underline"
+                        >
+                            <AppIcon name="arrow-right-on-rectangle" class="h-4 w-4" />
+                            Sign out
+                        </Link>
+                    </div>
+
+                    <p v-else class="mt-6 text-center text-xs text-slate-400">
                         Commission staff can
                         <Link href="/login" class="font-semibold text-brand-700 hover:underline">sign in here</Link>.
                     </p>
