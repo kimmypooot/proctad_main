@@ -216,6 +216,83 @@ class MyProctadTest extends TestCase
                 ->where('requirements.0.label', EligibilityRequirement::cases()[0]->label()));
     }
 
+    /**
+     * A member may submit evidence but must never be able to mark themselves
+     * eligible — the Testing Center verifies and flips `complied`.
+     */
+    public function test_member_uploads_a_requirement_document_without_becoming_compliant(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $key = EligibilityRequirement::cases()[0];
+
+        $this->actingAs($user)
+            ->post("/my/requirements/{$key->value}", [
+                'file' => UploadedFile::fake()->create('clearance.pdf', 200, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $record = $member->requirements()->where('requirement', $key)->first();
+        $this->assertNotNull($record->file_path);
+        $this->assertFalse((bool) $record->complied);
+        Storage::disk('local')->assertExists($record->file_path);
+    }
+
+    public function test_requirement_upload_rejects_unsupported_files(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->post('/my/requirements/'.EligibilityRequirement::cases()[0]->value, [
+                'file' => UploadedFile::fake()->create('payload.exe', 10),
+            ])
+            ->assertSessionHasErrors('file');
+    }
+
+    public function test_unknown_requirement_key_is_404(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->post('/my/requirements/not-a-requirement', [
+                'file' => UploadedFile::fake()->create('clearance.pdf', 10, 'application/pdf'),
+            ])
+            ->assertNotFound();
+    }
+
+    /** Replacing evidence a Testing Center already accepted would erase the basis of that decision. */
+    public function test_member_cannot_replace_an_already_verified_document(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $key = EligibilityRequirement::cases()[0];
+        // The factory does not seed requirement rows, so create the verified one.
+        $member->requirements()->create([
+            'requirement' => $key,
+            'complied' => true,
+            'file_path' => 'kept.pdf',
+        ]);
+
+        $this->actingAs($user)
+            ->post("/my/requirements/{$key->value}", [
+                'file' => UploadedFile::fake()->create('replacement.pdf', 10, 'application/pdf'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame('kept.pdf', $member->requirements()->where('requirement', $key)->first()->file_path);
+    }
+
     private function upcomingAssignmentFor(Member $member, string $status = 'pending'): ExamAssignment
     {
         return ExamAssignment::factory()->create([

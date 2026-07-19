@@ -59,8 +59,12 @@ class MyProctadController extends Controller
                     $record = $member->requirements->firstWhere('requirement', $requirement);
 
                     return [
+                        'key' => $requirement->value,
                         'label' => $requirement->label(),
                         'complied' => (bool) $record?->complied,
+                        // Submitted but not yet verified — the member has done
+                        // their part and is waiting on the Testing Center.
+                        'submitted' => (bool) $record?->file_path,
                         'remarks' => $record?->remarks,
                     ];
                 })
@@ -225,6 +229,44 @@ class MyProctadController extends Controller
                     'released_at' => $certificate->released_at?->format('M d, Y'),
                 ]) ?? [],
         ]);
+    }
+
+    /**
+     * A member's own supporting document for one eligibility requirement.
+     *
+     * Submission only — `complied` stays staff-controlled. A member uploading a
+     * file must not be able to mark themselves eligible; a Testing Center still
+     * verifies the document and flips the flag. The member sees "submitted,
+     * awaiting verification" in the meantime.
+     */
+    public function uploadRequirement(Request $request, string $requirement): RedirectResponse
+    {
+        $member = $this->ownMember($request);
+        abort_if($member === null, 403);
+
+        $key = EligibilityRequirement::tryFrom($requirement) ?? abort(404);
+
+        $request->validate([
+            'file' => ['required', 'file', 'max:5120', Rule::file()->types(['pdf', 'jpg', 'jpeg', 'png'])],
+        ]);
+
+        $record = $member->requirements()->firstOrCreate(['requirement' => $key]);
+
+        // Already verified: re-submitting would replace the evidence a Testing
+        // Center accepted, with no trace that it changed.
+        if ($record->complied) {
+            return back()->with('error', 'This requirement has already been verified. Contact your Testing Center if it needs to be updated.');
+        }
+
+        if ($record->file_path) {
+            Storage::disk('local')->delete($record->file_path);
+        }
+
+        $record->update([
+            'file_path' => $request->file('file')->store("member-requirements/{$member->id}", 'local'),
+        ]);
+
+        return back()->with('success', 'Document submitted. Your Testing Center will verify it.');
     }
 
     /**

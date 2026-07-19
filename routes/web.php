@@ -141,6 +141,9 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         ->name('my.service-history.print');
     Route::get('/my/service-history/export', [MyProctadController::class, 'exportServiceHistory'])
         ->name('my.service-history.export');
+    // Submission only — `complied` stays staff-controlled (see the controller).
+    Route::post('/my/requirements/{requirement}', [MyProctadController::class, 'uploadRequirement'])
+        ->name('my.requirements.upload');
     Route::get('/my/assignments', [MyProctadController::class, 'assignments'])->name('my.assignments');
     // Own-record only, enforced in the controller. The emailed signed link
     // (assignments.confirm.store) remains the route for members who are not
