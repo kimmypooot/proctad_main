@@ -148,3 +148,73 @@ No open parity gaps found.
   210 automated feature tests pass and did a code-level review of every route
   group, but did not drive the app in a real browser. Recommended before
   go-live: log in as each of the 6 roles and click through their full nav menu.
+
+**Update 2026-07-20.** The suite is now 336 tests (325 feature, 11 unit). The
+manual walkthrough is **still outstanding** — attempted this date and blocked on
+the browser tooling, not on the app. It remains the single largest gap between
+"the tests pass" and "someone has looked at it", and §1's four open blockers are
+unchanged apart from item 4, which got stricter (see §4: a queue worker is now
+required rather than optional).
+
+## 8. Member-facing enhancements (post-cutover backlog)
+
+Identified 2026-07-20 by reading the member self-service surface. **None of these
+are cutover blockers** — the member area is functional without them, and each is
+new feature work rather than a fix. They are recorded here so they are not lost
+between the migration and whatever comes next.
+
+Members can already: view a dashboard summary, edit their contact details and
+photo, view their QR code, download their ID card, view/print/export service
+history, view and download certificates, view trainings, and receive in-app
+notifications.
+
+### 8.1 No in-app view of assignments — highest value
+
+A member learns they have been deployed **only by email**. There is no
+`/my/assignments` route and no nav entry; the dashboard's `latest_service`
+(`DashboardController::memberSummary`) shows only *past* assignments with
+confirmed attendance.
+
+This matters because the confirmation link is a signed URL that expires after
+7 days and, per §2 of `CheckMaintenanceMode`'s exempt-route list, **cannot be
+re-sent by the member**. A missed, spam-filtered or deleted email leaves the
+member with no way to see the assignment and no way to confirm it — their only
+recourse is telephoning a Testing Center admin to press Resend.
+
+Proposed: a "My Assignments" page listing upcoming deployments (examination,
+date, venue, role, status) with a Confirm action, so the operational loop does
+not depend on one email arriving.
+
+### 8.2 Requirements are visible but not actionable
+
+`MyProctadController::profile()` returns each requirement's label, complied flag
+and remarks, so members can see what is outstanding. Only staff can attach the
+document, via the member details modal. A member who sees "not complied" has no
+way to submit anything and must deliver it in person or by email.
+
+The benefit is as much to Testing Center staff — who currently receive every
+document by hand — as to members.
+
+### 8.3 Requirement list asymmetry between the member and staff views
+
+`MemberController::store` creates one row per `EligibilityRequirement` case at
+member creation, so app-created members are complete. But the member profile
+maps only *existing* rows, while the staff modal iterates
+`EligibilityRequirement::cases()` and renders missing ones as outstanding.
+
+A member with no requirement rows therefore sees an **empty list** while staff
+see a full set of outstanding requirements. As of 2026-07-20 this affects 1 of
+20 members in the development database — presumably seeded or ETL-imported.
+**Re-check this after the production ETL**, which may import many members
+without requirement rows.
+
+Small and self-contained: have the member view iterate the enum the same way the
+staff view does. This is the only item in §8 worth considering before cutover.
+
+### 8.4 Evaluations are not linked from the signed-in area
+
+The post-examination evaluation flow is public: search by name or PROCTAD ID at
+`/evaluation`, resolve the assignment, then fill the form. A signed-in member
+goes through that same anonymous search even though the system already knows who
+they are and which assignments they attended. Prefilling for authenticated
+members would remove a step and the chance of selecting the wrong record.
