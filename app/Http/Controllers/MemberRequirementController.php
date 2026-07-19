@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Enums\EligibilityRequirement;
 use App\Models\Member;
+use App\Notifications\MemberRequirementReviewed;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -27,6 +29,11 @@ class MemberRequirementController extends Controller
 
         $record = $member->requirements()->firstOrCreate(['requirement' => $key]);
 
+        // Captured before the update so the notification fires on a genuine
+        // review only — re-saving a row unchanged, or merely attaching a file,
+        // should not ping the member about a decision that didn't happen.
+        $was = ['complied' => (bool) $record->complied, 'remarks' => $record->remarks];
+
         if ($request->hasFile('file')) {
             if ($record->file_path) {
                 Storage::disk('local')->delete($record->file_path);
@@ -37,6 +44,18 @@ class MemberRequirementController extends Controller
 
         unset($validated['file']);
         $record->update($validated);
+
+        $reviewed = $was['complied'] !== (bool) $record->complied
+            || $was['remarks'] !== $record->remarks;
+
+        // Members without a linked self-service account have nowhere to receive
+        // this — the same rule AssignmentConfirmationSender applies.
+        if ($reviewed && $member->user) {
+            Notification::send(
+                [$member->user],
+                new MemberRequirementReviewed($key, (bool) $record->complied, $record->remarks),
+            );
+        }
 
         return back()->with('success', 'Eligibility requirement updated.');
     }

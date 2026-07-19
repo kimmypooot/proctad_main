@@ -8,8 +8,10 @@ use App\Enums\UserRole;
 use App\Models\FieldOffice;
 use App\Models\Member;
 use App\Models\User;
+use App\Notifications\MemberRequirementReviewed;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -206,6 +208,80 @@ class MemberTest extends TestCase
             ->get("/members/{$member->id}/requirements/{$key}/download")
             ->assertOk()
             ->assertDownload("{$member->proctad_id}-{$key}.pdf");
+    }
+
+    /**
+     * Members can submit documents but cannot mark themselves compliant, so the
+     * outcome of a review is otherwise invisible until they reopen their profile.
+     */
+    public function test_reviewing_a_requirement_notifies_the_member(): void
+    {
+        Notification::fake();
+
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['field_office_id' => $this->leyte->id, 'user_id' => $user->id]);
+        $key = EligibilityRequirement::UpdatedPds->value;
+
+        $this->actingAs($admin)
+            ->put("/members/{$member->id}/requirements/{$key}", ['complied' => true])
+            ->assertRedirect();
+
+        Notification::assertSentTo($user, MemberRequirementReviewed::class);
+    }
+
+    public function test_rejecting_with_remarks_also_notifies(): void
+    {
+        Notification::fake();
+
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['field_office_id' => $this->leyte->id, 'user_id' => $user->id]);
+        $key = EligibilityRequirement::UpdatedPds->value;
+
+        $this->actingAs($admin)
+            ->put("/members/{$member->id}/requirements/{$key}", [
+                'complied' => false,
+                'remarks' => 'Signature page missing.',
+            ])
+            ->assertRedirect();
+
+        Notification::assertSentTo($user, MemberRequirementReviewed::class);
+    }
+
+    /** Re-saving an unchanged row is not a review, and must not ping the member. */
+    public function test_saving_a_requirement_unchanged_does_not_notify(): void
+    {
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['field_office_id' => $this->leyte->id, 'user_id' => $user->id]);
+        $key = EligibilityRequirement::UpdatedPds->value;
+
+        $this->actingAs($admin)
+            ->put("/members/{$member->id}/requirements/{$key}", ['complied' => true, 'remarks' => 'Verified']);
+
+        Notification::fake();
+
+        $this->actingAs($admin)
+            ->put("/members/{$member->id}/requirements/{$key}", ['complied' => true, 'remarks' => 'Verified'])
+            ->assertRedirect();
+
+        Notification::assertNothingSent();
+    }
+
+    /** A member with no linked account has nowhere to receive it — must not error. */
+    public function test_reviewing_a_requirement_for_an_unlinked_member_is_safe(): void
+    {
+        Notification::fake();
+
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+        $member = Member::factory()->create(['field_office_id' => $this->leyte->id, 'user_id' => null]);
+
+        $this->actingAs($admin)
+            ->put("/members/{$member->id}/requirements/".EligibilityRequirement::UpdatedPds->value, ['complied' => true])
+            ->assertRedirect();
+
+        Notification::assertNothingSent();
     }
 
     public function test_index_exposes_last_exam_served(): void
