@@ -125,11 +125,20 @@ class ScannerTest extends TestCase
 
     public function test_scanner_is_limited_to_scanning_roles(): void
     {
-        foreach ([UserRole::Member, UserRole::FieldDirector, UserRole::Management] as $role) {
+        // Field Directors run their Testing Center's operations, so they scan too.
+        // Management is region-wide oversight and Members are not staff at all.
+        foreach ([UserRole::Member, UserRole::Management] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/scanner')
                 ->assertForbidden();
         }
+
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+
+        $this->actingAs(User::factory()->create([
+            'role' => UserRole::FieldDirector,
+            'field_office_id' => $office->id,
+        ]))->get('/scanner')->assertOk();
     }
 
     public function test_attendance_summary_reflects_present_and_absent_counts(): void

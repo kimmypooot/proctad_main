@@ -29,7 +29,7 @@ class MemberPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
     }
 
     public function update(User $user, Member $member): bool
@@ -48,7 +48,7 @@ class MemberPolicy
             return true;
         }
 
-        return $user->role === UserRole::FoAdmin
+        return $user->role->isFieldOfficeScoped()
             && $user->field_office_id === $member->field_office_id;
     }
 }

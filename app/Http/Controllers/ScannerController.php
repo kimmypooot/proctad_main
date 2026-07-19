@@ -48,7 +48,7 @@ class ScannerController extends Controller
         if ($raw['type'] === 'oep') {
             $oep = OtherExaminationPersonnel::with('fieldOffice:id,name,code')
                 ->where('oep_id', $raw['code'])
-                ->when($user->role === UserRole::FoAdmin,
+                ->when($user->role->isFieldOfficeScoped(),
                     fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->first();
 
@@ -75,7 +75,7 @@ class ScannerController extends Controller
             $member = Member::with('fieldOffice:id,name,code')
                 ->where('proctad_id', $raw['code'])
                 // FO Admins can only look up members of their own Testing Center.
-                ->when($user->role === UserRole::FoAdmin,
+                ->when($user->role->isFieldOfficeScoped(),
                     fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->first();
 
@@ -189,7 +189,7 @@ class ScannerController extends Controller
             $assignments = $query
                 ->whereIn('member_id', $memberIds)
                 ->whereNull('attendance_confirmed_at')
-                ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->get();
 
             foreach ($assignments as $assignment) {
@@ -232,7 +232,7 @@ class ScannerController extends Controller
                 [$assignmentId, $schoolId] = array_map('intval', explode(':', $pair, 2));
 
                 $assignment = ExamAssignment::where('id', $assignmentId)
-                    ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                    ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
                     ->first();
 
                 if (! $assignment) {
@@ -286,7 +286,7 @@ class ScannerController extends Controller
         if ($trainingId) {
             $assignments = TrainingAssignment::with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
                 ->where('training_id', $trainingId)
-                ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->get();
         } elseif ($examinationId) {
             $assignments = ExamAssignment::with([
@@ -295,7 +295,7 @@ class ScannerController extends Controller
                 'room',
             ])
                 ->where('examination_id', $examinationId)
-                ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->get();
         } else {
             return null;
@@ -369,7 +369,7 @@ class ScannerController extends Controller
             $coverageAssignments = ExamAssignment::where('examination_id', $examinationId)
                 ->whereHas('coveredSchools', fn ($q) => $q->where('examination_school.id', $venueId))
                 ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
-                ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->get();
             $coverageAttendance = ExamAssignmentAttendance::where('examination_school_id', $venueId)
                 ->whereIn('exam_assignment_id', $coverageAssignments->pluck('id'))
@@ -617,7 +617,7 @@ class ScannerController extends Controller
                     'label' => "{$exam->title} — {$exam->exam_date->format('M d, Y')}",
                 ]),
             'trainings' => Training::whereNull('completed_at')
-                ->when($user->role === UserRole::FoAdmin,
+                ->when($user->role->isFieldOfficeScoped(),
                     fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->orderByDesc('training_date')->limit(10)
                 ->get(['id', 'title', 'training_date'])

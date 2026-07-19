@@ -41,6 +41,43 @@ class VerifyTest extends TestCase
                 ->where('code', $member->proctad_id));
     }
 
+    /**
+     * A disqualified member's ID still resolves, so the page keys its headline off
+     * `result.status` to avoid showing "Verified PROCTAD Member" over one. That only
+     * works while the raw status reaches the page.
+     */
+    public function test_status_is_exposed_so_the_page_can_flag_non_active_members(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+
+        foreach (['active', 'inactive', 'disqualified'] as $status) {
+            $member = Member::factory()->create([
+                'field_office_id' => $office->id,
+                'status' => $status,
+            ]);
+
+            $this->get("/verify/{$member->proctad_id}")
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->where('result.status', $status)
+                    ->has('result.status_label')
+                    ->has('result.status_variant'));
+        }
+    }
+
+    /**
+     * Certificate numbers are sequential, so an unthrottled public lookup lets
+     * anyone walk the range and harvest every releasee's details.
+     */
+    public function test_public_verification_is_rate_limited(): void
+    {
+        for ($i = 0; $i < 10; $i++) {
+            $this->get('/verify/PROCTAD-CSCRO8-XXXXXX')->assertOk();
+        }
+
+        $this->get('/verify/PROCTAD-CSCRO8-XXXXXX')->assertStatus(429);
+    }
+
     public function test_unknown_or_removed_id_shows_invalid_state(): void
     {
         $this->get('/verify/PROCTAD-CSCRO8-XXXXXX')

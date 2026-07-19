@@ -25,7 +25,7 @@ class OtherExaminationPersonnelPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
     }
 
     public function update(User $user, OtherExaminationPersonnel $oep): bool
@@ -44,7 +44,7 @@ class OtherExaminationPersonnelPolicy
             return true;
         }
 
-        return $user->role === UserRole::FoAdmin
+        return $user->role->isFieldOfficeScoped()
             && $user->field_office_id === $oep->field_office_id;
     }
 }

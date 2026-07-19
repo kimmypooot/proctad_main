@@ -15,7 +15,7 @@ class SchoolPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
     }
 
     public function update(User $user, School $school): bool
@@ -34,7 +34,7 @@ class SchoolPolicy
             return true;
         }
 
-        return $user->role === UserRole::FoAdmin
+        return $user->role->isFieldOfficeScoped()
             && $user->field_office_id === $school->field_office_id;
     }
 }

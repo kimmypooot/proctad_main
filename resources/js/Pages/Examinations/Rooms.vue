@@ -1,6 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -214,28 +214,65 @@ const savePerRoomDesignations = () => {
 /* ---------------------------------------------------------------------- */
 const showStaffingMap = ref(true);
 
-const occupant = (room, role) => props.assignments.find((a) => a.exam_room_id === room.id && a.role === role);
-const poolFor = (room, role) => props.assignments
+/**
+ * Room/unassign edits are applied to this local copy *first* and persisted in
+ * the background, so filling a venue's staffing map doesn't cost a round trip
+ * (and a whole-page re-render) per dropdown. The server still has the final
+ * say — roomAssignabilityRule rejects members who haven't confirmed yet and
+ * rooms whose Proctor/Room Examiner slot is already taken — so every optimistic
+ * edit remembers its previous value and rolls back if the PATCH fails.
+ *
+ * Re-seeded from props on every server response, which is what reconciles the
+ * optimistic guess with the authoritative list.
+ */
+const localAssignments = ref([]);
+watch(() => props.assignments, (incoming) => {
+    localAssignments.value = incoming.map((a) => ({ ...a }));
+}, { immediate: true });
+
+const occupant = (room, role) => localAssignments.value.find((a) => a.exam_room_id === room.id && a.role === role);
+const poolFor = (room, role) => localAssignments.value
     .filter((a) => a.role === role && (a.exam_room_id === null || a.exam_room_id === room.id))
     .map((a) => ({ value: a.id, label: a.member.name }));
 
-const assignRoomForm = useForm({ exam_room_id: null });
-const savingCell = ref(null);
+/** Rejection messages, keyed `${roomId}:${role}` — cleared when that cell is retried. */
+const cellErrors = ref({});
+/** Cells with a PATCH still in flight, for a subtle pending tint (never disabled — that's the point). */
+const pendingCells = ref({});
+
+/** Optimistically move `assignment` to `roomId` (null = unassign), rolling back if the server refuses. */
+const persistRoom = (assignment, roomId, cellKey) => {
+    const previousRoomId = assignment.exam_room_id;
+
+    delete cellErrors.value[cellKey];
+    pendingCells.value[cellKey] = true;
+    assignment.exam_room_id = roomId;
+
+    router.patch(`/assignments/${assignment.id}/room`, { exam_room_id: roomId }, {
+        preserveScroll: true,
+        preserveState: true,
+        // Assigning staff can't change rooms/venue/designations — skip them
+        // (ExamRoomController::index leaves those props as unevaluated closures).
+        only: ['assignments', 'roomBreakdown', 'stats', 'flash', 'errors'],
+        onError: (errors) => {
+            assignment.exam_room_id = previousRoomId;
+            cellErrors.value[cellKey] = errors.exam_room_id ?? 'Could not save this assignment.';
+        },
+        onFinish: () => delete pendingCells.value[cellKey],
+    });
+};
+
 const onCellChange = (room, role, event) => {
-    const assignmentId = event.target.value;
+    const assignmentId = Number(event.target.value);
     if (!assignmentId) return;
 
-    savingCell.value = `${room.id}:${role}`;
-    assignRoomForm
-        .transform(() => ({ exam_room_id: room.id }))
-        .patch(`/assignments/${assignmentId}/room`, { preserveScroll: true, onFinish: () => (savingCell.value = null) });
+    const assignment = localAssignments.value.find((a) => a.id === assignmentId);
+    if (!assignment) return;
+
+    persistRoom(assignment, room.id, `${room.id}:${role}`);
 };
-const clearCell = (assignment) => {
-    savingCell.value = `${assignment.exam_room_id}:${assignment.role}`;
-    assignRoomForm
-        .transform(() => ({ exam_room_id: null }))
-        .patch(`/assignments/${assignment.id}/room`, { preserveScroll: true, onFinish: () => (savingCell.value = null) });
-};
+
+const clearCell = (assignment) => persistRoom(assignment, null, `${assignment.exam_room_id}:${assignment.role}`);
 
 const randomizeForm = useForm({ scope: 'all' });
 const confirmingRandomize = ref(null); // 'all' | 'unfilled' | null
@@ -417,7 +454,7 @@ const exportSupervisingExaminers = () => exportCsv(
                                         <span v-else class="text-xs text-slate-300">No eligible staff</span>
                                     </template>
                                     <template v-else>
-                                        <div v-if="occupant(room, role)" class="flex items-center gap-1.5">
+                                        <div v-if="occupant(room, role)" class="flex items-center gap-1.5" :class="{ 'opacity-60': pendingCells[`${room.id}:${role}`] }">
                                             <BaseBadge variant="success" class="min-w-0 max-w-full truncate" :title="occupant(room, role).member.name">
                                                 {{ occupant(room, role).member.name }}
                                             </BaseBadge>
@@ -427,14 +464,17 @@ const exportSupervisingExaminers = () => exportCsv(
                                         </div>
                                         <select
                                             v-else-if="poolFor(room, role).length"
-                                            class="w-full max-w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600"
-                                            :disabled="savingCell === `${room.id}:${role}`"
+                                            class="w-full max-w-full rounded-lg border bg-white px-2 py-1 text-xs text-slate-600"
+                                            :class="cellErrors[`${room.id}:${role}`] ? 'border-accent-400' : 'border-slate-300'"
                                             @change="onCellChange(room, role, $event)"
                                         >
                                             <option value="">— Unassigned —</option>
                                             <option v-for="option in poolFor(room, role)" :key="option.value" :value="option.value">{{ option.label }}</option>
                                         </select>
                                         <span v-else class="text-xs text-slate-300">No eligible staff</span>
+                                        <p v-if="cellErrors[`${room.id}:${role}`]" class="mt-1 text-xs leading-snug text-accent-600">
+                                            {{ cellErrors[`${room.id}:${role}`] }}
+                                        </p>
                                     </template>
                                 </td>
                             </tr>
@@ -754,7 +794,7 @@ const exportSupervisingExaminers = () => exportCsv(
                                 <tr v-for="room in rooms" :key="room.id">
                                     <td class="truncate py-1.5 pr-3 font-medium text-slate-700">{{ room.room_number }}</td>
                                     <td v-for="role in ['proctor', 'room_examiner']" :key="role" class="py-1.5 pr-3">
-                                        <div v-if="occupant(room, role)" class="flex items-center gap-1.5">
+                                        <div v-if="occupant(room, role)" class="flex items-center gap-1.5" :class="{ 'opacity-60': pendingCells[`${room.id}:${role}`] }">
                                             <BaseBadge variant="success" size="xs" class="min-w-0 max-w-full truncate" :title="occupant(room, role).member.name">
                                                 {{ occupant(room, role).member.name }}
                                             </BaseBadge>
@@ -764,14 +804,17 @@ const exportSupervisingExaminers = () => exportCsv(
                                         </div>
                                         <select
                                             v-else-if="poolFor(room, role).length"
-                                            class="w-full max-w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600"
-                                            :disabled="savingCell === `${room.id}:${role}`"
+                                            class="w-full max-w-full rounded-lg border bg-white px-2 py-1 text-xs text-slate-600"
+                                            :class="cellErrors[`${room.id}:${role}`] ? 'border-accent-400' : 'border-slate-300'"
                                             @change="onCellChange(room, role, $event)"
                                         >
                                             <option value="">— Unassigned —</option>
                                             <option v-for="option in poolFor(room, role)" :key="option.value" :value="option.value">{{ option.label }}</option>
                                         </select>
                                         <span v-else class="text-xs text-slate-300">No eligible staff</span>
+                                        <p v-if="cellErrors[`${room.id}:${role}`]" class="mt-1 text-xs leading-snug text-accent-600">
+                                            {{ cellErrors[`${room.id}:${role}`] }}
+                                        </p>
                                     </td>
                                 </tr>
                             </tbody>
@@ -802,7 +845,7 @@ const exportSupervisingExaminers = () => exportCsv(
                                 <tr v-for="room in anchorRooms" :key="room.id">
                                     <td class="truncate py-1.5 pr-3 font-medium text-slate-700">{{ room.room_number }}</td>
                                     <td class="py-1.5">
-                                        <div v-if="occupant(room, 'supervising_examiner')" class="flex items-center gap-1.5">
+                                        <div v-if="occupant(room, 'supervising_examiner')" class="flex items-center gap-1.5" :class="{ 'opacity-60': pendingCells[`${room.id}:supervising_examiner`] }">
                                             <BaseBadge variant="success" size="xs" class="min-w-0 max-w-full truncate" :title="occupant(room, 'supervising_examiner').member.name">
                                                 {{ occupant(room, 'supervising_examiner').member.name }}
                                             </BaseBadge>
@@ -812,14 +855,17 @@ const exportSupervisingExaminers = () => exportCsv(
                                         </div>
                                         <select
                                             v-else-if="poolFor(room, 'supervising_examiner').length"
-                                            class="w-full max-w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600"
-                                            :disabled="savingCell === `${room.id}:supervising_examiner`"
+                                            class="w-full max-w-full rounded-lg border bg-white px-2 py-1 text-xs text-slate-600"
+                                            :class="cellErrors[`${room.id}:supervising_examiner`] ? 'border-accent-400' : 'border-slate-300'"
                                             @change="onCellChange(room, 'supervising_examiner', $event)"
                                         >
                                             <option value="">— Unassigned —</option>
                                             <option v-for="option in poolFor(room, 'supervising_examiner')" :key="option.value" :value="option.value">{{ option.label }}</option>
                                         </select>
                                         <span v-else class="text-xs text-slate-300">No eligible staff</span>
+                                        <p v-if="cellErrors[`${room.id}:supervising_examiner`]" class="mt-1 text-xs leading-snug text-accent-600">
+                                            {{ cellErrors[`${room.id}:supervising_examiner`] }}
+                                        </p>
                                     </td>
                                 </tr>
                             </tbody>

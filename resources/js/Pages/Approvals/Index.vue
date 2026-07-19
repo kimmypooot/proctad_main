@@ -262,6 +262,12 @@ const confirmBulkDisapprove = () => {
                             <td class="whitespace-nowrap px-3 py-2">
                                 <BaseBadge :variant="waitingVariant(certificate.waiting_days)" size="xs">{{ certificate.requested_ago }}</BaseBadge>
                                 <p class="mt-1 text-xs text-slate-400">{{ certificate.requested_by }}</p>
+                                <!-- Allowed (a Director must be able to cover for an absent
+                                     FO Admin), but surfaced so it stays a conscious act. -->
+                                <p v-if="certificate.self_requested" class="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-amber-700">
+                                    <AppIcon name="exclamation-triangle" class="h-3 w-3 shrink-0" />
+                                    You requested this
+                                </p>
                             </td>
                             <td class="px-3 py-2 text-center">
                                 <div class="inline-flex gap-1">

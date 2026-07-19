@@ -35,7 +35,7 @@ class ExamVenueController extends Controller
         $school = School::findOrFail($validated['school_id']);
 
         abort_if(
-            $user->role === UserRole::FoAdmin && $school->field_office_id !== $user->field_office_id,
+            $user->role->isFieldOfficeScoped() && $school->field_office_id !== $user->field_office_id,
             403,
         );
 

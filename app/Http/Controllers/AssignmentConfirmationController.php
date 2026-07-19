@@ -12,6 +12,7 @@ use App\Notifications\AssignmentDeclined;
 use App\Services\AssignmentConfirmationSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
@@ -30,10 +31,23 @@ class AssignmentConfirmationController extends Controller
     {
         Gate::authorize('update', $assignment);
 
-        $sent = $sender->send($assignment, $request->user());
+        $log = $sender->send($assignment, $request->user());
 
-        if (! $sent) {
+        if ($log === null) {
             return back()->with('error', 'This member has no email address on file.');
+        }
+
+        // NotificationMailer swallows delivery exceptions into the log rather than
+        // throwing, so a returned log is not proof of delivery — report the real
+        // outcome instead of flashing success over a silent failure.
+        if ($log->status === 'failed') {
+            return back()->with('error', "Could not send the confirmation to {$assignment->member->name}: {$log->error_message}");
+        }
+
+        // Deliberate suppression, not a failure — the assignment still advances so
+        // the workflow stays testable, but say plainly that nothing was delivered.
+        if ($log->status === 'skipped') {
+            return back()->with('error', "Email sending is switched off in Settings, so nothing was sent to {$assignment->member->name}. The assignment was still marked as awaiting confirmation.");
         }
 
         return back()->with('success', "Confirmation request sent to {$assignment->member->name}.");
@@ -46,11 +60,19 @@ class AssignmentConfirmationController extends Controller
      */
     public function show(Request $request, ExamAssignment $assignment): Response
     {
-        $assignment->loadMissing('member', 'examination', 'examinationSchool.school', 'room');
+        $assignment->loadMissing('member', 'examination', 'examinationSchool.school');
 
         return Inertia::render('Assignments/Confirm', [
             'assignment' => $this->present($assignment),
             'actionUrl' => $request->fullUrl(),
+            // The signed link's own expiry *is* the response deadline, so read
+            // it back off the URL rather than storing a second copy that could
+            // drift out of step with LINK_LIFETIME_DAYS.
+            'responseDueBy' => $request->query('expires')
+                ? Carbon::createFromTimestamp((int) $request->query('expires'))
+                    ->timezone(config('app.timezone'))
+                    ->format('F j, Y')
+                : null,
         ]);
     }
 
@@ -65,7 +87,9 @@ class AssignmentConfirmationController extends Controller
         ]);
 
         if ($assignment->status !== AssignmentStatus::Pending) {
-            return back()->with('error', 'This assignment has already been responded to.');
+            // Responses are deliberately one-shot. Say where to go instead of
+            // leaving the member at a dead end with no recourse.
+            return back()->with('error', 'You have already responded to this assignment. To change your response, please contact your Testing Center.');
         }
 
         $confirmed = $validated['action'] === 'confirm';
@@ -118,7 +142,9 @@ class AssignmentConfirmationController extends Controller
             'exam_name' => $assignment->examination->title,
             'exam_date' => $assignment->examination->exam_date->format('F j, Y (l)'),
             'venue' => $assignment->examinationSchool?->school?->name,
-            'room' => $assignment->room?->room_number,
+            // No 'room' by design: the member is told their room in person by
+            // the secretariat on exam day, so it must not reach this public
+            // page — not rendered, and not in the payload either.
             'decline_reason' => $assignment->decline_reason,
         ];
     }

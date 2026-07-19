@@ -23,7 +23,7 @@ class SchoolController extends Controller
 
         $schools = School::with('fieldOffice:id,name,code')
             ->withCount('examinationSchools')
-            ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
             ->orderBy('name')
             ->get();
 
@@ -86,7 +86,7 @@ class SchoolController extends Controller
                 $school ? 'sometimes' : 'required',
                 'exists:field_offices,id',
                 function (string $attribute, mixed $value, \Closure $fail) use ($user) {
-                    if ($user->role === UserRole::FoAdmin && (int) $value !== $user->field_office_id) {
+                    if ($user->role->isFieldOfficeScoped() && (int) $value !== $user->field_office_id) {
                         $fail('You can only manage schools of your own Testing Center.');
                     }
                 },
@@ -96,7 +96,7 @@ class SchoolController extends Controller
 
     private function assignableScopes(User $user): array
     {
-        if ($user->role === UserRole::FoAdmin) {
+        if ($user->role->isFieldOfficeScoped()) {
             return FieldOffice::whereKey($user->field_office_id)->get(['id', 'name', 'code'])->all();
         }
 

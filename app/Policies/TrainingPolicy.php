@@ -20,7 +20,7 @@ class TrainingPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
     }
 
     public function update(User $user, Training $training): bool
@@ -29,7 +29,7 @@ class TrainingPolicy
             return true;
         }
 
-        return $user->hasRole(UserRole::FoAdmin)
+        return $user->role->isFieldOfficeScoped()
             && $training->field_office_id === $user->field_office_id;
     }
 
@@ -44,7 +44,7 @@ class TrainingPolicy
             return true;
         }
 
-        return $user->hasRole(UserRole::FoAdmin)
+        return $user->role->isFieldOfficeScoped()
             && $training->field_office_id === $user->field_office_id;
     }
 }

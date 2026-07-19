@@ -95,7 +95,9 @@ class DashboardController extends Controller
      */
     private function adminAnalytics(UserRole $role, User $user, Request $request): ?array
     {
-        if (! in_array($role, [UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin], true)) {
+        // Field Directors run their Testing Center's operations alongside FO
+        // Admin staff, so they get the same operational analytics.
+        if (! in_array($role, [UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector], true)) {
             return null;
         }
 

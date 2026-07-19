@@ -41,7 +41,7 @@ class StoreOtherExaminationPersonnelRequest extends FormRequest
     {
         return function (string $attribute, mixed $value, \Closure $fail) {
             $user = $this->user();
-            if ($user->role === UserRole::FoAdmin && $value !== null && (int) $value !== $user->field_office_id) {
+            if ($user->role->isFieldOfficeScoped() && $value !== null && (int) $value !== $user->field_office_id) {
                 $fail('You can only manage other examination personnel of your own Testing Center.');
             }
         };

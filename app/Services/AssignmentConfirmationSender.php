@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AssignmentStatus;
 use App\Enums\ConfirmationAction;
+use App\Models\EmailLog;
 use App\Models\ExamAssignment;
 use App\Models\User;
 use App\Notifications\VenueAssigned;
@@ -25,14 +26,19 @@ class AssignmentConfirmationSender
 
     public function __construct(private readonly NotificationMailer $mailer) {}
 
-    /** @return bool false if the member has no email on file — nothing was sent. */
-    public function send(ExamAssignment $assignment, ?User $sentBy = null): bool
+    /**
+     * @return EmailLog|null the delivery attempt's log row, or null if the member
+     *                       has no email on file. Callers that report back to a
+     *                       user must check `$log->status` — a returned log can
+     *                       still be a 'failed' one.
+     */
+    public function send(ExamAssignment $assignment, ?User $sentBy = null): ?EmailLog
     {
         $assignment->loadMissing('member.user', 'examination');
         $member = $assignment->member;
 
         if (! $member?->email) {
-            return false;
+            return null;
         }
 
         $signedUrl = URL::temporarySignedRoute(
@@ -41,7 +47,7 @@ class AssignmentConfirmationSender
             ['assignment' => $assignment->id],
         );
 
-        $this->mailer->send(
+        $log = $this->mailer->send(
             templateCode: 'assignment_confirmation',
             toEmail: $member->email,
             toName: $member->name,
@@ -56,6 +62,14 @@ class AssignmentConfirmationSender
             ],
             sentBy: $sentBy,
         );
+
+        // Nothing left the building, so don't record that it did: stamping
+        // confirmation_sent_at on a failure would flip the button to "Resend",
+        // reset a existing response, and make the reminder command think the
+        // member has already been asked.
+        if ($log->status === 'failed') {
+            return $log;
+        }
 
         $assignment->update([
             'status' => AssignmentStatus::Pending,
@@ -77,6 +91,6 @@ class AssignmentConfirmationSender
             Notification::send([$member->user], new VenueAssigned($assignment));
         }
 
-        return true;
+        return $log;
     }
 }

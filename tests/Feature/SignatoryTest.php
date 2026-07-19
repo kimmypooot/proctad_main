@@ -7,6 +7,8 @@ use App\Models\FieldOffice;
 use App\Models\Signatory;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class SignatoryTest extends TestCase
@@ -83,5 +85,107 @@ class SignatoryTest extends TestCase
         $this->assertSame($foEntry->id, Signatory::currentFor($this->leyte->id)?->id);
         $this->assertSame($region->id, Signatory::currentFor($this->samar->id)?->id);
         $this->assertSame($region->id, Signatory::currentFor(null)?->id);
+    }
+
+    public function test_signature_image_can_be_uploaded_and_removed(): void
+    {
+        Storage::fake('local');
+
+        $admin = $this->staff(UserRole::EsdAdmin);
+
+        $this->actingAs($admin)->post('/signatories', [
+            'name' => 'Atty. Juana D. Reyes',
+            'position' => 'Director IV',
+            'field_office_id' => null,
+            'active' => true,
+            'signature' => UploadedFile::fake()->image('sig.png', 600, 200),
+        ])->assertRedirect();
+
+        $signatory = Signatory::firstOrFail();
+        $this->assertNotNull($signatory->signature_path);
+        Storage::disk('local')->assertExists($signatory->signature_path);
+
+        $storedPath = $signatory->signature_path;
+
+        $this->actingAs($admin)->post("/signatories/{$signatory->id}", [
+            '_method' => 'put',
+            'name' => $signatory->name,
+            'position' => $signatory->position,
+            'field_office_id' => null,
+            'active' => true,
+            'remove_signature' => true,
+        ])->assertRedirect();
+
+        $this->assertNull($signatory->fresh()->signature_path);
+        Storage::disk('local')->assertMissing($storedPath);
+    }
+
+    public function test_non_png_signature_is_rejected(): void
+    {
+        Storage::fake('local');
+
+        $this->actingAs($this->staff(UserRole::EsdAdmin))
+            ->post('/signatories', [
+                'name' => 'Atty. Juana D. Reyes',
+                'position' => 'Director IV',
+                'field_office_id' => null,
+                'active' => true,
+                // JPEG has no alpha channel — it would stamp a white box over
+                // the printed name it's supposed to overlay.
+                'signature' => UploadedFile::fake()->image('sig.jpg', 600, 200),
+            ])
+            ->assertSessionHasErrors('signature');
+    }
+
+    /**
+     * The signature is snapshotted at release like name/position. Replacing a
+     * signatory's image must not re-sign certificates already issued — which
+     * matters doubly because regeneratePdf() overwrites the stored PDF in place.
+     */
+    public function test_replacing_a_signature_does_not_alter_already_issued_certificates(): void
+    {
+        Storage::fake('local');
+
+        $admin = $this->staff(UserRole::EsdAdmin);
+        $signatory = Signatory::create([
+            'field_office_id' => null,
+            'name' => 'Atty. Juana D. Reyes',
+            'position' => 'Director IV',
+            'signature_path' => 'signatures/original.png',
+            'active' => true,
+        ]);
+        Storage::disk('local')->put('signatures/original.png', 'original-bytes');
+
+        $assignment = \App\Models\ExamAssignment::factory()->create();
+        $certificate = \App\Models\Certificate::create([
+            'type' => \App\Enums\CertificateType::Appearance,
+            'member_id' => $assignment->member_id,
+            'field_office_id' => $assignment->field_office_id,
+            'certifiable_type' => \App\Models\ExamAssignment::class,
+            'certifiable_id' => $assignment->id,
+            'status' => \App\Enums\CertificateStatus::Pending,
+            'requested_by' => $admin->id,
+        ]);
+
+        app(\App\Services\CertificateService::class)->release($certificate, $admin);
+
+        $this->assertSame('signatures/original.png', $certificate->fresh()->signatory_signature_path);
+
+        // Swap the signatory's image for a new one.
+        $this->actingAs($admin)->post("/signatories/{$signatory->id}", [
+            '_method' => 'put',
+            'name' => $signatory->name,
+            'position' => $signatory->position,
+            'field_office_id' => null,
+            'active' => true,
+            'signature' => UploadedFile::fake()->image('new.png', 600, 200),
+        ])->assertRedirect();
+
+        $this->assertNotSame('signatures/original.png', $signatory->fresh()->signature_path);
+
+        // The issued certificate still points at the original, and the file it
+        // depends on was not deleted out from under it.
+        $this->assertSame('signatures/original.png', $certificate->fresh()->signatory_signature_path);
+        Storage::disk('local')->assertExists('signatures/original.png');
     }
 }

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['field_office_id', 'name', 'position', 'active'])]
+#[Fillable(['field_office_id', 'name', 'position', 'signature_path', 'active'])]
 class Signatory extends Model
 {
     use Auditable;

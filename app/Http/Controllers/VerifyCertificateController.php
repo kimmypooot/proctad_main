@@ -31,6 +31,9 @@ class VerifyCertificateController extends Controller
                 'released_at' => $certificate->released_at?->format('F d, Y'),
             ] : null,
             'code' => $certificateNo,
+            // Shown on the result so whoever is checking a presented certificate
+            // can see this is a live lookup, not a cached or screenshotted page.
+            'verifiedAt' => now()->format('F j, Y \a\t g:i A'),
         ]);
     }
 }

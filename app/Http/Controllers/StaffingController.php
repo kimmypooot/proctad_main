@@ -52,7 +52,7 @@ class StaffingController extends Controller
 
         abort_unless(
             $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
-                || ($user->role === UserRole::FoAdmin && $user->field_office_id === $venue->school?->field_office_id),
+                || ($user->role->isFieldOfficeScoped() && $user->field_office_id === $venue->school?->field_office_id),
             403,
         );
     }

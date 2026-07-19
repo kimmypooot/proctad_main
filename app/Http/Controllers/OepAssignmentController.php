@@ -37,7 +37,7 @@ class OepAssignmentController extends Controller
         $oep = OtherExaminationPersonnel::findOrFail($validated['other_examination_personnel_id']);
 
         abort_if(
-            $user->role === UserRole::FoAdmin && $oep->field_office_id !== $user->field_office_id,
+            $user->role->isFieldOfficeScoped() && $oep->field_office_id !== $user->field_office_id,
             403,
         );
 

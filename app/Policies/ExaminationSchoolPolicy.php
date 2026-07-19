@@ -14,7 +14,7 @@ class ExaminationSchoolPolicy
 {
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
     }
 
     public function delete(User $user, ExaminationSchool $venue): bool
@@ -23,7 +23,7 @@ class ExaminationSchoolPolicy
             return true;
         }
 
-        return $user->role === UserRole::FoAdmin
+        return $user->role->isFieldOfficeScoped()
             && $user->field_office_id === $venue->school?->field_office_id;
     }
 }

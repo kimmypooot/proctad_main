@@ -10,7 +10,7 @@ class OepAssignmentPolicy
 {
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
     }
 
     public function delete(User $user, OepAssignment $assignment): bool
@@ -31,7 +31,7 @@ class OepAssignmentPolicy
 
         $assignment->loadMissing('personnel');
 
-        return $user->role === UserRole::FoAdmin
+        return $user->role->isFieldOfficeScoped()
             && $user->field_office_id === $assignment->personnel?->field_office_id;
     }
 }

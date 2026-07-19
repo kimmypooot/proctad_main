@@ -81,6 +81,47 @@ class CertificatePagesTest extends TestCase
                 ->has('pending', 2));
     }
 
+    /**
+     * The sidebar badge and the approvals queue must count the same set — a badge
+     * advertising work the user can't see when they click through is worse than
+     * no badge. Both read Certificate::scopePendingApprovalFor().
+     */
+    public function test_sidebar_badge_matches_the_approvals_queue_per_role(): void
+    {
+        $fo = FieldOffice::factory()->create();
+        $otherFo = FieldOffice::factory()->create();
+
+        $this->certificate(CertificateType::Appearance, CertificateStatus::Pending, $fo->id);
+        $this->certificate(CertificateType::Appearance, CertificateStatus::Pending, $otherFo->id);
+        $this->certificate(CertificateType::Appreciation, CertificateStatus::Pending, $fo->id);
+        // Released ones must never be counted.
+        $this->certificate(CertificateType::Appearance, CertificateStatus::Released, $fo->id);
+
+        $cases = [
+            // [user, expected count]
+            [User::factory()->create(['role' => UserRole::FieldDirector, 'field_office_id' => $fo->id]), 2],
+            [User::factory()->create(['role' => UserRole::Management]), 1],
+            [User::factory()->create(['role' => UserRole::SuperAdmin]), 3],
+            // No approval rights — badge must stay hidden.
+            [User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]), 0],
+        ];
+
+        foreach ($cases as [$user, $expected]) {
+            $this->actingAs($user)
+                ->get('/dashboard')
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->where('pendingApprovalCount', $expected));
+
+            // And the queue itself lists exactly that many, for roles that can open it.
+            if ($expected > 0) {
+                $this->actingAs($user)
+                    ->get('/approvals')
+                    ->assertOk()
+                    ->assertInertia(fn (Assert $page) => $page->has('pending', $expected));
+            }
+        }
+    }
+
     public function test_field_director_can_approve_appreciation_as_a_local_fallback(): void
     {
         $fo = FieldOffice::factory()->create();
@@ -181,5 +222,34 @@ class CertificatePagesTest extends TestCase
         $this->assertSame(CertificateStatus::Disapproved, $first->fresh()->status);
         $this->assertSame(CertificateStatus::Disapproved, $second->fresh()->status);
         $this->assertSame('Missing supporting documents.', $second->fresh()->disapproval_remarks);
+    }
+
+    /**
+     * Approving your own request is permitted — a Field Director has to be able
+     * to cover for an absent FO Admin — but the queue flags it so it stays a
+     * conscious act rather than something that passes unnoticed.
+     */
+    public function test_queue_flags_requests_the_approver_made_themselves(): void
+    {
+        $fo = FieldOffice::factory()->create();
+        $director = User::factory()->create(['role' => UserRole::FieldDirector, 'field_office_id' => $fo->id]);
+        $someoneElse = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]);
+
+        $own = $this->certificate(CertificateType::Appearance, CertificateStatus::Pending, $fo->id);
+        $own->update(['requested_by' => $director->id]);
+
+        $theirs = $this->certificate(CertificateType::Appearance, CertificateStatus::Pending, $fo->id);
+        $theirs->update(['requested_by' => $someoneElse->id]);
+
+        $this->actingAs($director)->get('/approvals')->assertInertia(function (Assert $page) use ($own, $theirs) {
+            $rows = collect($page->toArray()['props']['pending']);
+
+            $this->assertTrue($rows->firstWhere('id', $own->id)['self_requested']);
+            $this->assertFalse($rows->firstWhere('id', $theirs->id)['self_requested']);
+        });
+
+        // Flagged, not blocked.
+        $this->actingAs($director)->post("/certificates/{$own->id}/approve")->assertRedirect();
+        $this->assertSame(CertificateStatus::Released, $own->fresh()->status);
     }
 }

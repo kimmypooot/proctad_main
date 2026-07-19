@@ -34,6 +34,9 @@ class VerifyController extends Controller
                 'status_variant' => $member->status->badgeVariant(),
             ] : null,
             'code' => $proctadId,
+            // Shown on the result so whoever is checking a presented ID can see
+            // this is a live lookup, not a cached or screenshotted page.
+            'verifiedAt' => now()->format('F j, Y \a\t g:i A'),
         ]);
     }
 }

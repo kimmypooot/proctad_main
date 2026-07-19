@@ -14,6 +14,7 @@ use App\Models\TrainingAssignment;
 use App\Models\User;
 use App\Notifications\CertificateDecided;
 use App\Notifications\CertificatePendingApproval;
+use App\Notifications\CertificateReissued;
 use App\Notifications\MemberCertificateDecided;
 use App\Support\BrandedQrCode;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -78,6 +79,9 @@ class CertificateService
             'approved_at' => now(),
             'signatory_name' => $signatory?->name,
             'signatory_position' => $signatory?->position,
+            // Snapshotted like name/position: replacing a signatory's uploaded
+            // image must never re-sign certificates already issued.
+            'signatory_signature_path' => $signatory?->signature_path,
             'released_at' => now(),
         ]);
 
@@ -103,9 +107,15 @@ class CertificateService
      */
     public function resign(Certificate $certificate, Signatory $signatory): Certificate
     {
+        // Archive before the update: re-signing changes whose name appears on an
+        // already-issued certificate, so the superseded copy matters more here
+        // than for a plain re-render.
+        $this->archiveCurrentPdf($certificate);
+
         $certificate->update([
             'signatory_name' => $signatory->name,
             'signatory_position' => $signatory->position,
+            'signatory_signature_path' => $signatory->signature_path,
         ]);
 
         $certificate->update(['pdf_path' => $this->renderPdf($certificate)]);
@@ -119,11 +129,44 @@ class CertificateService
      * letterhead or template geometry changes and already-issued certificates
      * need to reflect it (see `certificates:regenerate-pdfs`).
      */
-    public function regeneratePdf(Certificate $certificate): Certificate
+    public function regeneratePdf(Certificate $certificate, bool $notifyMember = true): Certificate
     {
+        // renderPdf() writes to certificates/{certificate_no}.pdf, so the old
+        // file is overwritten in place. A member may already be holding a copy
+        // of it, and the number stays the same — keep the superseded version so
+        // two differing PDFs bearing one number can always be reconciled.
+        $this->archiveCurrentPdf($certificate);
+
         $certificate->update(['pdf_path' => $this->renderPdf($certificate)]);
 
+        // The member's copy has changed under them; nothing else tells them.
+        if ($notifyMember) {
+            $this->notifyMemberOfReissue($certificate);
+        }
+
         return $certificate;
+    }
+
+    /** Copy the current PDF aside before it is overwritten. No-op if there isn't one. */
+    private function archiveCurrentPdf(Certificate $certificate): void
+    {
+        $current = $certificate->pdf_path;
+
+        if (! $current || ! Storage::disk('local')->exists($current)) {
+            return;
+        }
+
+        Storage::disk('local')->copy(
+            $current,
+            "certificates/history/{$certificate->certificate_no}-".now()->format('Ymd-His').'.pdf',
+        );
+    }
+
+    private function notifyMemberOfReissue(Certificate $certificate): void
+    {
+        $certificate->loadMissing('member.user');
+
+        $certificate->member?->user?->notify(new CertificateReissued($certificate));
     }
 
     public function disapprove(Certificate $certificate, User $approver, string $remarks): Certificate
@@ -143,7 +186,11 @@ class CertificateService
 
     /**
      * Bell-notify the certificate type's approver role (FO-scoped for Field
-     * Director), plus Super Admin as the region-wide fallback approver.
+     * Director), plus both region-wide fallback approvers.
+     *
+     * ESD Admin is included because CertificatePolicy::decide() grants them
+     * approval rights for every type region-wide — leaving them off this list
+     * made them a fallback who never learns there is anything to fall back on.
      */
     private function notifyApprovers(Certificate $certificate): void
     {
@@ -159,7 +206,7 @@ class CertificateService
                     ->when($approverRole === UserRole::FieldDirector,
                         fn ($q) => $q->where('field_office_id', $certificate->field_office_id));
             })
-            ->orWhere('role', UserRole::SuperAdmin)
+            ->orWhereIn('role', [UserRole::SuperAdmin, UserRole::EsdAdmin])
             ->get();
 
         Notification::send($recipients, new CertificatePendingApproval($certificate));
@@ -255,6 +302,7 @@ class CertificateService
             'qrDataUri' => $this->qrDataUri(route('verify-certificate', $certificate->certificate_no)),
             'verifyUrl' => route('verify-certificate', $certificate->certificate_no),
             'letterheadDataUri' => $this->letterheadDataUri(),
+            'signatureDataUri' => $this->signatureDataUri($certificate),
             'watermark' => $watermark,
             'fontDir' => $this->fontDir(),
         ])->setPaper('a4', 'portrait')->output();
@@ -314,9 +362,25 @@ class CertificateService
             'designation_order' => $this->drawDesignationOrder($pdf, $putCtr, $multiCtr, $member, $certificate, $source, $black),
         };
 
-        // No signature-image asset exists yet on the Signatory model (name/position
-        // only), so unlike legacy this block is text-only — nothing to draw above it.
         if ($certificate->signatory_name) {
+            // The e-signature sits in the gap above the printed name — the same
+            // space a wet signature would occupy. Drawn from the certificate's
+            // own snapshot, so re-rendering reproduces what was issued.
+            $signatureFile = $this->signatureTempFile($certificate);
+
+            if ($signatureFile !== null) {
+                [$sigW, $sigH] = $this->fitSignature($signatureFile, maxW: 50.0, maxH: 16.0);
+                $pdf->Image(
+                    $signatureFile,
+                    $ML + ($cw - $sigW) / 2,
+                    $this->signatureY - $sigH - 1,
+                    $sigW,
+                    $sigH,
+                    'PNG',
+                );
+                @unlink($signatureFile);
+            }
+
             $putCtr($this->signatureY, 'B', $this->signatureFontSize, $black, mb_strtoupper($certificate->signatory_name));
             $putCtr($this->signatureY + 3, '', $this->signatureFontSize - 1, $black, (string) $certificate->signatory_position);
         }
@@ -607,6 +671,60 @@ class CertificateService
      * template then draws its own self-contained frame) when no letterhead is
      * active or the file is missing.
      */
+    /**
+     * FPDF can't read from a Laravel disk, so the snapshotted signature is
+     * spooled to a temp file for Image(). Caller unlinks it.
+     */
+    private function signatureTempFile(Certificate $certificate): ?string
+    {
+        $path = $certificate->signatory_signature_path;
+
+        if (! $path || ! Storage::disk('local')->exists($path)) {
+            return null;
+        }
+
+        $temp = tempnam(sys_get_temp_dir(), 'proctad_cert_sig_').'.png';
+        file_put_contents($temp, Storage::disk('local')->get($path));
+
+        return $temp;
+    }
+
+    /**
+     * Scale a signature to fit the box above the printed name without
+     * distorting it — uploads vary wildly in aspect ratio.
+     *
+     * @return array{0: float, 1: float} width, height in mm
+     */
+    private function fitSignature(string $file, float $maxW, float $maxH): array
+    {
+        $size = @getimagesize($file);
+
+        if ($size === false || $size[0] <= 0 || $size[1] <= 0) {
+            return [$maxW, $maxH];
+        }
+
+        $scale = min($maxW / $size[0], $maxH / $size[1]);
+
+        return [$size[0] * $scale, $size[1] * $scale];
+    }
+
+    /**
+     * The signature image snapshotted onto this certificate at release, inlined
+     * for dompdf. Reads the certificate's own snapshot — never the signatory's
+     * current file — so re-rendering an old certificate reproduces the
+     * signature it was issued with.
+     */
+    private function signatureDataUri(Certificate $certificate): ?string
+    {
+        $path = $certificate->signatory_signature_path;
+
+        if (! $path || ! Storage::disk('local')->exists($path)) {
+            return null;
+        }
+
+        return 'data:image/png;base64,'.base64_encode(Storage::disk('local')->get($path));
+    }
+
     private function letterheadDataUri(): ?string
     {
         $letterhead = Letterhead::active();

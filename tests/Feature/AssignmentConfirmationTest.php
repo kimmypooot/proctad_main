@@ -60,6 +60,33 @@ class AssignmentConfirmationTest extends TestCase
         Mail::assertSent(TemplatedMail::class);
     }
 
+    /**
+     * NotificationMailer swallows delivery failures into email_logs instead of
+     * throwing, so a failed send used to flash "Confirmation request sent" and
+     * stamp confirmation_sent_at — the exact blind spot that made a broken
+     * mailer look like a working one.
+     */
+    public function test_failed_send_reports_an_error_and_does_not_mark_it_sent(): void
+    {
+        $fo = FieldOffice::factory()->create();
+        $admin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]);
+        $assignment = $this->assignmentFor($fo);
+
+        // Deactivating the template makes NotificationMailer log a failure.
+        EmailTemplate::where('code', 'assignment_confirmation')->update(['is_active' => false]);
+
+        $this->actingAs($admin)
+            ->post("/assignments/{$assignment->id}/send-confirmation")
+            ->assertRedirect()
+            ->assertSessionHas('error')
+            ->assertSessionMissing('success');
+
+        $assignment->refresh();
+        $this->assertNull($assignment->confirmation_sent_at);
+        $this->assertSame(0, $assignment->confirmations()->where('action', ConfirmationAction::Sent)->count());
+        $this->assertSame(1, EmailLog::where('status', 'failed')->count());
+    }
+
     public function test_sending_confirmation_requires_permission(): void
     {
         $fo = FieldOffice::factory()->create();
@@ -101,6 +128,44 @@ class AssignmentConfirmationTest extends TestCase
 
         $this->get("/assignments/{$assignment->id}/confirm?expires=9999999999&signature=bogus")
             ->assertForbidden();
+    }
+
+    /** A member clicking a week-old email must land on an explanation, not the stock 403. */
+    public function test_expired_link_renders_the_link_expired_page(): void
+    {
+        $assignment = ExamAssignment::factory()->create();
+
+        $url = URL::temporarySignedRoute('assignments.confirm', now()->addDays(7), ['assignment' => $assignment->id]);
+
+        $this->travel(8)->days();
+
+        $this->get($url)
+            ->assertForbidden()
+            ->assertInertia(fn ($page) => $page->component('Errors/LinkExpired'));
+    }
+
+    public function test_confirmation_page_shows_the_response_deadline(): void
+    {
+        $assignment = ExamAssignment::factory()->create();
+
+        $expiry = now()->addDays(7);
+        $url = URL::temporarySignedRoute('assignments.confirm', $expiry, ['assignment' => $assignment->id]);
+
+        $this->get($url)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('responseDueBy', $expiry->format('F j, Y')));
+    }
+
+    /** The room is withheld until exam day — it must not reach this public page at all. */
+    public function test_confirmation_page_never_exposes_the_room(): void
+    {
+        $assignment = ExamAssignment::factory()->create();
+
+        $url = URL::temporarySignedRoute('assignments.confirm', now()->addDays(7), ['assignment' => $assignment->id]);
+
+        $this->get($url)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->missing('assignment.room'));
     }
 
     public function test_member_can_confirm_via_signed_link(): void

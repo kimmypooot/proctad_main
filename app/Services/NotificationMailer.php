@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Mail\TemplatedMail;
 use App\Models\EmailLog;
 use App\Models\EmailTemplate;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
@@ -41,6 +42,22 @@ class NotificationMailer
         }
 
         $rendered = $template->render($data);
+
+        // Email is globally paused (Settings → General). AppServiceProvider has
+        // already redirected the mailer to 'log', so sending would "succeed" and
+        // record a misleading 'sent' row — log it as skipped instead, so the
+        // audit trail reflects that nothing was delivered.
+        if (! Setting::emailSendingEnabled()) {
+            return EmailLog::create([
+                'recipient_email' => $toEmail,
+                'recipient_name' => $toName,
+                'subject' => $rendered['subject'],
+                'email_type' => $emailType,
+                'status' => 'skipped',
+                'error_message' => 'Email sending is switched off in Settings.',
+                'sent_by' => $sentBy?->id,
+            ]);
+        }
 
         try {
             Mail::to($toEmail)->send(new TemplatedMail($template, $data));

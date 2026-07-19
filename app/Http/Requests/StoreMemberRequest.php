@@ -51,7 +51,7 @@ class StoreMemberRequest extends FormRequest
     {
         return function (string $attribute, mixed $value, \Closure $fail) {
             $user = $this->user();
-            if ($user->role === UserRole::FoAdmin && (int) $value !== $user->field_office_id) {
+            if ($user->role->isFieldOfficeScoped() && (int) $value !== $user->field_office_id) {
                 $fail('You can only manage members of your own Testing Center.');
             }
         };

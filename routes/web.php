@@ -63,8 +63,16 @@ Route::get('/contact', fn () => Inertia::render('Contact'))->name('contact');
 Route::get('/privacy-policy', fn () => Inertia::render('PrivacyPolicy'))->name('privacy');
 Route::get('/terms-and-conditions', fn () => Inertia::render('Terms'))->name('terms');
 Route::get('/maintenance', fn () => Inertia::render('Maintenance'))->name('maintenance');
-Route::get('/verify/{proctadId}', VerifyController::class)->name('verify');
-Route::get('/verify-certificate/{certificateNo}', VerifyCertificateController::class)->name('verify-certificate');
+// Public QR verification. Throttled because certificate numbers are sequential
+// (RO8-CAP-2026-00001, -00002, …), so an unthrottled endpoint lets anyone walk
+// the range and harvest every releasee's name, PROCTAD ID and testing center.
+// 10/min is far above scanning one QR code and far below a useful sweep.
+Route::get('/verify/{proctadId}', VerifyController::class)
+    ->middleware('throttle:10,1')
+    ->name('verify');
+Route::get('/verify-certificate/{certificateNo}', VerifyCertificateController::class)
+    ->middleware('throttle:10,1')
+    ->name('verify-certificate');
 
 // Assignment confirmation: opened from an emailed signed link, no login required.
 Route::get('/assignments/{assignment}/confirm', [AssignmentConfirmationController::class, 'show'])
@@ -152,7 +160,7 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])
         ->name('notifications.read-all');
 
-    Route::middleware('role:super_admin,esd_admin,fo_admin')->group(function () {
+    Route::middleware('role:super_admin,esd_admin,fo_admin,field_director')->group(function () {
         Route::get('/scanner', ScannerController::class)->name('scanner');
         Route::post('/scanner/mark-attendance', [ScannerController::class, 'bulkMarkAttendance'])
             ->name('scanner.mark-attendance');
@@ -216,6 +224,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::get('/service-history/{member}', [ServiceHistoryController::class, 'show'])->name('service-history.show');
 
         Route::resource('signatories', SignatoryController::class)->only('index', 'store', 'update', 'destroy');
+        Route::get('/signatories/{signatory}/signature', [SignatoryController::class, 'signature'])
+            ->name('signatories.signature');
         Route::resource('schools', SchoolController::class)->only('index', 'store', 'update', 'destroy');
 
         Route::resource('other-examination-personnel', OtherExaminationPersonnelController::class);

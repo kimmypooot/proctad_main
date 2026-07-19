@@ -115,6 +115,17 @@ class MyProctadController extends Controller
                     $computed = $ratingCalculator->computeFor($assignment);
                     $rating = $computed['rating'] ?? $assignment->performance_rating;
 
+                    // A member learns their room only after physically reporting in
+                    // and being scanned at the venue — never in advance. Once
+                    // revealed it stays on the record, so past service keeps showing
+                    // the room actually worked. The exam-date guard is what stops a
+                    // backfilled or corrected attendance stamp from leaking the room
+                    // for an examination that hasn't happened yet.
+                    $examDate = $assignment->examination?->exam_date;
+                    $roomVisible = $assignment->attendance_confirmed_at !== null
+                        && $examDate !== null
+                        && ! $examDate->isFuture();
+
                     return [
                         'id' => $assignment->id,
                         'exam_title' => $assignment->examination?->title,
@@ -124,9 +135,13 @@ class MyProctadController extends Controller
                         'status_label' => $assignment->status->label(),
                         'status_variant' => $assignment->status->badgeVariant(),
                         'testing_center' => $assignment->examinationSchool?->school?->name,
-                        'room' => $assignment->room
+                        // Withheld rooms are omitted from the payload entirely, not
+                        // just hidden in the template — this page is the member's
+                        // own data, so the value must not be readable in devtools.
+                        'room' => $roomVisible && $assignment->room
                             ? trim("{$assignment->room->designation} {$assignment->room->room_number}")
                             : null,
+                        'room_withheld' => ! $roomVisible && $assignment->room !== null,
                         'attended' => (bool) $assignment->attendance_confirmed_at,
                         'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y g:i A'),
                         'confirmed_by' => $assignment->confirmedBy?->name,

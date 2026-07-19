@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { usePage } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import NavBar from '@/Components/NavBar.vue';
 import AppFooter from '@/Components/AppFooter.vue';
 import BaseAlert from '@/Components/BaseAlert.vue';
@@ -14,6 +14,10 @@ const flashVisible = ref(true);
 const flash = computed(() => page.props.flash ?? {});
 
 watch(() => page.props.flash, () => (flashVisible.value = true));
+
+/* Signed-in staff pass straight through maintenance mode, so without this they
+   see a working public site and conclude the switch is broken. */
+const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
 </script>
 
 <template>
@@ -27,9 +31,23 @@ watch(() => page.props.flash, () => (flashVisible.value = true));
 
         <NavBar />
 
+        <div v-if="maintenanceMode" class="border-b border-amber-200 bg-amber-50 px-4 py-2.5 sm:px-6 lg:px-8">
+            <div class="mx-auto flex w-full max-w-7xl items-center gap-2 text-sm text-amber-900">
+                <AppIcon name="exclamation-triangle" class="h-4 w-4 shrink-0" />
+                <p class="min-w-0">
+                    <span class="font-semibold">Maintenance mode is on.</span>
+                    You can see this page because you are signed in — visitors get a maintenance notice instead.
+                    <Link href="/settings" class="font-semibold underline hover:text-amber-950">Manage in Settings</Link>
+                </p>
+            </div>
+        </div>
+
+        <!-- aria-live so a response registering is announced, not just shown. -->
         <div
             v-if="flashVisible && (flash.success || flash.error)"
             class="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 lg:px-8"
+            role="status"
+            aria-live="polite"
         >
             <BaseAlert
                 :variant="flash.success ? 'success' : 'error'"

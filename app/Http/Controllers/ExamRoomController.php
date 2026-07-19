@@ -59,20 +59,24 @@ class ExamRoomController extends Controller
                 'member_name' => $a->member->name,
             ]);
 
+        // Assigning staff only ever changes assignments/breakdown/stats, so the
+        // staffing map re-requests just those three (see Rooms.vue's `only:`).
+        // Everything else is a closure: on a partial reload Inertia never
+        // evaluates it, and the client keeps the copy it already has.
         return Inertia::render('Examinations/Rooms', [
-            'examination' => [
+            'examination' => fn () => [
                 'id' => $venue->examination->id,
                 'title' => $venue->examination->title,
                 'exam_date' => $venue->examination->exam_date->toDateString(),
             ],
-            'venue' => [
+            'venue' => fn () => [
                 'id' => $venue->id,
                 'school_name' => $venue->school?->name,
                 'municipality' => $venue->school?->municipality,
                 'contact_person' => $venue->school?->contact_person,
                 'contact_number' => $venue->school?->contact_number,
             ],
-            'rooms' => $rooms->map(fn (ExamRoom $room) => [
+            'rooms' => fn () => $rooms->map(fn (ExamRoom $room) => [
                 'id' => $room->id,
                 'room_number' => $room->room_number,
                 'capacity' => $room->capacity,
@@ -82,7 +86,7 @@ class ExamRoomController extends Controller
             'assignments' => $assignments,
             'roomBreakdown' => $this->roomStaffing->breakdown($rooms, $assignments),
             'stats' => $this->roomStaffing->stats($rooms, $assignments),
-            'designations' => self::DESIGNATIONS,
+            'designations' => fn () => self::DESIGNATIONS,
         ]);
     }
 
@@ -219,7 +223,7 @@ class ExamRoomController extends Controller
 
         abort_unless(
             $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
-                || ($user->role === UserRole::FoAdmin && $user->field_office_id === $venue->school?->field_office_id),
+                || ($user->role->isFieldOfficeScoped() && $user->field_office_id === $venue->school?->field_office_id),
             403,
         );
     }

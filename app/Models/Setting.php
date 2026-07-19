@@ -43,12 +43,33 @@ class Setting extends Model
         });
     }
 
+    /** Settings key for the outbound-email kill switch. */
+    public const EMAIL_SENDING_ENABLED = 'email_sending_enabled';
+
+    /**
+     * Whether the system may send outbound email at all. Defaults to true so a
+     * missing row (fresh install, unseeded database) never silently swallows
+     * mail — it has to be switched off deliberately.
+     */
+    public static function emailSendingEnabled(): bool
+    {
+        return (bool) static::get(self::EMAIL_SENDING_ENABLED, true);
+    }
+
     public static function set(string $key, mixed $value, string $type = 'string', ?int $updatedBy = null): self
     {
         return static::updateOrCreate(
             ['key' => $key],
             [
-                'value' => $type === 'json' ? json_encode($value) : (string) $value,
+                // Booleans are normalised to '1'/'0' rather than cast with
+                // (string), which turns false into an empty string — readable
+                // back via filter_var, but it meant the seeder and the settings
+                // UI stored two different representations of "off".
+                'value' => match (true) {
+                    $type === 'json' => json_encode($value),
+                    $type === 'boolean' => filter_var($value, FILTER_VALIDATE_BOOLEAN) ? '1' : '0',
+                    default => (string) $value,
+                },
                 'type' => $type,
                 'updated_by' => $updatedBy,
             ],

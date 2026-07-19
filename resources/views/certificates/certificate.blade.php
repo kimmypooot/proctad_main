@@ -98,6 +98,10 @@
        renderA4's `contentEnd + 25mm` anchoring in the reference. The 54pt
        top margin is the space left for a wet signature to overlay the name. */
     .signatory { margin-top: 54pt; text-align: center; }
+    /* With an e-signature the image itself fills the gap that was reserved for
+       a wet signature, so the block sits closer to the body text. */
+    .signatory-signed { margin-top: 20pt; }
+    .sig-image { display: block; height: 40pt; width: auto; margin: 0 auto 2pt; }
     .sig-name {
         font-family: 'Mirante', serif;
         font-weight: bold;
@@ -213,7 +217,10 @@
         @endif
 
         @if ($certificate->signatory_name)
-            <div class="signatory">
+            <div class="signatory {{ ($signatureDataUri ?? null) ? 'signatory-signed' : '' }}">
+                @if ($signatureDataUri ?? null)
+                    <img class="sig-image" src="{{ $signatureDataUri }}" alt="">
+                @endif
                 <p class="sig-name">{{ mb_strtoupper($certificate->signatory_name) }}</p>
                 <p class="sig-pos">{{ $certificate->signatory_position }}</p>
             </div>

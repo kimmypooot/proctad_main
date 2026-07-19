@@ -22,6 +22,18 @@ const notificationsOpen = ref(false);
 const userMenuOpen = ref(false);
 const notifications = computed(() => page.props.notifications ?? { unread_count: 0, items: [] });
 
+/**
+ * Sidebar counters, keyed by a nav item's `badge` field. Server-scoped to what
+ * the user may actually act on (Certificate::scopePendingApprovalFor), so the
+ * number always matches what the linked page will list.
+ */
+const badgeCounts = computed(() => ({
+    pendingApprovals: page.props.pendingApprovalCount ?? 0,
+}));
+const badgeCount = (item) => (item.badge ? badgeCounts.value[item.badge] ?? 0 : 0);
+
+const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
+
 // Single source of truth for the desktop/mobile split — avoids re-reading
 // window.innerWidth at click time and lets us react to viewport changes.
 const desktopQuery = window.matchMedia('(min-width: 1024px)');
@@ -163,16 +175,39 @@ const navByRole = {
         {
             section: 'Approvals',
             items: [
-                { label: 'Pending Approvals', icon: 'clipboard-check', href: '/approvals' },
+                { label: 'Pending Approvals', icon: 'clipboard-check', href: '/approvals', badge: 'pendingApprovals' },
+            ],
+        },
+        // Field Directors run their Testing Center's operations as well as
+        // approving, so this mirrors fo_admin's menu plus Approvals and the
+        // Audit Trail.
+        {
+            section: 'Management',
+            items: [
+                { label: 'PROCTAD Members', icon: 'users', href: '/members' },
+                { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
+                { label: 'Blacklisted Test Admins', icon: 'exclamation-triangle', href: '/blacklists' },
             ],
         },
         {
-            section: 'Records',
+            section: 'Examinations',
             items: [
-                { label: 'Members', icon: 'users', href: '/members' },
-                { label: 'Certificates', icon: 'document-check', href: '/certificates' },
-                { label: 'Service Records', icon: 'document-text', href: '/examinations' },
-                { label: 'Blacklisted Test Admins', icon: 'exclamation-triangle', href: '/blacklists' },
+                { label: 'Examinations', icon: 'calendar', href: '/examinations' },
+                { label: 'Certificates', icon: 'paper-airplane', href: '/certificates' },
+                { label: 'Trainings', icon: 'academic-cap', href: '/trainings' },
+            ],
+        },
+        {
+            section: 'Configuration',
+            items: [
+                { label: 'Schools', icon: 'building-office', href: '/schools' },
+                { label: 'Signatories', icon: 'identification', href: '/signatories' },
+            ],
+        },
+        {
+            section: 'Tools',
+            items: [
+                { label: 'QR Scanner', icon: 'qr-code', href: '/scanner' },
             ],
         },
         {
@@ -200,7 +235,7 @@ const navByRole = {
         {
             section: 'Approvals',
             items: [
-                { label: 'Appreciation Approvals', icon: 'clipboard-check', href: '/approvals' },
+                { label: 'Appreciation Approvals', icon: 'clipboard-check', href: '/approvals', badge: 'pendingApprovals' },
             ],
         },
         {
@@ -228,7 +263,7 @@ const navByRole = {
         {
             section: 'Approvals',
             items: [
-                { label: 'Approvals', icon: 'clipboard-check', href: '/approvals' },
+                { label: 'Approvals', icon: 'clipboard-check', href: '/approvals', badge: 'pendingApprovals' },
             ],
         },
         {
@@ -293,7 +328,7 @@ navByRole.super_admin = [
     {
         section: 'Approvals',
         items: [
-            { label: 'Approvals', icon: 'clipboard-check', href: '/approvals' },
+            { label: 'Approvals', icon: 'clipboard-check', href: '/approvals', badge: 'pendingApprovals' },
         ],
     },
     {
@@ -450,8 +485,8 @@ const logout = () => {
                                 <Link
                                     v-if="item.href !== '#'"
                                     :href="item.href"
-                                    :title="item.label"
-                                    class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+                                    :title="badgeCount(item) ? `${item.label} — ${badgeCount(item)} awaiting approval` : item.label"
+                                    class="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
                                     :class="[
                                         sidebarCollapsed && 'lg:justify-center lg:px-2',
                                         $page.url.startsWith(item.href)
@@ -462,6 +497,24 @@ const logout = () => {
                                 >
                                     <AppIcon :name="item.icon" class="h-5 w-5 shrink-0" />
                                     <span :class="sidebarCollapsed && 'lg:hidden'">{{ item.label }}</span>
+
+                                    <!-- Expanded: full count. Collapsed: a dot, since the
+                                         number is unreadable at icon-only width. -->
+                                    <span
+                                        v-if="badgeCount(item)"
+                                        class="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent-500 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white"
+                                        :class="sidebarCollapsed && 'lg:hidden'"
+                                    >
+                                        {{ badgeCount(item) > 99 ? '99+' : badgeCount(item) }}
+                                    </span>
+                                    <span
+                                        v-if="badgeCount(item) && sidebarCollapsed"
+                                        class="absolute right-1.5 top-1.5 hidden h-2 w-2 rounded-full bg-accent-500 ring-2 ring-brand-900 lg:block"
+                                        aria-hidden="true"
+                                    />
+                                    <span v-if="badgeCount(item)" class="sr-only">
+                                        {{ badgeCount(item) }} certificates awaiting your approval
+                                    </span>
                                 </Link>
                                 <span
                                     v-else
@@ -644,6 +697,19 @@ const logout = () => {
             </BaseModal>
 
             <ToastContainer />
+
+            <!-- Staff browse normally while the public site is closed, so this is
+                 the only thing stopping it being left on by accident. -->
+            <div v-if="maintenanceMode" class="border-b border-amber-200 bg-amber-50 px-4 py-2.5 sm:px-6">
+                <div class="mx-auto flex w-full max-w-screen-2xl items-center gap-2 text-sm text-amber-900">
+                    <AppIcon name="exclamation-triangle" class="h-4 w-4 shrink-0" />
+                    <p class="min-w-0">
+                        <span class="font-semibold">Maintenance mode is on.</span>
+                        Visitors to the public website see a maintenance notice.
+                        <Link href="/settings" class="font-semibold underline hover:text-amber-950">Turn it off</Link>
+                    </p>
+                </div>
+            </div>
 
             <main id="main-content" class="flex-1 p-4 sm:p-6">
                 <div class="mx-auto w-full max-w-screen-2xl">

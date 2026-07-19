@@ -2,9 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
-use App\Enums\UserRole;
 use App\Models\Certificate;
 use App\Models\FieldOffice;
 use App\Services\CertificateService;
@@ -30,17 +28,13 @@ class CertificateApprovalController extends Controller
         $user = $request->user();
         $regionWide = $user->role->isRegionWide();
 
-        $types = match ($user->role) {
-            UserRole::FieldDirector, UserRole::SuperAdmin, UserRole::EsdAdmin => [
-                CertificateType::Appearance, CertificateType::DesignationOrder, CertificateType::Appreciation,
-            ],
-            UserRole::Management => [CertificateType::Appreciation],
-            default => abort(403),
-        };
+        $types = Certificate::approvableTypesFor($user);
 
-        $base = Certificate::where('status', CertificateStatus::Pending)
-            ->whereIn('type', $types)
-            ->when(! $regionWide, fn ($q) => $q->where('field_office_id', $user->field_office_id));
+        abort_if($types === [], 403);
+
+        // Scoping lives on the model so the sidebar badge counts exactly what
+        // this queue lists — see Certificate::scopePendingApprovalFor().
+        $base = Certificate::query()->pendingApprovalFor($user);
 
         $pending = (clone $base)
             ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix',
@@ -63,6 +57,10 @@ class CertificateApprovalController extends Controller
                 'source' => $certificate->sourceDescription(),
                 'source_date' => $certificate->sourceDate(),
                 'requested_by' => $certificate->requestedBy?->name ?? 'System',
+                // Approving your own request is allowed — a Field Director must be
+                // able to cover for an absent FO Admin — but it should be a
+                // conscious act, not something that happens without being noticed.
+                'self_requested' => $certificate->requested_by === $user->id,
                 'requested_at' => $certificate->created_at->format('M d, Y H:i'),
                 'requested_ago' => $certificate->created_at->diffForHumans(),
                 // diffInDays() returns a float (whole + fractional days) as

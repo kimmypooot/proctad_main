@@ -125,4 +125,37 @@ class ExamRoomTest extends TestCase
         $this->assertSame('BCLTE', $designated->fresh()->designation);
         $this->assertSame('Professional', $undesignated->fresh()->designation);
     }
+
+    /**
+     * The staffing map assigns optimistically and re-requests only the three
+     * props an assignment can change (see Rooms.vue's `only:`). That only pays
+     * off while the rest stay unevaluated closures in index() — if someone
+     * unwraps one, it silently ships on every dropdown change again.
+     */
+    public function test_partial_reload_returns_only_the_staffing_props(): void
+    {
+        $venue = ExaminationSchool::factory()->create();
+        ExamRoom::factory()->count(3)->create(['examination_school_id' => $venue->id]);
+
+        $response = $this->actingAs($this->admin())
+            ->get("/venues/{$venue->id}/rooms", [
+                'X-Inertia' => 'true',
+                'X-Inertia-Version' => (string) (new \App\Http\Middleware\HandleInertiaRequests)->version(request()),
+                'X-Inertia-Partial-Component' => 'Examinations/Rooms',
+                'X-Inertia-Partial-Data' => 'assignments,roomBreakdown,stats',
+            ])
+            ->assertOk();
+
+        // A partial reload returns JSON, not the full page object, so assert on
+        // the payload directly — assertInertia() only handles HTML responses.
+        $props = $response->json('props');
+
+        $this->assertArrayHasKey('assignments', $props);
+        $this->assertArrayHasKey('roomBreakdown', $props);
+        $this->assertArrayHasKey('stats', $props);
+
+        foreach (['rooms', 'venue', 'examination', 'designations'] as $skipped) {
+            $this->assertArrayNotHasKey($skipped, $props, "'{$skipped}' must stay a closure so partial reloads skip it.");
+        }
+    }
 }

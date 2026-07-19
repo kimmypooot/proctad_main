@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -27,7 +27,32 @@ const form = useForm({
     position: '',
     field_office_id: '',
     active: true,
+    signature: null,
+    remove_signature: false,
 });
+
+/** Local object URL for previewing a freshly picked file before it's uploaded. */
+const signaturePreview = ref(null);
+const setSignaturePreview = (file) => {
+    if (signaturePreview.value) URL.revokeObjectURL(signaturePreview.value);
+    signaturePreview.value = file ? URL.createObjectURL(file) : null;
+};
+
+const onSignaturePicked = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    form.signature = file;
+    form.remove_signature = false;
+    setSignaturePreview(file);
+};
+
+/** Clears both a pending pick and an already-stored image. */
+const clearSignature = () => {
+    form.signature = null;
+    form.remove_signature = true;
+    setSignaturePreview(null);
+};
+
+onBeforeUnmount(() => setSignaturePreview(null));
 
 const scopeOptions = [
     { value: 'region', label: 'Region-wide (default for all Testing Centers)' },
@@ -38,6 +63,7 @@ const openCreate = () => {
     editing.value = null;
     form.reset();
     form.clearErrors();
+    setSignaturePreview(null);
     // FO admins can only assign their single office; preselect it.
     form.field_office_id = props.fieldOffices.length === 1 ? props.fieldOffices[0].id : 'region';
     showForm.value = true;
@@ -50,22 +76,32 @@ const openEdit = (signatory) => {
     form.position = signatory.position;
     form.field_office_id = signatory.field_office_id ?? 'region';
     form.active = signatory.active;
+    form.signature = null;
+    form.remove_signature = false;
+    setSignaturePreview(null);
     showForm.value = true;
 };
+
+/** Existing stored image, unless the user has just replaced or cleared it. */
+const currentSignatureUrl = computed(() => {
+    if (signaturePreview.value) return signaturePreview.value;
+    if (form.remove_signature) return null;
+    return editing.value?.signature_url ?? null;
+});
 
 const submit = () => {
     const transform = (data) => ({
         ...data,
         field_office_id: data.field_office_id === 'region' ? null : data.field_office_id,
+        // PHP can't parse a multipart PUT body, so edits go out as POST with
+        // Laravel's method override — required now that this form carries a file.
+        ...(editing.value ? { _method: 'put' } : {}),
     });
 
     const options = { preserveScroll: true, onSuccess: () => (showForm.value = false) };
+    const url = editing.value ? `/signatories/${editing.value.id}` : '/signatories';
 
-    if (editing.value) {
-        form.transform(transform).put(`/signatories/${editing.value.id}`, options);
-    } else {
-        form.transform(transform).post('/signatories', options);
-    }
+    form.transform(transform).post(url, options);
 };
 
 const destroyForm = useForm({});
@@ -98,6 +134,7 @@ const confirmDelete = () => {
                     <tr>
                         <th class="px-3 py-2">Name</th>
                         <th class="hidden px-3 py-2 sm:table-cell">Position</th>
+                        <th class="hidden px-3 py-2 lg:table-cell">E-Signature</th>
                         <th class="hidden px-3 py-2 md:table-cell">Scope</th>
                         <th class="px-3 py-2">Status</th>
                         <th class="px-3 py-2 text-center">Actions</th>
@@ -110,6 +147,15 @@ const confirmDelete = () => {
                             <p class="text-xs font-normal text-slate-400 sm:hidden">{{ signatory.position }}</p>
                         </td>
                         <td class="hidden px-3 py-2 text-slate-600 sm:table-cell">{{ signatory.position }}</td>
+                        <td class="hidden px-3 py-2 lg:table-cell">
+                            <img
+                                v-if="signatory.signature_url"
+                                :src="signatory.signature_url"
+                                :alt="`${signatory.name} signature`"
+                                class="h-8 w-auto max-w-[140px] object-contain"
+                            />
+                            <span v-else class="text-xs text-slate-400">Signed by hand</span>
+                        </td>
                         <td class="hidden px-3 py-2 md:table-cell">
                             <BaseBadge :variant="signatory.field_office ? 'neutral' : 'brand'">
                                 {{ signatory.field_office?.name ?? 'Region-wide' }}
@@ -151,6 +197,34 @@ const confirmDelete = () => {
                     :options="scopeOptions"
                     :error="form.errors.field_office_id"
                 />
+                <div>
+                    <p class="mb-1.5 block text-sm font-medium text-slate-700">
+                        E-Signature <span class="font-normal text-slate-400">(optional)</span>
+                    </p>
+
+                    <div v-if="currentSignatureUrl" class="mb-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <img :src="currentSignatureUrl" alt="Signature preview" class="h-12 w-auto max-w-[60%] object-contain" />
+                        <button type="button" class="ml-auto text-xs font-semibold text-accent-600 hover:text-accent-700" @click="clearSignature">
+                            Remove
+                        </button>
+                    </div>
+
+                    <input
+                        type="file"
+                        accept="image/png"
+                        class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
+                        @change="onSignaturePicked"
+                    />
+
+                    <p v-if="form.errors.signature" class="mt-1.5 text-sm text-accent-600" role="alert">
+                        {{ form.errors.signature }}
+                    </p>
+                    <p v-else class="mt-1.5 text-xs leading-relaxed text-slate-500">
+                        Transparent PNG, max 2&nbsp;MB. Printed above the name on certificates. Leave empty to keep
+                        signing by hand. Certificates already issued keep the signature they were released with.
+                    </p>
+                </div>
+
                 <CheckboxInput v-model="form.active">Active (used on newly issued IDs and certificates)</CheckboxInput>
             </form>
             <template #footer>

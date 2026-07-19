@@ -198,7 +198,7 @@ class OtherExaminationPersonnelController extends Controller
     {
         return FieldOffice::query()
             ->where(fn ($q) => $q->where('is_active', true)->when($currentId, fn ($q2) => $q2->orWhere('id', $currentId)))
-            ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->whereKey($user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereKey($user->field_office_id))
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
     }

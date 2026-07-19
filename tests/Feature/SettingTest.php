@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -131,5 +132,89 @@ class SettingTest extends TestCase
             ->has('settings', 2)
             ->where('settings.0.key', 'alpha')
         );
+    }
+
+    /**
+     * The page is used by Testing Center staff, not developers — every setting
+     * has to arrive with a plain-language label and an explanation, including
+     * custom keys nobody has written copy for.
+     */
+    public function test_settings_payload_carries_plain_language_labels(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+
+        Setting::set(Setting::EMAIL_SENDING_ENABLED, true, 'boolean');
+        Setting::create(['key' => 'custom_widget_id', 'value' => 'x', 'type' => 'string']);
+
+        $this->actingAs($admin)->get('/settings')->assertInertia(function (Assert $page) {
+            $settings = collect($page->toArray()['props']['settings']);
+
+            $email = $settings->firstWhere('key', Setting::EMAIL_SENDING_ENABLED);
+            $this->assertSame('Send emails', $email['label']);
+            $this->assertSame('Email', $email['group']);
+            $this->assertSame('toggle', $email['control']);
+            $this->assertNotEmpty($email['help']);
+
+            // Uncatalogued key still renders readably rather than as raw snake_case.
+            $custom = $settings->firstWhere('key', 'custom_widget_id');
+            $this->assertSame('Custom widget ID', $custom['label']);
+            $this->assertSame('Other', $custom['group']);
+        });
+    }
+
+    public function test_email_sending_defaults_to_enabled_when_the_setting_is_absent(): void
+    {
+        // A missing row must never silently swallow mail — it has to be
+        // switched off deliberately.
+        $this->assertTrue(Setting::emailSendingEnabled());
+    }
+
+    /**
+     * The kill switch redirects the default mailer to 'log' in AppServiceProvider,
+     * which is what catches senders that call Mail:: directly rather than going
+     * through NotificationMailer.
+     */
+    public function test_pausing_email_redirects_the_mailer_away_from_smtp(): void
+    {
+        config(['mail.default' => 'smtp']);
+        Setting::set(Setting::EMAIL_SENDING_ENABLED, false, 'boolean');
+
+        // Re-boot the provider the way a fresh request would.
+        (new \App\Providers\AppServiceProvider($this->app))->boot();
+
+        $this->assertSame('log', config('mail.default'));
+    }
+
+    public function test_paused_email_is_logged_as_skipped_and_not_sent(): void
+    {
+        Mail::fake();
+        $this->seed(\Database\Seeders\EmailTemplateSeeder::class);
+
+        Setting::set(Setting::EMAIL_SENDING_ENABLED, false, 'boolean');
+
+        $log = app(\App\Services\NotificationMailer::class)->send(
+            templateCode: 'assignment_confirmation',
+            toEmail: 'member@proctad.test',
+            toName: 'Test Member',
+            emailType: 'designation',
+            data: [],
+        );
+
+        $this->assertSame('skipped', $log->status);
+        Mail::assertNothingSent();
+
+        // And back on: the same call sends normally.
+        Setting::set(Setting::EMAIL_SENDING_ENABLED, true, 'boolean');
+
+        $log = app(\App\Services\NotificationMailer::class)->send(
+            templateCode: 'assignment_confirmation',
+            toEmail: 'member@proctad.test',
+            toName: 'Test Member',
+            emailType: 'designation',
+            data: [],
+        );
+
+        $this->assertSame('sent', $log->status);
+        Mail::assertSent(\App\Mail\TemplatedMail::class);
     }
 }

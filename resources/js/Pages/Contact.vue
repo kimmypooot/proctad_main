@@ -30,8 +30,8 @@ const details = [
     {
         icon: 'envelope',
         label: 'Email',
-        lines: ['cscro8@csc.gov.ph'],
-        href: 'mailto:cscro8@csc.gov.ph',
+        lines: ['ro08.esd@csc.gov.ph'],
+        href: 'mailto:ro08.esd@csc.gov.ph',
     },
     {
         icon: 'clock',
@@ -103,7 +103,7 @@ const submit = () => {
                     <!-- Google Map embed -->
                     <div class="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
                         <iframe
-                            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1234!2d124.987!3d11.155!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3309e3b3b3b3b3b3%3A0x3b3b3b3b3b3b3b3b!2sCSC%20Regional%20Office%20VIII!5e0!3m2!1sen!2sph!4v1"
+                            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d587.9861278738567!2d125.00381179609384!3d11.177733681367517!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x330870ce6c6b102f%3A0x1de1827d151c9102!2sCivil%20Service%20Commission%20Regional%20Office%20VIII!5e1!3m2!1sen!2sph!4v1784371610486!5m2!1sen!2sph"
                             width="100%"
                             height="280"
                             style="border:0;"

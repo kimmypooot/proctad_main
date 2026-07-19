@@ -32,4 +32,14 @@ enum UserRole: string
     {
         return in_array($this, [self::FieldDirector, self::FoAdmin], true);
     }
+
+    /**
+     * Everyone who works for the Commission, as opposed to a PROCTAD member
+     * using self-service. Written as "not a member" deliberately: a new staff
+     * role added later should be staff by default, not silently locked out.
+     */
+    public function isStaff(): bool
+    {
+        return $this !== self::Member;
+    }
 }

@@ -15,7 +15,7 @@ class SignatoryPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin);
+        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
     }
 
     public function update(User $user, Signatory $signatory): bool
@@ -38,7 +38,7 @@ class SignatoryPolicy
             return true;
         }
 
-        return $user->role === UserRole::FoAdmin
+        return $user->role->isFieldOfficeScoped()
             && $signatory->field_office_id !== null
             && $signatory->field_office_id === $user->field_office_id;
     }

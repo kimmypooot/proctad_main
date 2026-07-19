@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Certificate;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -51,6 +53,20 @@ class HandleInertiaRequests extends Middleware
                 'error' => fn () => $request->session()->get('error'),
                 'status' => fn () => $request->session()->get('status'),
             ],
+            // Staff see the site as normal while maintenance is on, so without a
+            // banner it's easy to leave the public website closed for days.
+            'maintenanceMode' => fn () => $user
+                ? (bool) Setting::get('site_maintenance_mode', false)
+                : false,
+            // Sidebar badge. A closure, so partial reloads that don't ask for it
+            // skip the COUNT entirely, and roles with no approval rights resolve
+            // to 0 without querying (scopePendingApprovalFor short-circuits).
+            // Named *Count, not 'pendingApprovals': DashboardController already
+            // ships that key as {items, total}, and a page prop shadows a shared
+            // one — reusing the name would blank the badge on /dashboard only.
+            'pendingApprovalCount' => fn () => $user
+                ? Certificate::query()->pendingApprovalFor($user)->count()
+                : 0,
             'notifications' => fn () => $request->user() ? [
                 'unread_count' => $request->user()->unreadNotifications()->count(),
                 'items' => $request->user()->notifications()->latest()->take(8)->get()

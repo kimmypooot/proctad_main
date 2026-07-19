@@ -135,7 +135,7 @@ class ExamAssignmentController extends Controller
 
         // FO Admins may only assign members of their own Testing Center.
         abort_if(
-            $user->role === UserRole::FoAdmin && $member->field_office_id !== $user->field_office_id,
+            $user->role->isFieldOfficeScoped() && $member->field_office_id !== $user->field_office_id,
             403,
         );
 
@@ -197,7 +197,7 @@ class ExamAssignmentController extends Controller
         $members = Member::query()
             ->whereIn('id', $validated['member_ids'])
             ->where('status', 'active')
-            ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
             ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
             ->get();
 
@@ -266,7 +266,7 @@ class ExamAssignmentController extends Controller
                 in_array($id, $blacklistedIds, true) => 'blacklisted',
                 $member === null => 'not found',
                 $member->status !== MemberStatus::Active => 'inactive',
-                $user->role === UserRole::FoAdmin && $member->field_office_id !== $user->field_office_id => 'different field office',
+                $user->role->isFieldOfficeScoped() && $member->field_office_id !== $user->field_office_id => 'different field office',
                 default => 'ineligible',
             };
 
@@ -301,7 +301,7 @@ class ExamAssignmentController extends Controller
 
         $assignments = ExamAssignment::whereIn('id', $validated['assignment_ids'])
             ->where('status', AssignmentStatus::Pending)
-            ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
             ->get();
 
         foreach ($assignments as $assignment) {
@@ -387,7 +387,7 @@ class ExamAssignmentController extends Controller
 
         abort_unless(
             $request->user()->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
-                || ($request->user()->role === UserRole::FoAdmin && $request->user()->field_office_id === $venueFieldOfficeId),
+                || ($request->user()->role->isFieldOfficeScoped() && $request->user()->field_office_id === $venueFieldOfficeId),
             403,
         );
 
@@ -430,7 +430,7 @@ class ExamAssignmentController extends Controller
         $assignment->loadMissing('examination', 'member');
 
         abort_if(
-            $user->role === UserRole::FoAdmin && $assignment->field_office_id !== $user->field_office_id,
+            $user->role->isFieldOfficeScoped() && $assignment->field_office_id !== $user->field_office_id,
             403,
         );
 

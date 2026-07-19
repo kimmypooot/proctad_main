@@ -214,7 +214,13 @@ const closeViewer = () => (viewing.value = null);
                     </div>
                     <div>
                         <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Room</p>
-                        <p class="mt-0.5 text-sm text-slate-800">{{ viewing.room ?? '—' }}</p>
+                        <p v-if="viewing.room" class="mt-0.5 text-sm text-slate-800">{{ viewing.room }}</p>
+                        <!-- Distinguishes "deliberately withheld" from "no room recorded",
+                             so a member doesn't read it as missing data and call the office. -->
+                        <p v-else-if="viewing.room_withheld" class="mt-0.5 text-sm leading-snug text-slate-400">
+                            Given by the secretariat when you report on exam day.
+                        </p>
+                        <p v-else class="mt-0.5 text-sm text-slate-800">—</p>
                     </div>
                     <div>
                         <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Attendance</p>
