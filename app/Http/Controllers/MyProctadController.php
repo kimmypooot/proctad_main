@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AssignmentStatus;
 use App\Enums\EligibilityRequirement;
 use App\Exports\ServiceRecordsExport;
 use App\Http\Requests\UpdateOwnProfileRequest;
+use App\Models\ExamAssignment;
 use App\Models\Member;
+use App\Services\AssignmentConfirmationSender;
+use App\Services\AssignmentResponder;
 use App\Services\IdCardPdfService;
 use App\Services\PerformanceRatingCalculator;
 use App\Support\MemberIdCard;
@@ -13,6 +17,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -220,6 +225,89 @@ class MyProctadController extends Controller
                     'released_at' => $certificate->released_at?->format('M d, Y'),
                 ]) ?? [],
         ]);
+    }
+
+    /**
+     * Upcoming deployments, with the option to respond in place.
+     *
+     * The emailed signed link stays the primary route, but it expires after
+     * seven days and a member cannot resend it to themselves — so a missed
+     * email previously left them unable to see or answer an assignment at all,
+     * short of telephoning their Testing Center.
+     *
+     * Deliberately no room in the payload: it is disclosed in person on exam
+     * day, and every assignment listed here is by definition still upcoming
+     * (see serviceHistory(), where the room appears only once attendance is
+     * confirmed and the date has passed).
+     */
+    public function assignments(Request $request): Response
+    {
+        $member = $this->ownMember($request);
+
+        return Inertia::render('My/Assignments', [
+            'hasRecord' => $member !== null,
+            'records' => $member?->assignments()
+                ->whereHas('examination', fn ($q) => $q->whereDate('exam_date', '>=', today()))
+                ->with('examination:id,title,type,exam_date', 'examinationSchool.school:id,name')
+                ->get()
+                ->sortBy(fn ($assignment) => $assignment->examination?->exam_date)
+                ->values()
+                ->map(fn ($assignment) => [
+                    'id' => $assignment->id,
+                    'exam_title' => $assignment->examination?->title,
+                    'exam_type' => $assignment->examination?->type,
+                    'exam_date' => $assignment->examination?->exam_date?->format('F j, Y (l)'),
+                    'role_label' => $assignment->role->label(),
+                    'venue' => $assignment->examinationSchool?->school?->name,
+                    'status' => $assignment->status->value,
+                    'status_label' => $assignment->status->label(),
+                    'status_variant' => $assignment->status->badgeVariant(),
+                    'awaiting_response' => $assignment->status === AssignmentStatus::Pending,
+                    'decline_reason' => $assignment->decline_reason,
+                    'responded_at' => $assignment->responded_at?->format('M d, Y'),
+                    // The emailed link's deadline, restated so the member can see
+                    // it without digging the email out.
+                    'respond_by' => $assignment->confirmation_sent_at
+                        ?->addDays(AssignmentConfirmationSender::LINK_LIFETIME_DAYS)
+                        ->format('F j, Y'),
+                ]) ?? [],
+        ]);
+    }
+
+    /**
+     * A signed-in member's response, mirroring the emailed signed link.
+     * Both funnel through AssignmentResponder so the one-shot rule, the audit
+     * row and the re-staffing notification cannot drift apart.
+     */
+    public function respondToAssignment(Request $request, ExamAssignment $assignment, AssignmentResponder $responder): RedirectResponse
+    {
+        $member = $this->ownMember($request);
+
+        // Own-record only: a member may answer for themselves and nobody else.
+        abort_unless($member !== null && $assignment->member_id === $member->id, 403);
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['confirm', 'decline'])],
+            'decline_reason' => ['required_if:action,decline', 'nullable', 'string', 'max:500'],
+        ]);
+
+        $confirmed = $validated['action'] === 'confirm';
+
+        $recorded = $responder->respond(
+            $assignment,
+            $confirmed,
+            $validated['decline_reason'] ?? null,
+            $request->ip(),
+            $request->userAgent(),
+        );
+
+        if (! $recorded) {
+            return back()->with('error', 'You have already responded to this assignment. To change your response, please contact your Testing Center.');
+        }
+
+        return back()->with('success', $confirmed
+            ? 'Thank you — your assignment is confirmed.'
+            : 'Your response has been recorded. Thank you for letting us know.');
     }
 
     public function trainings(Request $request): Response

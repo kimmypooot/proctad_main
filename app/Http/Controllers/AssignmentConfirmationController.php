@@ -2,20 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AssignmentStatus;
-use App\Enums\ConfirmationAction;
-use App\Enums\UserRole;
-use App\Models\AssignmentConfirmation;
 use App\Models\ExamAssignment;
-use App\Models\User;
-use App\Notifications\AssignmentDeclined;
 use App\Services\AssignmentConfirmationSender;
+use App\Services\AssignmentResponder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -79,55 +72,32 @@ class AssignmentConfirmationController extends Controller
     /**
      * Record the member's confirm/decline response.
      */
-    public function store(Request $request, ExamAssignment $assignment): RedirectResponse
+    public function store(Request $request, ExamAssignment $assignment, AssignmentResponder $responder): RedirectResponse
     {
         $validated = $request->validate([
             'action' => ['required', Rule::in(['confirm', 'decline'])],
             'decline_reason' => ['required_if:action,decline', 'nullable', 'string', 'max:500'],
         ]);
 
-        if ($assignment->status !== AssignmentStatus::Pending) {
+        $confirmed = $validated['action'] === 'confirm';
+
+        $recorded = $responder->respond(
+            $assignment,
+            $confirmed,
+            $validated['decline_reason'] ?? null,
+            $request->ip(),
+            $request->userAgent(),
+        );
+
+        if (! $recorded) {
             // Responses are deliberately one-shot. Say where to go instead of
             // leaving the member at a dead end with no recourse.
             return back()->with('error', 'You have already responded to this assignment. To change your response, please contact your Testing Center.');
         }
 
-        $confirmed = $validated['action'] === 'confirm';
-
-        $assignment->update([
-            'status' => $confirmed ? AssignmentStatus::Confirmed : AssignmentStatus::Declined,
-            'responded_at' => now(),
-            'decline_reason' => $confirmed ? null : $validated['decline_reason'],
-        ]);
-
-        $assignment->confirmations()->create([
-            'action' => $confirmed ? ConfirmationAction::Confirmed : ConfirmationAction::Declined,
-            'ip_address' => $request->ip(),
-            'user_agent' => Str::limit((string) $request->userAgent(), 250, ''),
-            'metadata' => $confirmed ? null : ['decline_reason' => $validated['decline_reason']],
-        ]);
-
-        if (! $confirmed) {
-            $this->notifyFieldOffice($assignment);
-        }
-
         return back()->with('success', $confirmed
             ? 'Thank you — your assignment is confirmed.'
             : 'Your response has been recorded. Thank you for letting us know.');
-    }
-
-    /**
-     * Bell-notify the owning field office (fo_admin + field_director) that a
-     * declined assignment needs re-staffing.
-     */
-    private function notifyFieldOffice(ExamAssignment $assignment): void
-    {
-        $recipients = User::query()
-            ->whereIn('role', [UserRole::FoAdmin, UserRole::FieldDirector])
-            ->where('field_office_id', $assignment->field_office_id)
-            ->get();
-
-        Notification::send($recipients, new AssignmentDeclined($assignment));
     }
 
     private function present(ExamAssignment $assignment): array

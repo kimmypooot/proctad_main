@@ -141,6 +141,12 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         ->name('my.service-history.print');
     Route::get('/my/service-history/export', [MyProctadController::class, 'exportServiceHistory'])
         ->name('my.service-history.export');
+    Route::get('/my/assignments', [MyProctadController::class, 'assignments'])->name('my.assignments');
+    // Own-record only, enforced in the controller. The emailed signed link
+    // (assignments.confirm.store) remains the route for members who are not
+    // signed in; both share AssignmentResponder.
+    Route::post('/my/assignments/{assignment}/respond', [MyProctadController::class, 'respondToAssignment'])
+        ->name('my.assignments.respond');
     Route::get('/my/certificates', [MyProctadController::class, 'certificates'])->name('my.certificates');
     Route::get('/my/trainings', [MyProctadController::class, 'trainings'])->name('my.trainings');
 

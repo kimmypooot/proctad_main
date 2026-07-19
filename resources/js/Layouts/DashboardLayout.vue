@@ -114,6 +114,7 @@ const navByRole = {
         {
             section: 'Records',
             items: [
+                { label: 'My Assignments', icon: 'calendar', href: '/my/assignments' },
                 { label: 'Service History', icon: 'clock', href: '/my/service-history' },
                 { label: 'Certificates', icon: 'document-check', href: '/my/certificates' },
                 { label: 'Trainings', icon: 'academic-cap', href: '/my/trainings' },

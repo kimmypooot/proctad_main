@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AssignmentStatus;
+use App\Enums\ConfirmationAction;
 use App\Enums\EligibilityRequirement;
 use App\Enums\UserRole;
+use App\Models\ExamAssignment;
+use App\Models\Examination;
 use App\Models\FieldOffice;
 use App\Models\Member;
 use App\Models\User;
@@ -210,6 +214,125 @@ class MyProctadTest extends TestCase
                 ->has('requirements', count(EligibilityRequirement::cases()))
                 ->where('requirements.0.complied', false)
                 ->where('requirements.0.label', EligibilityRequirement::cases()[0]->label()));
+    }
+
+    private function upcomingAssignmentFor(Member $member, string $status = 'pending'): ExamAssignment
+    {
+        return ExamAssignment::factory()->create([
+            'member_id' => $member->id,
+            'field_office_id' => $member->field_office_id,
+            'status' => $status,
+            'confirmation_sent_at' => now(),
+            'examination_id' => Examination::factory()->create(['exam_date' => now()->addDays(30)])->id,
+        ]);
+    }
+
+    public function test_member_sees_only_upcoming_assignments(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+
+        $this->upcomingAssignmentFor($member);
+        ExamAssignment::factory()->create([
+            'member_id' => $member->id,
+            'examination_id' => Examination::factory()->create(['exam_date' => now()->subDays(30)])->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/my/assignments')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('My/Assignments')
+                ->where('hasRecord', true)
+                ->has('records', 1)
+                ->where('records.0.awaiting_response', true));
+    }
+
+    /**
+     * Room is disclosed in person on exam day. It must be absent from the
+     * payload, not merely hidden in the template.
+     */
+    public function test_assignment_payload_never_carries_the_room(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $this->upcomingAssignmentFor($member);
+
+        $this->actingAs($user)
+            ->get('/my/assignments')
+            ->assertInertia(fn (Assert $page) => $page->missing('records.0.room'));
+    }
+
+    public function test_member_can_confirm_their_own_assignment(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $assignment = $this->upcomingAssignmentFor($member);
+
+        $this->actingAs($user)
+            ->post("/my/assignments/{$assignment->id}/respond", ['action' => 'confirm'])
+            ->assertRedirect();
+
+        $assignment->refresh();
+        $this->assertSame(AssignmentStatus::Confirmed, $assignment->status);
+        $this->assertNotNull($assignment->responded_at);
+        $this->assertSame(1, $assignment->confirmations()->where('action', ConfirmationAction::Confirmed)->count());
+    }
+
+    public function test_declining_requires_a_reason_and_records_it(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $assignment = $this->upcomingAssignmentFor($member);
+
+        $this->actingAs($user)
+            ->post("/my/assignments/{$assignment->id}/respond", ['action' => 'decline'])
+            ->assertSessionHasErrors('decline_reason');
+
+        $this->actingAs($user)
+            ->post("/my/assignments/{$assignment->id}/respond", [
+                'action' => 'decline',
+                'decline_reason' => 'Hospital duty that weekend.',
+            ])
+            ->assertRedirect();
+
+        $assignment->refresh();
+        $this->assertSame(AssignmentStatus::Declined, $assignment->status);
+        $this->assertSame('Hospital duty that weekend.', $assignment->decline_reason);
+    }
+
+    /** The whole point of the authorization check: nobody answers for anybody else. */
+    public function test_member_cannot_respond_to_someone_elses_assignment(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $user->id]);
+
+        $someoneElse = Member::factory()->create();
+        $theirAssignment = $this->upcomingAssignmentFor($someoneElse);
+
+        $this->actingAs($user)
+            ->post("/my/assignments/{$theirAssignment->id}/respond", ['action' => 'confirm'])
+            ->assertForbidden();
+
+        $this->assertSame(AssignmentStatus::Pending, $theirAssignment->fresh()->status);
+    }
+
+    /** Responses are one-shot, exactly as through the emailed link. */
+    public function test_responding_twice_is_rejected(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $assignment = $this->upcomingAssignmentFor($member, 'confirmed');
+
+        $this->actingAs($user)
+            ->post("/my/assignments/{$assignment->id}/respond", [
+                'action' => 'decline',
+                'decline_reason' => 'Changed my mind.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame(AssignmentStatus::Confirmed, $assignment->fresh()->status);
     }
 
     /** The member view and the staff view must agree on what is outstanding. */

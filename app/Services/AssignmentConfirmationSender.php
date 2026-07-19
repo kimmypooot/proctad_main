@@ -21,8 +21,12 @@ use Illuminate\Support\Facades\URL;
  */
 class AssignmentConfirmationSender
 {
-    /** How long a confirmation link stays valid (matches the legacy 7-day token). */
-    private const LINK_LIFETIME_DAYS = 7;
+    /**
+     * How long a confirmation link stays valid (matches the legacy 7-day token).
+     * Public because "My Assignments" restates the same deadline to the member;
+     * a second copy of the number would be free to drift out of step with this one.
+     */
+    public const LINK_LIFETIME_DAYS = 7;
 
     public function __construct(private readonly NotificationMailer $mailer) {}
 
