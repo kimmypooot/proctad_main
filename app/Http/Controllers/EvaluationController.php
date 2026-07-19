@@ -6,6 +6,7 @@ use App\Enums\ExamRole;
 use App\Models\Evaluation;
 use App\Models\ExamAssignment;
 use App\Models\Examination;
+use App\Models\Member;
 use App\Services\SupervisionHierarchyResolver;
 use App\Support\EvaluationCriteria;
 use Illuminate\Http\JsonResponse;
@@ -30,7 +31,7 @@ class EvaluationController extends Controller
      * then searches for and selects their own assignment record; everything
      * else (designation, room, hierarchy) is derived server-side from there.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
         return Inertia::render('Evaluations/Create', [
             'examinations' => Examination::query()
@@ -43,7 +44,49 @@ class EvaluationController extends Controller
                     'exam_date' => $exam->exam_date->format('F j, Y'),
                 ]),
             'criteria' => EvaluationCriteria::toArray(),
+            // A signed-in member should not have to search for themselves. The
+            // anonymous search stays the primary path — this page must keep
+            // working with no login at all, on exam day — so this is an
+            // additional shortcut, empty for guests, and every entry still
+            // resolves through the same resolve() endpoint.
+            'myAssignments' => $this->ownEligibleAssignments($request),
         ]);
+    }
+
+    /**
+     * The signed-in member's own evaluable assignments, under exactly the
+     * conditions resolve() enforces: a covered designation, and attendance
+     * confirmed for that exam day.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function ownEligibleAssignments(Request $request): array
+    {
+        $member = $request->user()
+            ? Member::where('user_id', $request->user()->id)->first()
+            : null;
+
+        if ($member === null) {
+            return [];
+        }
+
+        return ExamAssignment::query()
+            ->where('member_id', $member->id)
+            ->whereIn('role', array_column(self::DESIGNATIONS, 'value'))
+            ->whereNotNull('attendance_confirmed_at')
+            ->whereDoesntHave('evaluation')
+            ->with('examination:id,title,exam_date')
+            ->get()
+            ->sortByDesc(fn (ExamAssignment $a) => $a->examination?->exam_date)
+            ->values()
+            ->map(fn (ExamAssignment $a) => [
+                'id' => $a->id,
+                'examination_id' => $a->examination_id,
+                'exam_title' => $a->examination?->title,
+                'exam_date' => $a->examination?->exam_date?->format('F j, Y'),
+                'designation_label' => $this->designationLabel($a->role),
+            ])
+            ->all();
     }
 
     /**

@@ -16,6 +16,9 @@ import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
 const props = defineProps({
     examinations: { type: Array, required: true },
     criteria: { type: Object, required: true },
+    /** Own assignments, when signed in. Always empty for guests — the anonymous
+     *  search below stays the primary path and must keep working without login. */
+    myAssignments: { type: Array, default: () => [] },
 });
 
 const flashSuccess = computed(() => usePage().props.flash?.success);
@@ -99,6 +102,15 @@ watch(searchQuery, (value) => {
     }, 300);
 });
 
+/**
+ * The signed-in shortcut skips the examination picker, so set it from the
+ * assignment first — selectResult reads examinationId when building the form.
+ */
+const selectOwnAssignment = (mine) => {
+    examinationId.value = mine.examination_id;
+    selectResult(mine);
+};
+
 const selectResult = async (result) => {
     resolving.value = true;
     searchError.value = null;
@@ -171,6 +183,33 @@ const submit = () => {
                         :options="examinationOptions"
                         :error="form.errors.examination_id"
                     />
+                </div>
+
+                <!-- Signed in: pick from your own assignments instead of searching. -->
+                <div
+                    v-if="!resolved && myAssignments.length"
+                    class="space-y-4 rounded-xl border border-brand-200 bg-brand-50/40 p-6 shadow-sm"
+                >
+                    <SectionTitle icon="user-circle" label="Your Assignments" />
+                    <p class="text-sm text-slate-600">
+                        You're signed in, so you can pick your assignment directly.
+                    </p>
+
+                    <ul class="divide-y divide-brand-100 rounded-lg border border-brand-100 bg-white">
+                        <li v-for="mine in myAssignments" :key="mine.id">
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-brand-50"
+                                @click="selectOwnAssignment(mine)"
+                            >
+                                <span class="min-w-0">
+                                    <span class="block break-words text-sm font-medium text-slate-800">{{ mine.exam_title }}</span>
+                                    <span class="block text-xs text-slate-500">{{ mine.exam_date }} · {{ mine.designation_label }}</span>
+                                </span>
+                                <AppIcon name="chevron-right" class="h-4 w-4 shrink-0 text-slate-400" />
+                            </button>
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- Step 2: Find yourself -->
