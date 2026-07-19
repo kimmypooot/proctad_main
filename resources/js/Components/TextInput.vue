@@ -17,6 +17,9 @@ const props = defineProps({
     inputmode: { type: String, default: null },
     min: { type: String, default: null },
     max: { type: String, default: null },
+    /** Character limit. Declared as a prop because fallthrough attributes land
+     *  on the outer wrapper, not the `<input>` — see `inputClass` below. */
+    maxlength: { type: [String, Number], default: null },
     /** Extra classes for the `<input>` itself — plain `class` on this component lands on the outer wrapper instead. */
     inputClass: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
@@ -59,6 +62,7 @@ const describedBy = computed(() => {
                 :inputmode="inputmode ?? undefined"
                 :min="min ?? undefined"
                 :max="max ?? undefined"
+                :maxlength="maxlength ?? undefined"
                 :aria-invalid="!!error || undefined"
                 :aria-describedby="describedBy"
                 class="block w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 min-h-[2.75rem] disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"

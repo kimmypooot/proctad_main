@@ -1,58 +1,117 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# PROCTAD
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Professional Conduct of Test Administration — the Civil Service Commission
+Regional Office VIII system for accrediting, deploying and rating test
+administrators for civil service examinations.
 
-## About Laravel
+Replaces a legacy PHP/PDO application. Laravel 13 + Vue 3 + Inertia.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Documentation map
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Most of this project's operational knowledge already lives in dedicated
+documents. Start here:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Document | What it covers |
+|---|---|
+| [`CUTOVER_RUNBOOK.md`](CUTOVER_RUNBOOK.md) | **Read before deploying.** Pre-cutover blockers, cron and queue-worker setup, the ordered cutover sequence, smoke tests, rollback plan. |
+| [`MIGRATION_CHECKPOINT.md`](MIGRATION_CHECKPOINT.md) | Phase-by-phase record of the migration from the legacy system. |
+| [`DATABASE_AUDIT.md`](DATABASE_AUDIT.md) | Legacy schema audit and its mapping onto the new schema. |
+| [`FRONTEND_AUDIT.md`](FRONTEND_AUDIT.md) | Frontend inventory and parity notes. |
 
-## Learning Laravel
+## Requirements
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- PHP 8.3+
+- MySQL
+- Composer
+- Node.js (Vite 8)
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Local setup
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Then, in two terminals:
 
-## Contributing
+```bash
+npm run dev
+php artisan serve
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Seeding
 
-## Code of Conduct
+```bash
+php artisan db:seed
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+> **Never run `db:seed` against production.** `UserSeeder` creates six accounts
+> — including a Super Administrator — all with the password `password` and
+> `@proctad.test` addresses. `MemberSeeder`, `ExaminationSeeder`,
+> `CertificateSeeder` and `TrainingSeeder` create sample records.
 
-## Security Vulnerabilities
+The seeders carrying genuine reference data are `FieldOfficeSeeder`,
+`ExamTypeSeeder`, `SchoolSeeder`, `EmailTemplateSeeder` and `SettingSeeder`.
+Run those individually if a fresh production database needs baseline rows:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan db:seed --class=EmailTemplateSeeder
+```
 
-## License
+Dashboard demo data is separate and opt-in:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```bash
+php artisan db:seed --class=DashboardDemoDataSeeder
+```
+
+## Tests
+
+```bash
+php artisan test
+```
+
+## Production configuration
+
+`.env.example` is a **local development** template. These values must differ in
+production:
+
+| Key | Local | Production |
+|---|---|---|
+| `APP_ENV` | `local` | `production` |
+| `APP_DEBUG` | `true` | **`false`** — while `true`, any error page exposes stack traces, file paths and config values to whoever triggered it |
+| `LOG_LEVEL` | `debug` | `error` |
+| `MAIL_MAILER` | `log` | `smtp` — while `log`, mail is written to the log file and never sent |
+| `APP_URL` | `http://127.0.0.1:8001` | The real host; Google OAuth redirect URIs derive from this |
+| `SESSION_ENCRYPT` | `false` | Consider `true` |
+
+Credentials — `GOOGLE_CLIENT_SECRET`, `MAIL_PASSWORD`, database password — must
+be set on the production host only.
+
+> **Do not put real credentials in `.env.example`.** It is tracked in git, so
+> anything committed there is permanently in history and must be treated as
+> compromised and rotated.
+
+Deployment steps proper — the required cron entry, the queue-worker question,
+and the ordered cutover sequence — are in
+[`CUTOVER_RUNBOOK.md`](CUTOVER_RUNBOOK.md) rather than duplicated here, so
+there is one authoritative copy.
+
+## Scheduled commands
+
+Registered in `routes/console.php`. All three require the `schedule:run` cron
+entry documented in the runbook (§4); without it they never run and nothing
+reports an error:
+
+| Command | Schedule |
+|---|---|
+| `proctad:send-assignment-reminders` | Daily 08:00 |
+| `proctad:expire-pending-assignments` | Daily 01:00 |
+| `proctad:prune-logs` | Monthly |
+
+Verify with `php artisan schedule:list`.
+
+Other commands are operational one-offs: `proctad:migrate-legacy` (the legacy
+ETL), `proctad:regenerate-certificate-pdfs`, `proctad:normalize-name-casing`.

@@ -250,7 +250,7 @@ const submitLift = () => liftForm.post(`/blacklists/${lifting.value.id}/lift`, {
                     </div>
 
                     <div v-else class="relative">
-                        <TextInput v-model="memberSearch" label="Member" required placeholder="Type a name to search…" />
+                        <TextInput v-model="memberSearch" label="Member" required maxlength="100" placeholder="Type a name to search…" />
 
                         <div
                             v-if="memberSearch.trim().length >= 2"

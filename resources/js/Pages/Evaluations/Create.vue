@@ -180,7 +180,7 @@ const submit = () => {
                         Search your name or PROCTAD ID to load your designation and testing assignment automatically.
                     </p>
 
-                    <TextInput v-model="searchQuery" label="Your name or PROCTAD ID" placeholder="e.g. Juan Dela Cruz" />
+                    <TextInput v-model="searchQuery" label="Your name or PROCTAD ID" maxlength="100" placeholder="e.g. Juan Dela Cruz" />
 
                     <p v-if="searching" class="text-sm text-slate-400">Searching…</p>
                     <BaseAlert v-if="searchError" variant="error">{{ searchError }}</BaseAlert>
