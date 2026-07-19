@@ -68,6 +68,13 @@ const draw = () => {
 
 onMounted(draw);
 watch(() => [props.value, props.size, props.branded], draw);
+
+// Exposed so callers can save the rendered code. The canvas holds the
+// full-resolution bitmap (size * RESOLUTION), not the downscaled CSS box,
+// so the saved PNG is print-quality rather than screen-quality.
+defineExpose({
+    toDataUrl: () => canvas.value?.toDataURL('image/png') ?? null,
+});
 </script>
 
 <template>

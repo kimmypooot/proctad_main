@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -8,8 +8,10 @@ import BaseModal from '@/Components/BaseModal.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import EditMemberModal from './EditMemberModal.vue';
 import EmptyState from '@/Components/EmptyState.vue';
-import LoadingSpinner from '@/Components/LoadingSpinner.vue';
 import MemberIdCard from '@/Components/MemberIdCard.vue';
+import QrCode from '@/Components/QrCode.vue';
+import StepTabs from '@/Components/StepTabs.vue';
+import { useDetailsResource } from '@/Composables/useDetailsResource';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -18,8 +20,10 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const loading = ref(false);
-const raw = ref(null);
+const { loading, data: raw, error, load } = useDetailsResource(
+    () => `/members/${props.memberId}/details`,
+    'Could not load member details.',
+);
 
 const member = () => raw.value?.member ?? null;
 const requirements = () => raw.value?.requirements ?? [];
@@ -44,38 +48,42 @@ const onEditSaved = () => {
 
 const rows = reactive({});
 
+const activeTab = ref('details');
+
+const tabs = computed(() => [
+    { key: 'details', label: 'Details' },
+    {
+        key: 'requirements',
+        label: `Requirements (${compliedCount()}/${requirements().length})`,
+        complete: requirements().length > 0 && compliedCount() === requirements().length,
+    },
+    { key: 'id', label: 'Digital ID' },
+    { key: 'history', label: `Service History (${serviceHistory().length})` },
+]);
+
 watch(() => props.show, (open) => {
     if (open && props.memberId) {
+        activeTab.value = 'details';
         fetchMember();
     }
 });
 
 const fetchMember = async () => {
-    loading.value = true;
-    raw.value = null;
-    try {
-        const response = await fetch(`/members/${props.memberId}/details`, {
-            headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error();
-        const json = await response.json();
-        raw.value = json;
+    const json = await load();
 
-        for (const key of Object.keys(rows)) {
-            delete rows[key];
-        }
-        for (const req of json.requirements) {
-            rows[req.key] = {
-                complied: req.complied,
-                remarks: req.remarks ?? '',
-                file: null,
-                saving: false,
-            };
-        }
-    } catch {
-        raw.value = null;
-    } finally {
-        loading.value = false;
+    for (const key of Object.keys(rows)) {
+        delete rows[key];
+    }
+
+    if (json === null) return;
+
+    for (const req of json.requirements) {
+        rows[req.key] = {
+            complied: req.complied,
+            remarks: req.remarks ?? '',
+            file: null,
+            saving: false,
+        };
     }
 };
 
@@ -114,6 +122,19 @@ const onFileChange = (req, event) => {
 
 const printCard = () => window.print();
 
+const qrRef = ref(null);
+const showQrModal = ref(false);
+
+const downloadQr = () => {
+    const dataUrl = qrRef.value?.toDataUrl();
+    if (!dataUrl) return;
+
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = `PROCTAD-${member().proctad_id}-QR.png`;
+    link.click();
+};
+
 const detailItems = (m) => [
     ['Sex', m.sex === 'male' ? 'Male' : 'Female'],
     ['Date of Birth', m.date_of_birth ?? '—'],
@@ -148,77 +169,25 @@ const detailItems = (m) => [
                 </div>
             </div>
 
-            <!-- 3-column grid skeleton -->
-            <div class="grid gap-6 lg:grid-cols-3">
-                <div class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
-                    <div class="h-5 w-32 rounded bg-slate-200" />
-                    <div class="space-y-3">
-                        <div v-for="i in 6" :key="i" class="flex items-baseline justify-between gap-4">
-                            <div class="h-3 w-16 rounded bg-slate-200" />
-                            <div class="h-4 w-28 rounded bg-slate-200" />
-                        </div>
-                    </div>
-                </div>
-                <div class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-6 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div class="h-5 w-44 rounded bg-slate-200" />
-                        <div class="h-5 w-20 rounded-full bg-slate-200" />
-                    </div>
-                    <div v-for="i in 3" :key="i" class="space-y-3 pt-4 border-t border-slate-100">
-                        <div class="flex items-start gap-3">
-                            <div class="mt-0.5 h-6 w-6 rounded-full bg-slate-200" />
-                            <div class="flex-1 space-y-1.5">
-                                <div class="h-4 w-44 rounded bg-slate-200" />
-                                <div class="h-3 w-28 rounded bg-slate-200" />
-                            </div>
-                        </div>
-                        <div class="ml-9 grid gap-3 sm:grid-cols-[auto_1fr_auto_auto]">
-                            <div class="h-4 w-16 rounded bg-slate-200" />
-                            <div class="h-8 rounded-lg bg-slate-200" />
-                            <div class="h-8 w-24 rounded-lg bg-slate-200" />
-                            <div class="h-8 w-14 rounded-lg bg-slate-200" />
-                        </div>
-                    </div>
-                </div>
+            <!-- Tab bar skeleton -->
+            <div class="flex gap-4 border-b border-slate-200 pb-2">
+                <div v-for="i in 4" :key="i" class="h-4 w-24 rounded bg-slate-200" />
             </div>
 
-            <!-- Digital ID skeleton -->
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div class="h-5 w-24 rounded bg-slate-200" />
-                    <div class="h-8 w-28 rounded-lg bg-slate-200" />
-                </div>
-                <div class="rounded-xl border border-slate-200 bg-white p-8 flex items-center justify-center">
-                    <LoadingSpinner class="h-8 w-8 text-slate-300" />
-                </div>
-            </div>
-
-            <!-- Service History skeleton -->
-            <div class="rounded-xl border border-slate-200 bg-white">
-                <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-                    <div class="h-5 w-28 rounded bg-slate-200" />
-                    <div class="flex gap-2">
-                        <div class="h-8 w-16 rounded-lg bg-slate-200" />
-                        <div class="h-8 w-28 rounded-lg bg-slate-200" />
-                    </div>
-                </div>
-                <div class="p-5 space-y-3">
-                    <div v-for="i in 3" :key="i" class="flex items-center gap-4">
-                        <div class="h-4 flex-1 rounded bg-slate-200" />
-                        <div class="h-4 w-24 rounded bg-slate-200" />
-                        <div class="h-4 w-20 rounded bg-slate-200 hidden sm:block" />
-                        <div class="h-4 w-24 rounded bg-slate-200 hidden md:block" />
-                        <div class="h-5 w-16 rounded-full bg-slate-200" />
-                    </div>
+            <!-- Details tab skeleton -->
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div v-for="i in 8" :key="i" class="space-y-1.5">
+                    <div class="h-3 w-16 rounded bg-slate-200" />
+                    <div class="h-4 w-28 rounded bg-slate-200" />
                 </div>
             </div>
         </div>
 
         <template v-else-if="raw">
-            <div class="max-h-[75vh] space-y-6 overflow-y-auto -mx-6 -mt-5 px-6 pt-5">
+            <div class="-mx-6 -mt-5 space-y-4 border-b border-slate-200 px-6 pt-5">
                 <!-- Header with photo -->
                 <div class="flex items-start justify-between gap-4">
-                    <div class="flex items-start gap-4">
+                    <div class="flex min-w-0 items-start gap-4">
                         <div class="shrink-0">
                             <img
                                 v-if="member().photo_url"
@@ -233,9 +202,9 @@ const detailItems = (m) => [
                                 {{ member().first_name?.[0] }}{{ member().last_name?.[0] }}
                             </div>
                         </div>
-                        <div>
-                            <p class="text-xs font-medium uppercase tracking-wide text-brand-700">{{ member().proctad_id }}</p>
-                            <h3 class="text-xl font-semibold text-slate-900">{{ member().name }}</h3>
+                        <div class="min-w-0">
+                            <p class="break-words text-xs font-medium uppercase tracking-wide text-brand-700">{{ member().proctad_id }}</p>
+                            <h3 class="break-words text-xl font-semibold text-slate-900">{{ member().name }}</h3>
                             <div class="mt-1 flex flex-wrap items-center gap-2">
                                 <BaseBadge :variant="member().status_variant">{{ member().status_label }}</BaseBadge>
                                 <BaseBadge v-if="member().field_office" variant="neutral">
@@ -261,96 +230,116 @@ const detailItems = (m) => [
                     <strong>Disqualification remarks:</strong> {{ member().disqualification_remarks }}
                 </div>
 
-                <!-- Member Details + Eligibility Requirements -->
-                <div class="grid gap-6 lg:grid-cols-3">
-                    <div class="rounded-xl border border-slate-200 bg-white p-6">
-                        <h4 class="text-base font-semibold text-slate-900">Member Details</h4>
-                        <dl class="mt-4 space-y-3 text-sm">
-                            <div v-for="[label, value] in detailItems(member())" :key="label">
-                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">{{ label }}</dt>
-                                <dd class="mt-0.5 text-slate-700">{{ value }}</dd>
-                            </div>
-                        </dl>
+                <StepTabs v-model="activeTab" :steps="tabs" aria-label="Member details sections" />
+            </div>
+
+            <div class="-mx-6 max-h-[60vh] overflow-y-auto px-6 py-5">
+                <!-- Details -->
+                <div v-if="activeTab === 'details'">
+                    <dl class="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                        <div v-for="[label, value] in detailItems(member())" :key="label" class="min-w-0">
+                            <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">{{ label }}</dt>
+                            <dd class="mt-0.5 break-words text-slate-700">{{ value }}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <!-- Eligibility Requirements -->
+                <div v-else-if="activeTab === 'requirements'" class="min-w-0">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-base font-semibold text-slate-900">Eligibility Requirements</h4>
+                        <BaseBadge :variant="compliedCount() === requirements().length ? 'success' : 'warning'">
+                            {{ compliedCount() }} / {{ requirements().length }} complied
+                        </BaseBadge>
                     </div>
 
-                    <div class="rounded-xl border border-slate-200 bg-white p-6 lg:col-span-2">
-                        <div class="flex items-center justify-between">
-                            <h4 class="text-base font-semibold text-slate-900">Eligibility Requirements</h4>
-                            <BaseBadge :variant="compliedCount() === requirements().length ? 'success' : 'warning'">
-                                {{ compliedCount() }} / {{ requirements().length }} complied
-                            </BaseBadge>
-                        </div>
-
-                        <ul class="mt-4 divide-y divide-slate-100">
-                            <li v-for="req in requirements()" :key="req.key" class="py-4">
-                                <div class="flex flex-wrap items-start justify-between gap-3">
-                                    <div class="flex items-start gap-3">
-                                        <span
-                                            class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                                            :class="req.complied ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'"
-                                        >
-                                            <AppIcon :name="req.complied ? 'check' : 'x-mark'" class="h-3.5 w-3.5" />
-                                        </span>
-                                        <div>
-                                            <p class="text-sm font-medium text-slate-800">{{ req.label }}</p>
-                                            <p v-if="!can().update && req.remarks" class="mt-0.5 text-xs text-slate-500">
-                                                {{ req.remarks }}
-                                            </p>
-                                        </div>
+                    <ul class="mt-4 divide-y divide-slate-100">
+                        <li v-for="req in requirements()" :key="req.key" class="py-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="flex items-start gap-3">
+                                    <span
+                                        class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                                        :class="req.complied ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'"
+                                    >
+                                        <AppIcon :name="req.complied ? 'check' : 'x-mark'" class="h-3.5 w-3.5" />
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="break-words text-sm font-medium text-slate-800">{{ req.label }}</p>
+                                        <p v-if="!can().update && req.remarks" class="mt-0.5 break-words text-xs text-slate-500">
+                                            {{ req.remarks }}
+                                        </p>
                                     </div>
-                                    <a
-                                        v-if="req.has_file"
-                                        :href="`/members/${member().id}/requirements/${req.key}/download`"
-                                        class="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
-                                    >
-                                        <AppIcon name="document-text" class="h-4 w-4" />
-                                        Download file
-                                    </a>
                                 </div>
-
-                                <div v-if="can().update" class="mt-3 grid gap-3 pl-9 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center">
-                                    <CheckboxInput v-model="rows[req.key].complied">Complied</CheckboxInput>
-                                    <input
-                                        v-model="rows[req.key].remarks"
-                                        type="text"
-                                        placeholder="Remarks (optional)"
-                                        class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                                    >
-                                    <label class="cursor-pointer text-xs font-medium text-slate-500 hover:text-brand-700">
-                                        <input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" @change="onFileChange(req, $event)">
-                                        <span class="inline-flex items-center gap-1">
-                                            <AppIcon name="cloud-arrow-up" class="h-4 w-4" />
+                                <a
+                                    v-if="req.has_file"
+                                    :href="`/members/${member().id}/requirements/${req.key}/download`"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
+                                >
+                                    <AppIcon name="document-text" class="h-4 w-4" />
+                                    Download file
+                                </a>
+                            </div>
+    
+                            <div v-if="can().update" class="mt-3 grid gap-3 pl-9 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center">
+                                <CheckboxInput v-model="rows[req.key].complied">Complied</CheckboxInput>
+                                <input
+                                    v-model="rows[req.key].remarks"
+                                    type="text"
+                                    placeholder="Remarks (optional)"
+                                    class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                                >
+                                <label class="min-w-0 cursor-pointer text-xs font-medium text-slate-500 hover:text-brand-700">
+                                    <input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" @change="onFileChange(req, $event)">
+                                    <span class="flex items-center gap-1">
+                                        <AppIcon name="cloud-arrow-up" class="h-4 w-4 shrink-0" />
+                                        <span class="truncate" :title="rows[req.key].file?.name">
                                             {{ rows[req.key].file ? rows[req.key].file.name : 'Attach file' }}
                                         </span>
-                                    </label>
-                                    <BaseButton
-                                        variant="secondary"
-                                        size="sm"
-                                        :loading="rows[req.key].saving"
-                                        :disabled="rows[req.key].saving"
-                                        @click="saveRequirement(req)"
-                                    >
-                                        Save
-                                    </BaseButton>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
+                                    </span>
+                                </label>
+                                <BaseButton
+                                    variant="secondary"
+                                    size="sm"
+                                    :loading="rows[req.key].saving"
+                                    :disabled="rows[req.key].saving"
+                                    @click="saveRequirement(req)"
+                                >
+                                    Save
+                                </BaseButton>
+                            </div>
+                        </li>
+                    </ul>
                 </div>
 
                 <!-- Digital ID -->
-                <div>
-                    <div class="flex items-center justify-between print:hidden">
-                        <h4 class="text-lg font-semibold text-slate-900">Digital ID</h4>
-                        <BaseButton variant="outline" size="sm" @click="printCard">Print ID Card</BaseButton>
+                <div v-else-if="activeTab === 'id'" class="grid gap-6 md:grid-cols-2">
+                    <div class="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-6">
+                        <div class="flex items-center justify-between gap-2 print:hidden">
+                            <h4 class="text-base font-semibold text-slate-900">ID Card</h4>
+                            <BaseButton variant="outline" size="sm" @click="printCard">Print ID Card</BaseButton>
+                        </div>
+                        <div id="print-id-card" class="mt-4 flex flex-1 items-center justify-center">
+                            <MemberIdCard :card="idCard()" />
+                        </div>
                     </div>
-                    <div id="print-id-card" class="mt-4">
-                        <MemberIdCard :card="idCard()" />
+
+                    <div class="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-6 print:hidden">
+                        <div class="flex items-center justify-between gap-2">
+                            <h4 class="text-base font-semibold text-slate-900">QR Code</h4>
+                            <div class="flex gap-2">
+                                <BaseButton variant="outline" size="sm" @click="showQrModal = true">View</BaseButton>
+                                <BaseButton variant="outline" size="sm" @click="downloadQr">Download</BaseButton>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex flex-1 flex-col items-center justify-center gap-3">
+                            <QrCode ref="qrRef" :value="idCard().qr_value" :size="200" />
+                            <p class="break-all text-center text-xs text-slate-500">{{ idCard().qr_value }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Service History -->
-                <div>
+                <div v-else-if="activeTab === 'history'">
                     <div class="flex items-center justify-between">
                         <h4 class="text-lg font-semibold text-slate-900">Service History</h4>
                         <div class="flex gap-2">
@@ -410,7 +399,7 @@ const detailItems = (m) => [
         </template>
 
         <div v-else class="py-16 text-center text-sm text-slate-400">
-            Could not load member details.
+            {{ error ?? 'Could not load member details.' }}
         </div>
     </BaseModal>
 
@@ -420,6 +409,18 @@ const detailItems = (m) => [
         @close="showEditModal = false"
         @saved="onEditSaved"
     />
+
+    <!-- Enlarged QR -->
+    <BaseModal :show="showQrModal" title="QR Code" @close="showQrModal = false">
+        <div class="flex flex-col items-center gap-4">
+            <QrCode v-if="raw" :value="idCard().qr_value" :size="320" />
+            <p class="break-all text-center text-xs text-slate-500">{{ raw ? idCard().qr_value : '' }}</p>
+        </div>
+        <template #footer>
+            <BaseButton variant="outline" size="sm" @click="showQrModal = false">Close</BaseButton>
+            <BaseButton variant="secondary" size="sm" @click="downloadQr">Download PNG</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- Delete confirmation -->
     <BaseModal :show="showDeleteModal" title="Remove member" @close="showDeleteModal = false">
