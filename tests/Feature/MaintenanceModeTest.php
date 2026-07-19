@@ -97,8 +97,27 @@ class MaintenanceModeTest extends TestCase
         $this->close();
 
         $this->get('/login')->assertOk();
-        $this->get('/member/login')->assertOk();
         $this->get('/forgot-password')->assertOk();
+
+        // Staff sign in with Google too, so those routes cannot be closed.
+        $this->get('/auth/google/redirect')->assertRedirectContains('accounts.google.com');
+    }
+
+    /**
+     * The portal is closed to members, so the member sign-in form is closed with
+     * it — inviting them to sign in only lands them on the notice with nothing
+     * they can do. Staff keep their own sign-in at /login.
+     */
+    public function test_member_sign_in_is_closed_along_with_the_rest_of_the_member_area(): void
+    {
+        $this->close();
+
+        $this->get('/member/login')->assertStatus(503);
+    }
+
+    public function test_member_sign_in_reopens_when_maintenance_is_off(): void
+    {
+        $this->get('/member/login')->assertOk();
     }
 
     /**

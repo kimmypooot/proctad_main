@@ -25,7 +25,16 @@ class CheckMaintenanceMode
      */
     private const EXEMPT_ROUTES = [
         // Staff need to get in to turn maintenance back off.
-        'login', 'login.store', 'member.login', 'logout',
+        //
+        // 'member.login' is deliberately NOT here: the portal is closed to
+        // members, so offering them a sign-in form only lands them on this
+        // notice with nothing they can do. They see the notice instead.
+        //
+        // The Google routes stay open because staff sign in that way too (see
+        // the button on Auth/Login.vue), not only members. A member who goes
+        // through Google directly can still authenticate and will then meet the
+        // notice — with a sign-out control on it.
+        'login', 'login.store', 'logout',
         'google.redirect', 'google.callback', 'google.cancel',
         'password.request', 'password.email', 'password.reset', 'password.store',
 
