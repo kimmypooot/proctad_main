@@ -13,6 +13,7 @@ import SelectInput from '@/Components/SelectInput.vue';
 import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { useToasts } from '@/Composables/useToasts';
+import { messageFor, SessionExpiredError } from '@/Composables/useJsonFetch';
 
 const props = defineProps({
     members: { type: Object, required: true },
@@ -106,7 +107,22 @@ const downloadSelectedIdCards = async () => {
             body: JSON.stringify({ ids: selectedIds.value }),
         });
 
-        if (!response.ok) throw new Error('Download failed');
+        if (response.redirected) throw new SessionExpiredError();
+
+        if (!response.ok) {
+            // Surface the server's reason (e.g. the 200-per-batch cap) instead of
+            // a generic failure, so the user knows to select fewer members.
+            const message = response.headers.get('Content-Type')?.includes('application/json')
+                ? (await response.json()).message
+                : null;
+            throw new Error(message || 'Download failed');
+        }
+
+        // Guard against a redirect-to-HTML being saved as a .pdf: fetch() follows
+        // redirects transparently, so response.ok alone does not prove this is a PDF.
+        if (!response.headers.get('Content-Type')?.includes('application/pdf')) {
+            throw new Error('Download failed');
+        }
 
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -117,8 +133,13 @@ const downloadSelectedIdCards = async () => {
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
-    } catch {
-        pushToast('error', 'Could not download ID cards. Please try again.');
+    } catch (error) {
+        pushToast('error', messageFor(
+            error,
+            error.message && error.message !== 'Download failed'
+                ? error.message
+                : 'Could not download ID cards. Please try again.',
+        ));
     } finally {
         downloadingIds.value = false;
     }

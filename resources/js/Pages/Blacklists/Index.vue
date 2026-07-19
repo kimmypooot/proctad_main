@@ -14,6 +14,7 @@ import StatCard from '@/Components/StatCard.vue';
 import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextArea from '@/Components/TextArea.vue';
 import TextInput from '@/Components/TextInput.vue';
+import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
 
 const props = defineProps({
     blacklists: { type: Object, required: true },
@@ -76,12 +77,10 @@ watch(memberSearch, (value) => {
         searching.value = true;
         try {
             const params = new URLSearchParams({ q: value.trim() });
-            const response = await fetch(`/blacklists/members/search?${params}`, { headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error('Search failed');
-            const data = await response.json();
+            const data = await fetchJson(`/blacklists/members/search?${params}`);
             searchResults.value = data.results;
-        } catch {
-            searchError.value = 'Something went wrong searching — please try again.';
+        } catch (e) {
+            searchError.value = messageFor(e, 'Something went wrong searching — please try again.');
         } finally {
             searching.value = false;
         }

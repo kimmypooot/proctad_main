@@ -4,6 +4,7 @@ import { useForm } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import MemberForm from './MemberForm.vue';
+import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -14,6 +15,7 @@ const emit = defineEmits(['close', 'saved']);
 
 const loading = ref(false);
 const loaded = ref(false);
+const loadError = ref(null);
 const fieldOffices = ref([]);
 const statuses = ref([]);
 
@@ -45,13 +47,10 @@ watch(() => props.show, (open) => {
 const fetchEditData = async () => {
     loading.value = true;
     loaded.value = false;
+    loadError.value = null;
     form.clearErrors();
     try {
-        const response = await fetch(`/members/${props.memberId}/edit-data`, {
-            headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error();
-        const json = await response.json();
+        const json = await fetchJson(`/members/${props.memberId}/edit-data`);
 
         form.first_name = json.member.first_name ?? '';
         form.middle_name = json.member.middle_name ?? '';
@@ -71,8 +70,9 @@ const fetchEditData = async () => {
         fieldOffices.value = json.fieldOffices;
         statuses.value = json.statuses;
         loaded.value = true;
-    } catch {
+    } catch (e) {
         loaded.value = false;
+        loadError.value = messageFor(e, 'Could not load member data.');
     } finally {
         loading.value = false;
     }
@@ -120,7 +120,7 @@ const submit = () => {
         </template>
 
         <div v-else class="py-16 text-center text-sm text-slate-400">
-            Could not load member data.
+            {{ loadError ?? 'Could not load member data.' }}
         </div>
     </BaseModal>
 </template>

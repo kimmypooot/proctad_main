@@ -1,10 +1,11 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { watch } from 'vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import LoadingSpinner from '@/Components/LoadingSpinner.vue';
 import OepIdCard from '@/Components/OepIdCard.vue';
+import { useDetailsResource } from '@/Composables/useDetailsResource';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -13,33 +14,19 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const loading = ref(false);
-const raw = ref(null);
+const { loading, data: raw, error, load } = useDetailsResource(
+    () => `/other-examination-personnel/${props.oepId}/details`,
+    'Could not load personnel details.',
+);
 
 const oep = () => raw.value?.oep ?? null;
 const idCard = () => raw.value?.idCard ?? null;
 
 watch(() => props.show, (open) => {
     if (open && props.oepId) {
-        fetchOep();
+        load();
     }
 });
-
-const fetchOep = async () => {
-    loading.value = true;
-    raw.value = null;
-    try {
-        const response = await fetch(`/other-examination-personnel/${props.oepId}/details`, {
-            headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error();
-        raw.value = await response.json();
-    } catch {
-        raw.value = null;
-    } finally {
-        loading.value = false;
-    }
-};
 </script>
 
 <template>
@@ -107,7 +94,7 @@ const fetchOep = async () => {
         </template>
 
         <div v-else class="py-16 text-center text-sm text-slate-400">
-            Could not load personnel details.
+            {{ error ?? 'Could not load personnel details.' }}
         </div>
     </BaseModal>
 </template>

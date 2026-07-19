@@ -11,6 +11,7 @@ import CheckboxInput from '@/Components/CheckboxInput.vue';
 import RatingGrid from '@/Components/RatingGrid.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import SectionTitle from '@/Components/SectionTitle.vue';
+import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
 
 const props = defineProps({
     examinations: { type: Array, required: true },
@@ -88,12 +89,10 @@ watch(searchQuery, (value) => {
         searching.value = true;
         try {
             const params = new URLSearchParams({ examination_id: examinationId.value, q: value.trim() });
-            const response = await fetch(`/evaluation/search?${params}`, { headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error('Search failed');
-            const data = await response.json();
+            const data = await fetchJson(`/evaluation/search?${params}`);
             searchResults.value = data.results;
-        } catch {
-            searchError.value = 'Something went wrong searching — please try again.';
+        } catch (e) {
+            searchError.value = messageFor(e, 'Something went wrong searching — please try again.');
         } finally {
             searching.value = false;
         }
@@ -104,9 +103,7 @@ const selectResult = async (result) => {
     resolving.value = true;
     searchError.value = null;
     try {
-        const response = await fetch(`/evaluation/assignments/${result.id}`, { headers: { Accept: 'application/json' } });
-        if (!response.ok) throw new Error('Resolve failed');
-        const data = await response.json();
+        const data = await fetchJson(`/evaluation/assignments/${result.id}`);
 
         resolved.value = data;
         form.examination_id = examinationId.value;
@@ -119,8 +116,8 @@ const selectResult = async (result) => {
                 ? data.subordinates.map((s) => ({ ...emptyRoomRating(), ...s }))
                 : [emptyRoomRating()];
         }
-    } catch {
-        searchError.value = 'Could not load that assignment — please try again.';
+    } catch (e) {
+        searchError.value = messageFor(e, 'Could not load that assignment — please try again.');
     } finally {
         resolving.value = false;
     }

@@ -10,6 +10,7 @@ import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
+import { useDetailsResource } from '@/Composables/useDetailsResource';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -18,8 +19,10 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'saved']);
 
-const loading = ref(false);
-const raw = ref(null);
+const { loading, data: raw, error, load } = useDetailsResource(
+    () => `/trainings/${props.trainingId}/modal`,
+    'Could not load training details.',
+);
 
 const training = () => raw.value?.training ?? null;
 const assignments = () => raw.value?.assignments ?? [];
@@ -42,7 +45,7 @@ const assign = () => assignForm.post(`/trainings/${training().id}/assignments`, 
     onSuccess: () => {
         assignForm.reset();
         memberSearch.value = '';
-        fetchTraining();
+        load();
     },
 });
 
@@ -59,7 +62,7 @@ const saveEdit = () => editForm.put(`/training-assignments/${editingAssignment.v
     preserveScroll: true,
     onSuccess: () => {
         editingAssignment.value = null;
-        fetchTraining();
+        load();
     },
 });
 
@@ -69,7 +72,7 @@ const confirmRemove = () => removeForm.delete(`/training-assignments/${removing.
     preserveScroll: true,
     onSuccess: () => {
         removing.value = null;
-        fetchTraining();
+        load();
     },
 });
 
@@ -79,32 +82,17 @@ const complete = () => completeForm.post(`/trainings/${training().id}/complete`,
     preserveScroll: true,
     onSuccess: () => {
         confirmingComplete.value = false;
-        fetchTraining();
+        load();
         emit('saved');
     },
 });
 
 watch(() => props.show, (open) => {
     if (open && props.trainingId) {
-        fetchTraining();
+        load();
     }
 });
 
-const fetchTraining = async () => {
-    loading.value = true;
-    raw.value = null;
-    try {
-        const response = await fetch(`/trainings/${props.trainingId}/modal`, {
-            headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error();
-        raw.value = await response.json();
-    } catch {
-        raw.value = null;
-    } finally {
-        loading.value = false;
-    }
-};
 </script>
 
 <template>
@@ -274,7 +262,7 @@ const fetchTraining = async () => {
         </template>
 
         <div v-else class="py-16 text-center text-sm text-slate-400">
-            Could not load training details.
+            {{ error ?? 'Could not load training details.' }}
         </div>
 
         <!-- Edit attendance modal -->

@@ -4,6 +4,7 @@ import { useForm } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import OtherExaminationPersonnelForm from './OtherExaminationPersonnelForm.vue';
+import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -14,6 +15,7 @@ const emit = defineEmits(['close', 'saved']);
 
 const loading = ref(false);
 const loaded = ref(false);
+const loadError = ref(null);
 const fieldOffices = ref([]);
 const personnelTypes = ref([]);
 
@@ -44,13 +46,10 @@ watch(() => props.show, (open) => {
 const fetchEditData = async () => {
     loading.value = true;
     loaded.value = false;
+    loadError.value = null;
     form.clearErrors();
     try {
-        const response = await fetch(`/other-examination-personnel/${props.oepId}/edit-data`, {
-            headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error();
-        const json = await response.json();
+        const json = await fetchJson(`/other-examination-personnel/${props.oepId}/edit-data`);
 
         form.first_name = json.oep.first_name ?? '';
         form.middle_name = json.oep.middle_name ?? '';
@@ -69,8 +68,9 @@ const fetchEditData = async () => {
         fieldOffices.value = json.fieldOffices;
         personnelTypes.value = json.personnelTypes;
         loaded.value = true;
-    } catch {
+    } catch (e) {
         loaded.value = false;
+        loadError.value = messageFor(e, 'Could not load personnel data.');
     } finally {
         loading.value = false;
     }
@@ -118,7 +118,7 @@ const submit = () => {
         </template>
 
         <div v-else class="py-16 text-center text-sm text-slate-400">
-            Could not load personnel data.
+            {{ loadError ?? 'Could not load personnel data.' }}
         </div>
     </BaseModal>
 </template>

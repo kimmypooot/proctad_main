@@ -1,10 +1,11 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { watch } from 'vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import EmptyState from '@/Components/EmptyState.vue';
+import { useDetailsResource } from '@/Composables/useDetailsResource';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -13,32 +14,19 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const loading = ref(false);
-const raw = ref(null);
+const { loading, data: raw, error, load } = useDetailsResource(
+    () => `/service-history/${props.memberId}`,
+    'Could not load service history.',
+);
 
 const member = () => raw.value?.member ?? null;
 const summary = () => raw.value?.summary ?? { total_served: 0, designations: [] };
 const records = () => raw.value?.records ?? [];
 
 watch(() => props.show, (open) => {
-    if (open && props.memberId) fetchHistory();
+    if (open && props.memberId) load();
 });
 
-const fetchHistory = async () => {
-    loading.value = true;
-    raw.value = null;
-    try {
-        const response = await fetch(`/service-history/${props.memberId}`, {
-            headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error();
-        raw.value = await response.json();
-    } catch {
-        raw.value = null;
-    } finally {
-        loading.value = false;
-    }
-};
 </script>
 
 <template>
@@ -113,7 +101,7 @@ const fetchHistory = async () => {
         </template>
 
         <div v-else class="py-16 text-center text-sm text-slate-400">
-            Could not load service history.
+            {{ error ?? 'Could not load service history.' }}
         </div>
 
         <template #footer>

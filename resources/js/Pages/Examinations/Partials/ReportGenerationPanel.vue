@@ -5,6 +5,7 @@ import BaseAlert from '@/Components/BaseAlert.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import SelectInput from '@/Components/SelectInput.vue';
+import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
 
 const props = defineProps({
     examination: { type: Object, required: true },
@@ -75,12 +76,13 @@ const runPrecheck = async () => {
     checked.value = false;
 
     try {
-        const response = await fetch(precheckUrl.value, { headers: { Accept: 'application/json' } });
-        const data = await response.json();
+        const data = await fetchJson(precheckUrl.value);
         blocking.value = data.blocking ?? [];
         warnings.value = data.warnings ?? [];
-    } catch {
-        blocking.value = ['Could not check report readiness. Please try again.'];
+    } catch (e) {
+        // Fails closed: an unreadable precheck becomes a blocking item, so a
+        // report is never generated on the strength of a check that never ran.
+        blocking.value = [messageFor(e, 'Could not check report readiness. Please try again.')];
         warnings.value = [];
     } finally {
         checking.value = false;
