@@ -228,3 +228,15 @@ The post-examination evaluation flow is public: search by name or PROCTAD ID at
 goes through that same anonymous search even though the system already knows who
 they are and which assignments they attended. Prefilling for authenticated
 members would remove a step and the chance of selecting the wrong record.
+
+### 8.5 Localisation — decided against (2026-07-20)
+
+The interface is English throughout. Region VIII is predominantly Waray-speaking
+with Filipino as a second language, so a Filipino or Waray option was raised as
+a possible enhancement.
+
+**Decision: English only.** Recorded here so it is not re-proposed as an
+oversight. Test administrators are teachers and government employees for whom
+English is the working language of the examinations themselves. Revisit only if
+CSC RO VIII asks for it, and scope it deliberately — retrofitting translation
+across every page and email template is not a small change.
