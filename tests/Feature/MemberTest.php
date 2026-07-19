@@ -137,16 +137,49 @@ class MemberTest extends TestCase
     {
         $member = Member::factory()->create(['field_office_id' => $this->leyte->id]);
 
-        foreach ([UserRole::Management, UserRole::FieldDirector] as $role) {
-            $user = $this->staff($role, $role->isFieldOfficeScoped() ? $this->leyte : null);
+        // Management is region-wide oversight only. Field Directors run their own
+        // Testing Center's operations and are covered separately below.
+        $user = $this->staff(UserRole::Management);
 
-            $this->actingAs($user)->get("/members/{$member->id}")->assertRedirect('/members');
-            $this->actingAs($user)->post('/members', $this->memberPayload($this->leyte, ['email' => "x{$role->value}@example.com"]))
-                ->assertForbidden();
-            $this->actingAs($user)->delete("/members/{$member->id}")->assertForbidden();
-        }
+        $this->actingAs($user)->get("/members/{$member->id}")->assertRedirect('/members');
+        $this->actingAs($user)->post('/members', $this->memberPayload($this->leyte, ['email' => 'x-management@example.com']))
+            ->assertForbidden();
+        $this->actingAs($user)->delete("/members/{$member->id}")->assertForbidden();
 
         $this->actingAs($this->staff(UserRole::Member))->get('/members')->assertForbidden();
+    }
+
+    /**
+     * Field Directors operate their own Testing Center alongside FO Admin staff.
+     * The scoping half matters most: every controller scope keys off
+     * isFieldOfficeScoped(), so a Director must not reach another office's data.
+     */
+    public function test_field_director_manages_own_testing_center_only(): void
+    {
+        $director = $this->staff(UserRole::FieldDirector, $this->leyte);
+
+        $own = Member::factory()->create(['field_office_id' => $this->leyte->id]);
+        $other = Member::factory()->create(['field_office_id' => $this->samar->id]);
+
+        // Can create and edit within their own office.
+        $this->actingAs($director)
+            ->post('/members', $this->memberPayload($this->leyte, ['email' => 'fd-created@example.com']))
+            ->assertRedirect();
+
+        // show() always redirects to the index; details() is the real read.
+        $this->actingAs($director)->get("/members/{$own->id}/details")->assertOk();
+        $this->actingAs($director)->delete("/members/{$own->id}")->assertRedirect();
+
+        // But not another Testing Center's. Deleting is blocked by the policy;
+        // creating is blocked one layer earlier, by the field-office scope rule
+        // on StoreMemberRequest — different mechanisms, same boundary.
+        $this->actingAs($director)->delete("/members/{$other->id}")->assertForbidden();
+
+        $this->actingAs($director)
+            ->post('/members', $this->memberPayload($this->samar, ['email' => 'fd-crossoffice@example.com']))
+            ->assertSessionHasErrors('field_office_id');
+
+        $this->assertDatabaseMissing('members', ['email' => 'fd-crossoffice@example.com']);
     }
 
     public function test_requirement_update_with_file_upload_and_download(): void
@@ -249,5 +282,42 @@ class MemberTest extends TestCase
         $this->actingAs($admin)->delete("/members/{$member->id}")->assertRedirect('/members');
         $this->assertSoftDeleted('members', ['id' => $member->id]);
         $this->assertTrue(Member::withTrashed()->where('proctad_id', $proctadId)->exists());
+    }
+
+    public function test_bulk_id_card_download_requires_an_explicit_id_list(): void
+    {
+        Member::factory()->count(3)->create(['field_office_id' => $this->leyte->id]);
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+
+        // An absent or empty list must not fall through to "every member".
+        $this->actingAs($admin)
+            ->postJson('/members/id-cards/download-bulk', [])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.ids.0', 'The ids field is required.');
+
+        $this->actingAs($admin)
+            ->postJson('/members/id-cards/download-bulk', ['ids' => []])
+            ->assertStatus(422);
+    }
+
+    public function test_bulk_id_card_download_is_bounded_and_scoped_to_the_requesters_office(): void
+    {
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+        $own = Member::factory()->count(2)->create(['field_office_id' => $this->leyte->id]);
+        $other = Member::factory()->create(['field_office_id' => $this->samar->id]);
+
+        $this->actingAs($admin)
+            ->postJson('/members/id-cards/download-bulk', ['ids' => range(1, 201)])
+            ->assertStatus(422);
+
+        // A member outside the requester's office must 403, not be silently omitted.
+        $this->actingAs($admin)
+            ->postJson('/members/id-cards/download-bulk', ['ids' => [$own[0]->id, $other->id]])
+            ->assertForbidden();
+
+        $this->actingAs($admin)
+            ->post('/members/id-cards/download-bulk', ['ids' => $own->pluck('id')->all()])
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
     }
 }

@@ -21,6 +21,7 @@ use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Inertia\Inertia;
@@ -296,13 +297,35 @@ class MemberController extends Controller
         return $this->pdfResponse($service->renderMember($member), "proctad-id-{$member->proctad_id}.pdf");
     }
 
-    public function downloadIdCardBulk(Request $request, IdCardPdfService $service): HttpResponse
+    public function downloadIdCardBulk(Request $request, IdCardPdfService $service): HttpResponse|JsonResponse
     {
         Gate::authorize('viewAny', Member::class);
 
-        $ids = $request->input('ids', []);
+        // 'ids' must be required and bounded: an absent/empty list previously fell
+        // through to "no whereIn", rendering an ID card for every member in the
+        // registry in one synchronous request.
+        //
+        // Validated by hand rather than via $request->validate(): this endpoint is
+        // called by fetch() expecting a PDF, not by Inertia. shouldRenderJsonWhen()
+        // in bootstrap/app.php limits JSON error rendering to 'api/*', so a thrown
+        // ValidationException would redirect — and fetch() follows the redirect to a
+        // 200 HTML page, which the caller would happily save as a .pdf.
+        $validator = Validator::make($request->all(), [
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['integer'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->errors()->first('ids'),
+                'errors' => $validator->errors()->toArray(),
+            ], 422);
+        }
+
+        // Authorized per row rather than via a scoped query: requesting a member
+        // outside your field office should 403, not silently drop them from the PDF.
         $members = Member::query()
-            ->when($ids !== [], fn ($q) => $q->whereIn('id', $ids))
+            ->whereIn('id', $validator->validated()['ids'])
             ->get()
             ->each(fn (Member $member) => Gate::authorize('view', $member));
 
@@ -323,7 +346,7 @@ class MemberController extends Controller
     {
         return FieldOffice::query()
             ->where(fn ($q) => $q->where('is_active', true)->when($currentId, fn ($q2) => $q2->orWhere('id', $currentId)))
-            ->when($user->role === UserRole::FoAdmin, fn ($q) => $q->whereKey($user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereKey($user->field_office_id))
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
     }
