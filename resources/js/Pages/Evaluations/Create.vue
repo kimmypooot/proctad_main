@@ -254,7 +254,9 @@ const rateeOptionsFor = (index) => {
         .filter((r) => !takenElsewhere.includes(r.exam_assignment_id))
         .map((r) => ({
             value: r.exam_assignment_id,
-            label: `${r.room_no ? `Room ${r.room_no} — ` : ''}${r.ratee_name} (${r.role_label})`
+            // room_number is stored already prefixed ("Room-001", see
+            // Examinations/Rooms.vue), so adding another reads "Room Room-001".
+            label: `${r.room_no ? `${r.room_no} — ` : ''}${r.ratee_name} (${r.role_label})`
                 + (r.attendance_confirmed ? '' : ' — attendance not yet confirmed'),
         }));
 };

@@ -65,7 +65,8 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
             <div v-for="(rating, index) in evaluation.room_ratings" :key="index" class="rounded-xl border border-slate-200 bg-white p-6">
                 <div class="flex items-center justify-between">
                     <p class="font-medium text-slate-900">{{ rating.ratee_name }}</p>
-                    <BaseBadge variant="neutral">Room {{ rating.room_no }}</BaseBadge>
+                    <!-- Not prefixed: room_number already reads "Room-001". -->
+                    <BaseBadge variant="neutral">{{ rating.room_no }}</BaseBadge>
                 </div>
                 <div class="mt-4 grid gap-4 sm:grid-cols-3">
                     <div v-for="(group, label) in { Punctuality: rating.punctuality, Decorum: rating.decorum, Procedures: rating.procedures }" :key="label">
