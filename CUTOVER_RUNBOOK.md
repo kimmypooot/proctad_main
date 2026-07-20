@@ -3,6 +3,29 @@
 > Companion to `MIGRATION_CHECKPOINT.md` Phase 9. Written 2026-07-10, targeting the
 > August 2026 CSE-PPT examination as the deployment deadline.
 
+## 0. Preflight
+
+Run this on the production host before anything else, and again after each step
+of §6. It is read-only.
+
+```
+php artisan proctad:preflight
+```
+
+It checks what this runbook otherwise only describes, and concentrates on the
+failures that look exactly like success — a missing queue worker, `MAIL_MAILER`
+still set to `log`, seeded `@proctad.test` accounts, `APP_DEBUG` left on. Exit
+code is non-zero when something must be fixed before real users are let in;
+warnings are advisory and do not block.
+
+Two things it cannot determine from inside the application, and reports as
+warnings for you to confirm on the host: whether cron actually invokes
+`schedule:run`, and — when the queue happens to be empty — whether a worker is
+running. For the latter, run a bulk assignment and re-run the preflight; stale
+jobs then fail the check.
+
+It is not a substitute for §6's smoke test, which exercises real journeys.
+
 ## 1. Pre-cutover blockers (must resolve before go-live)
 
 | # | Item | Status | Owner action needed |
@@ -120,7 +143,10 @@ No open parity gaps found.
    investigate any skips reported by the command.
 4. **Switch**: point the production domain/DNS or web server config at the new
    Laravel app's `public/` directory.
-5. **Smoke test** (do this before opening access to real users):
+5. **Preflight**: `php artisan proctad:preflight` must exit clean (see §0) before
+   the smoke test below. It catches the configuration and infrastructure
+   failures that the smoke test would otherwise surface as confusing symptoms.
+6. **Smoke test** (do this before opening access to real users):
    - Staff login (username or email) succeeds; forced password change works for
      ETL'd accounts flagged `must_change_password`.
    - Member Google login succeeds for an already-registered member.
@@ -132,12 +158,12 @@ No open parity gaps found.
      `/evaluation` page moves it out of the waiting list and offers it — the
      attendance-before-evaluations ordering in §9, which nothing enforces
      automatically.
-6. **Rollback plan**: keep the legacy app and its database untouched (read-only)
+7. **Rollback plan**: keep the legacy app and its database untouched (read-only)
    for at least one full examination cycle after cutover. If a blocking issue is
    found, revert DNS/web server config back to legacy and re-open it read-write;
    any records created in the new system during the failed window must be
    manually reconciled back into legacy before reopening it for writes.
-7. **Post-cutover**: confirm the SMTP password has been rotated (§1.3 — owner-handled);
+8. **Post-cutover**: confirm the SMTP password has been rotated (§1.3 — owner-handled);
    confirm the exposed-files finding (§2) has been resolved; remove or restrict
    `proctad_legacy/` and any SQL dumps from the production web server's document root
    entirely (not just moved within the same host, if that host is directly
