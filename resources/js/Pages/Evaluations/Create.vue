@@ -190,7 +190,8 @@ const rateeOptionsFor = (index) => {
         .filter((r) => !takenElsewhere.includes(r.exam_assignment_id))
         .map((r) => ({
             value: r.exam_assignment_id,
-            label: `${r.room_no ? `Room ${r.room_no} — ` : ''}${r.ratee_name} (${r.role_label})`,
+            label: `${r.room_no ? `Room ${r.room_no} — ` : ''}${r.ratee_name} (${r.role_label})`
+                + (r.attendance_confirmed ? '' : ' — attendance not yet confirmed'),
         }));
 };
 
@@ -367,11 +368,15 @@ const submit = () => {
                         </div>
                         <BaseButton variant="link" type="button" @click="resetSelection">Not you? Search again</BaseButton>
                     </div>
+                    <!-- Wording matters: the roster is now selected, not typed.
+                         The inference is positional and can legitimately come back
+                         empty, so this is a normal state rather than a failure. -->
                     <p
                         v-if="isSupervisingExaminer && form.room_ratings.every((r) => !r.exam_assignment_id)"
                         class="text-xs text-amber-700"
                     >
-                        We couldn't automatically find your room roster — please add the Room Examiners/Proctors you supervised below.
+                        We couldn't work out your room group automatically — please select the Room
+                        Examiners/Proctors you supervised from the list below.
                     </p>
                 </div>
 
@@ -414,7 +419,7 @@ const submit = () => {
                                 :options="rateeOptionsFor(index)"
                                 :error="form.errors[`room_ratings.${index}.exam_assignment_id`]
                                     || form.errors[`room_ratings.${index}.ratee_name`]"
-                                :hint="availableRatees.length ? null : 'No room examiners or proctors with confirmed attendance were found at this testing center.'"
+                                :hint="availableRatees.length ? null : 'No room examiners or proctors are assigned to this testing center — contact your Testing Center before submitting.'"
                                 @update:model-value="(value) => selectRatee(index, value)"
                             />
 

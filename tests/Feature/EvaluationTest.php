@@ -86,6 +86,51 @@ class EvaluationTest extends TestCase
             ->assertJsonPath('available_ratees.0.exam_assignment_id', $ratee->id);
     }
 
+    /**
+     * Evaluations are filled in on or just after exam day, while attendance
+     * confirmation is a separate administrative step that lags behind it.
+     * Filtering ratees on confirmed attendance emptied the roster at exactly the
+     * moment the form is used — observed on real data, where every room examiner
+     * and proctor at the venue was still unconfirmed and the supervising examiner
+     * was told to type names by hand.
+     */
+    public function test_ratees_are_offered_before_their_attendance_is_confirmed(): void
+    {
+        $examination = Examination::factory()->create(['exam_date' => now()->subDays(1)]);
+        $venue = \App\Models\ExaminationSchool::factory()->create(['examination_id' => $examination->id]);
+
+        $supervisor = ExamAssignment::factory()->create([
+            'member_id' => Member::factory()->create()->id,
+            'role' => ExamRole::SupervisingExaminer,
+            'attendance_confirmed_at' => now(),
+            'examination_id' => $examination->id,
+            'examination_school_id' => $venue->id,
+        ]);
+
+        // Assigned, present on the day, paperwork not caught up.
+        $unconfirmed = ExamAssignment::factory()->create([
+            'member_id' => Member::factory()->create()->id,
+            'role' => ExamRole::Proctor,
+            'attendance_confirmed_at' => null,
+            'examination_id' => $examination->id,
+            'examination_school_id' => $venue->id,
+        ]);
+
+        $this->getJson("/evaluation/assignments/{$supervisor->id}")
+            ->assertOk()
+            ->assertJsonPath('available_ratees.0.exam_assignment_id', $unconfirmed->id)
+            ->assertJsonPath('available_ratees.0.attendance_confirmed', false);
+
+        // And the submission is accepted, not just the listing.
+        $this->post('/evaluation', $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => $unconfirmed->id,
+            'room_no' => '001',
+            'ratee_name' => $unconfirmed->member->name,
+        ]))->assertRedirect();
+
+        $this->assertSame(1, \App\Models\Evaluation::count());
+    }
+
     public function test_a_rating_is_stored_against_the_selected_assignment(): void
     {
         [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();

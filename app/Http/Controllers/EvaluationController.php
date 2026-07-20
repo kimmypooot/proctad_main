@@ -247,8 +247,16 @@ class EvaluationController extends Controller
     }
 
     /**
-     * Room Examiners and Proctors at the same venue whose attendance was
-     * confirmed — the only people a respondent may rate.
+     * Room Examiners and Proctors assigned to the same venue — the people a
+     * respondent may rate.
+     *
+     * Deliberately NOT filtered on confirmed attendance, unlike the respondent's
+     * own eligibility. Evaluations are filled in on or just after exam day while
+     * attendance confirmation is a separate administrative step that lags behind
+     * it, so filtering here empties the roster at exactly the moment the form is
+     * used. The supervising examiner is the person who watched who turned up;
+     * they select from the assigned roster rather than being blocked by
+     * paperwork that has not caught up.
      *
      * Scoped to the venue rather than the examination: a supervising examiner
      * has no business rating staff at a testing centre they were never at. This
@@ -265,7 +273,6 @@ class EvaluationController extends Controller
         return ExamAssignment::query()
             ->where('examination_school_id', $assignment->examination_school_id)
             ->whereIn('role', [ExamRole::RoomExaminer->value, ExamRole::Proctor->value])
-            ->whereNotNull('attendance_confirmed_at')
             ->with('member:id,first_name,middle_name,last_name,suffix', 'room:id,room_number')
             ->get()
             ->sortBy(fn (ExamAssignment $a) => sprintf(
@@ -279,6 +286,9 @@ class EvaluationController extends Controller
                 'room_no' => $a->room?->room_number,
                 'ratee_name' => $a->member?->name,
                 'role_label' => $a->role->label(),
+                // Shown in the picker so the respondent can see whose attendance
+                // is still unconfirmed, without it excluding them.
+                'attendance_confirmed' => $a->attendance_confirmed_at !== null,
             ]);
     }
 
