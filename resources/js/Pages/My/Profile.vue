@@ -106,9 +106,11 @@ const submit = () => form
             />
         </div>
 
-        <div v-else class="mt-6 grid gap-6 lg:grid-cols-3">
+        <!-- Four columns, split evenly: the identity card also hosts the edit
+             form, whose paired name fields were cramped at a third of the width. -->
+        <div v-else class="mt-6 grid gap-6 lg:grid-cols-4">
             <!-- Identity card -->
-            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white lg:col-span-2">
                 <div class="bg-gradient-to-br from-brand-700 to-brand-800 px-6 pb-8 pt-6 text-white">
                     <div class="flex items-center gap-4">
                         <div class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/30 bg-white/10">
