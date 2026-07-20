@@ -56,8 +56,7 @@ class DashboardTest extends TestCase
                     ->component('Dashboard/Index')
                     ->where('role', $role->value)
                     ->where('roleLabel', $role->label())
-                    // Members carry an extra card for outstanding evaluations.
-                    ->has('stats', $role === UserRole::Member ? 5 : 4)
+                    ->has('stats', 4)
                     ->where('fieldOffice', $role->isRegionWide()
                         ? null
                         : ['id' => $office->id, 'name' => $office->name, 'code' => $office->code]));

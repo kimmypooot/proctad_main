@@ -475,13 +475,6 @@ class DashboardController extends Controller
                     null,
                     '/my/trainings',
                 ),
-                $this->stat(
-                    'Eligibility Requirements Complied',
-                    $member?->requirements->where('complied', true)->count() ?? 0,
-                    'shield-check',
-                    $member?->status->label() ?? 'Not yet registered',
-                    '/my/profile',
-                ),
                 // Members are asked to evaluate an examination they served, but
                 // nothing told them one was outstanding — they had to think to
                 // visit the public evaluation page and search for themselves.
