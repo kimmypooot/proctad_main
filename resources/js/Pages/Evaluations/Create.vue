@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
+import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import BaseAlert from '@/Components/BaseAlert.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -37,7 +38,8 @@ const flashSuccess = computed(() => usePage().props.flash?.success);
  * form: the rating grids and the supervising-examiner branching are
  * exam-critical, and two implementations would eventually disagree.
  */
-const layout = computed(() => (usePage().props.auth?.user ? DashboardLayout : PublicLayout));
+const inDashboard = computed(() => !!usePage().props.auth?.user);
+const layout = computed(() => (inDashboard.value ? DashboardLayout : PublicLayout));
 
 /**
  * A member's assignments are already known, so asking them to pick an
@@ -186,18 +188,33 @@ const submit = () => {
     <component :is="layout">
         <Head title="Post-Examination Evaluation" />
 
-        <!-- DashboardLayout supplies its own page padding; the public shell does
-             not, so the generous vertical spacing only applies there. -->
+        <!-- Public shell: it supplies no page padding, so the generous vertical
+             spacing belongs here. Dashboard: it supplies its own padding, and its
+             cards are flat — this page's shadow-sm cards would stand out against
+             every other /my/ page, so they are flattened here rather than edited
+             in nine places and kept in sync by hand. -->
         <section
             class="mx-auto max-w-3xl"
-            :class="layout === PublicLayout ? 'px-4 py-12 sm:py-16' : ''"
+            :class="inDashboard ? '[&_.shadow-sm]:shadow-none' : 'px-4 py-12 sm:py-16'"
         >
-            <p class="text-xs font-semibold uppercase tracking-wide text-brand-700">PROCTAD Post-Examination Evaluation</p>
-            <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Test Administrator Performance Evaluation</h1>
-            <p class="mt-3 text-sm leading-relaxed text-slate-600">
-                Please give your sincerest and honest observation. Your response shall serve as management information for
-                future examination administration. All responses are confidential.
-            </p>
+            <!-- Two idioms for the same content. Inside the dashboard this must
+                 read like the other /my/ pages, which all open with a
+                 DashboardPageHeader; on the public site it keeps the standalone
+                 eyebrow-and-headline treatment of a landing page. -->
+            <DashboardPageHeader
+                v-if="inDashboard"
+                title="Post-Examination Evaluation"
+                subtitle="Please give your sincerest and honest observation. Your response shall serve as management information for future examination administration. All responses are confidential."
+            />
+
+            <template v-else>
+                <p class="text-xs font-semibold uppercase tracking-wide text-brand-700">PROCTAD Post-Examination Evaluation</p>
+                <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Test Administrator Performance Evaluation</h1>
+                <p class="mt-3 text-sm leading-relaxed text-slate-600">
+                    Please give your sincerest and honest observation. Your response shall serve as management information for
+                    future examination administration. All responses are confidential.
+                </p>
+            </template>
 
             <BaseAlert v-if="flashSuccess" class="mt-6" variant="success">{{ flashSuccess }}</BaseAlert>
 
