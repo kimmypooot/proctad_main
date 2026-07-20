@@ -14,14 +14,6 @@ use Inertia\Response;
 
 class EvaluationMonitoringController extends Controller
 {
-    /** Roles the Post-Examination Evaluation form covers — the only ones tracked for submission compliance. */
-    private const ELIGIBLE_ROLES = [
-        ExamRole::ChiefExaminer,
-        ExamRole::SupervisingExaminer,
-        ExamRole::Proctor,
-        ExamRole::RoomExaminer,
-    ];
-
     public function index(Request $request): Response
     {
         Gate::authorize('viewAny', Evaluation::class);
@@ -35,7 +27,7 @@ class EvaluationMonitoringController extends Controller
         $assignments = ExamAssignment::query()
             ->with(['member:id,proctad_id,first_name,middle_name,last_name,suffix', 'fieldOffice:id,name,code', 'examinationSchool.school:id,name', 'room:id,room_number'])
             ->withExists('evaluation as has_submitted')
-            ->whereIn('role', array_column(self::ELIGIBLE_ROLES, 'value'))
+            ->evaluable()
             ->when($examinationId, fn ($q) => $q->where('examination_id', $examinationId), fn ($q) => $q->whereRaw('1 = 0'))
             ->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId))
             ->when($request->filled('role'), fn ($q) => $q->where('role', $request->string('role')))
@@ -52,7 +44,13 @@ class EvaluationMonitoringController extends Controller
                     ->orWhere('proctad_id', 'like', "%{$term}%"));
             })
             ->orderBy('field_office_id')
-            ->orderByRaw("FIELD(role, 'chief_examiner', 'supervising_examiner', 'proctor', 'room_examiner')")
+            // Seniority order, not alphabetical. Expressed as CASE rather than
+            // MySQL's FIELD(): FIELD does not exist in SQLite, so this page threw
+            // a 500 under test the moment there was a row to sort — which is why
+            // it had no coverage, and why an inconsistency here went unnoticed.
+            // Built from evaluableCases() so the ordering cannot fall out of step
+            // with the set of roles being listed.
+            ->orderByRaw($this->roleSeniorityOrdering())
             ->paginate(15)
             ->withQueryString()
             ->through(fn (ExamAssignment $assignment) => [
@@ -81,7 +79,7 @@ class EvaluationMonitoringController extends Controller
                     'exam_date' => $exam->exam_date->format('F j, Y'),
                 ]),
             'fieldOffices' => $fieldOfficeScoped ? null : FieldOffice::query()->orderBy('name')->get(['id', 'name', 'code']),
-            'roles' => collect(self::ELIGIBLE_ROLES)->map(fn (ExamRole $role) => [
+            'roles' => collect(ExamRole::evaluableCases())->map(fn (ExamRole $role) => [
                 'value' => $role->value,
                 'label' => $role === ExamRole::Proctor ? 'Room Proctor' : $role->label(),
             ]),
@@ -102,10 +100,28 @@ class EvaluationMonitoringController extends Controller
         ]);
     }
 
+    /**
+     * Portable equivalent of MySQL's FIELD(): a CASE ranking roles in the order
+     * evaluableCases() declares them.
+     *
+     * The values are enum-backed, never user input, so interpolation here cannot
+     * carry anything a caller controls.
+     */
+    private function roleSeniorityOrdering(): string
+    {
+        $cases = '';
+
+        foreach (ExamRole::evaluableCases() as $index => $role) {
+            $cases .= " WHEN '{$role->value}' THEN {$index}";
+        }
+
+        return "CASE role{$cases} ELSE ".count(ExamRole::evaluableCases()).' END';
+    }
+
     private function summary(?int $examinationId, ?int $fieldOfficeId): array
     {
         $base = ExamAssignment::query()
-            ->whereIn('role', array_column(self::ELIGIBLE_ROLES, 'value'))
+            ->evaluable()
             ->when($examinationId, fn ($q) => $q->where('examination_id', $examinationId), fn ($q) => $q->whereRaw('1 = 0'))
             ->when($fieldOfficeId, fn ($q) => $q->where('field_office_id', $fieldOfficeId));
 

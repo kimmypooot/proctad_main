@@ -203,6 +203,101 @@ class EvaluationTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->component('Evaluations/Create'));
     }
 
+    /**
+     * Monitoring and the member's own view must agree. They previously did not:
+     * monitoring filtered on role and examination only, so an assignment whose
+     * attendance was never confirmed showed to staff as "Not Submitted" while
+     * the member was correctly told there was nothing to evaluate — and the form
+     * would have refused the submission anyway. Staff chased people who could
+     * not comply.
+     */
+    public function test_monitoring_ignores_assignments_the_form_would_refuse(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+
+        $examination = Examination::factory()->create(['exam_date' => now()->subDays(3)]);
+
+        // Assigned and confirmed, but never marked present.
+        ExamAssignment::factory()->create([
+            'member_id' => $member->id,
+            'role' => ExamRole::SupervisingExaminer,
+            'attendance_confirmed_at' => null,
+            'examination_id' => $examination->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get("/evaluation-monitoring?examination_id={$examination->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('summary.total', 0)
+                ->where('summary.not_submitted', 0));
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page->has('myAssignments', 0));
+    }
+
+    /** Once attendance is confirmed, both views agree it is outstanding. */
+    public function test_monitoring_and_the_member_agree_once_attendance_is_confirmed(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+
+        $examination = Examination::factory()->create(['exam_date' => now()->subDays(3)]);
+
+        ExamAssignment::factory()->create([
+            'member_id' => $member->id,
+            'role' => ExamRole::SupervisingExaminer,
+            'attendance_confirmed_at' => now(),
+            'examination_id' => $examination->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get("/evaluation-monitoring?examination_id={$examination->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('summary.total', 1)
+                ->where('summary.not_submitted', 1));
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page->has('myAssignments', 1));
+    }
+
+    /**
+     * Roles list in seniority order, not alphabetically. Worth pinning because
+     * the ordering was MySQL's FIELD() and is now a portable CASE — the whole
+     * point being that this page can finally be exercised under test at all.
+     */
+    public function test_monitoring_lists_roles_in_seniority_order(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $examination = Examination::factory()->create(['exam_date' => now()->subDays(3)]);
+        $office = \App\Models\FieldOffice::factory()->create();
+
+        // Created deliberately out of order.
+        foreach ([ExamRole::Proctor, ExamRole::ChiefExaminer, ExamRole::RoomExaminer, ExamRole::SupervisingExaminer] as $role) {
+            ExamAssignment::factory()->create([
+                'member_id' => Member::factory()->create()->id,
+                'role' => $role,
+                'attendance_confirmed_at' => now(),
+                'examination_id' => $examination->id,
+                'field_office_id' => $office->id,
+            ]);
+        }
+
+        $this->actingAs($admin)
+            ->get("/evaluation-monitoring?examination_id={$examination->id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('assignments.data.0.role', ExamRole::ChiefExaminer->value)
+                ->where('assignments.data.1.role', ExamRole::SupervisingExaminer->value)
+                ->where('assignments.data.2.role', ExamRole::Proctor->value)
+                ->where('assignments.data.3.role', ExamRole::RoomExaminer->value));
+    }
+
     /** A member never sees somebody else's assignment in their own shortcut. */
     public function test_shortcut_is_scoped_to_the_signed_in_member(): void
     {

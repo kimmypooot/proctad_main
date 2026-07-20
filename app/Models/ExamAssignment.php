@@ -110,20 +110,32 @@ class ExamAssignment extends Model
     }
 
     /**
-     * Assignments a member has served but not yet evaluated.
+     * Assignments that owe a post-examination evaluation at all — a covered
+     * designation, and attendance actually confirmed.
      *
-     * Mirrors exactly what EvaluationController::resolve() will accept — a
-     * covered designation and confirmed attendance — so the dashboard and
-     * service history cannot tell a member an evaluation is due on something
-     * the form would then reject.
+     * Attendance is the part that is easy to omit and expensive to get wrong.
+     * EvaluationController::resolve() refuses an unconfirmed assignment, so
+     * anything listed without this filter is someone the system will not let
+     * evaluate: staff chase them, and the member is told there is nothing to do.
+     *
+     * @param  Builder<ExamAssignment>  $query
+     */
+    public function scopeEvaluable(Builder $query): void
+    {
+        $query->whereIn('role', array_column(ExamRole::evaluableCases(), 'value'))
+            ->whereNotNull('attendance_confirmed_at');
+    }
+
+    /**
+     * Assignments a member has served but not yet evaluated — what the member
+     * dashboard, service history and the form's own shortcut all read.
      *
      * @param  Builder<ExamAssignment>  $query
      */
     public function scopeAwaitingEvaluationFor(Builder $query, int $memberId): void
     {
-        $query->where('member_id', $memberId)
-            ->whereIn('role', array_column(ExamRole::evaluableCases(), 'value'))
-            ->whereNotNull('attendance_confirmed_at')
+        $query->evaluable()
+            ->where('member_id', $memberId)
             ->whereDoesntHave('evaluation');
     }
 }
