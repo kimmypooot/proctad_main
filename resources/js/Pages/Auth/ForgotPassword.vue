@@ -4,6 +4,12 @@ import AuthLayout from '@/Layouts/AuthLayout.vue';
 import TextInput from '@/Components/TextInput.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 
+const props = defineProps({
+    /** Set by PasswordResetLinkController from ?from=member — members return to
+     *  their own sign-in screen, not the staff one. */
+    fromMember: { type: Boolean, default: false },
+});
+
 const form = useForm({
     email: '',
 });
@@ -11,6 +17,8 @@ const form = useForm({
 const submit = () => {
     form.post('/forgot-password');
 };
+
+const backTo = props.fromMember ? '/member/login' : '/login';
 </script>
 
 <template>
@@ -46,9 +54,9 @@ const submit = () => {
         </form>
 
         <p class="mt-8 text-center text-sm text-slate-500">
-            Remembered your password?
-            <Link href="/login" class="font-semibold text-brand-700 transition-colors hover:text-brand-800 hover:underline">
-                Back to login
+            {{ fromMember ? 'Prefer to use Google?' : 'Remembered your password?' }}
+            <Link :href="backTo" class="font-semibold text-brand-700 transition-colors hover:text-brand-800 hover:underline">
+                Back to sign in
             </Link>
         </p>
     </AuthLayout>

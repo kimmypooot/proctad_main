@@ -14,9 +14,14 @@ class PasswordResetLinkController extends Controller
     /**
      * Show the forgot-password page.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('Auth/ForgotPassword');
+        return Inertia::render('Auth/ForgotPassword', [
+            // Members reach this page from their own sign-in screen, which is
+            // separate from staff sign-in — returning them to /login would strand
+            // them on a username-and-password form they have no credentials for.
+            'fromMember' => $request->query('from') === 'member',
+        ]);
     }
 
     /**

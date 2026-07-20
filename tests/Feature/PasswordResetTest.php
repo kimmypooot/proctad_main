@@ -9,11 +9,34 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class PasswordResetTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Members arrive from their own sign-in screen and must be returned there —
+     * /login is a username-and-password form they have no credentials for, since
+     * Google registration stores an unusable random password.
+     */
+    public function test_forgot_password_returns_members_to_their_own_sign_in(): void
+    {
+        $this->get('/forgot-password?from=member')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/ForgotPassword')
+                ->where('fromMember', true));
+
+        $this->get('/forgot-password')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('fromMember', false));
+
+        // Anything other than the exact flag falls back to staff sign-in.
+        $this->get('/forgot-password?from=somethingelse')
+            ->assertInertia(fn (Assert $page) => $page->where('fromMember', false));
+    }
 
     public function test_forgot_password_screen_renders(): void
     {

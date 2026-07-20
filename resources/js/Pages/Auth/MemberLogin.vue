@@ -35,6 +35,29 @@ import AuthLayout from '@/Layouts/AuthLayout.vue';
             </p>
         </div>
 
+        <!-- Members register through Google and never set a password, so "forgot
+             password" reads as irrelevant to them. Label the outcome instead, and
+             name the case the reset link cannot solve — an unreachable registered
+             email would otherwise send them to a form that reports success and
+             delivers nothing. -->
+        <div class="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <p class="font-semibold text-slate-700">Can't access your Google account?</p>
+            <p class="mt-1">
+                You can
+                <Link
+                    href="/forgot-password?from=member"
+                    class="font-semibold text-brand-700 transition-colors hover:text-brand-800 hover:underline"
+                >
+                    sign in with a password instead
+                </Link>
+                — we'll email a link to the address registered to your membership.
+            </p>
+            <p class="mt-2">
+                If you can no longer read that email either, contact CSC RO VIII: your
+                registered address has to be updated before you can sign in again.
+            </p>
+        </div>
+
         <p class="mt-8 text-center text-sm text-slate-500">
             Don't have an account?
             <Link href="/register" class="font-semibold text-brand-700 transition-colors hover:text-brand-800 hover:underline">

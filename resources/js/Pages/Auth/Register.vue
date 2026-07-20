@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import TextInput from '@/Components/TextInput.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
@@ -77,6 +78,20 @@ const submit = () => {
             <a href="/auth/google/cancel" class="ml-auto shrink-0 text-xs font-medium text-brand-700 hover:underline">
                 Not you?
             </a>
+        </div>
+
+        <!-- Shown at the only point the advice can still change the outcome: while
+             the account is chosen. A DepEd or agency Google account and its mailbox
+             are disabled together when someone resigns or retires, which leaves no
+             way back into the record. -->
+        <div v-if="google" class="mb-5 flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AppIcon name="information-circle" class="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+                <span class="font-semibold">Use an account you'll keep.</span>
+                A DepEd or agency Google account stops working when you resign or retire, and
+                you would lose access to your PROCTAD record with it. A personal Google account
+                stays with you.
+            </p>
         </div>
 
         <a

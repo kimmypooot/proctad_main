@@ -133,6 +133,19 @@ const submit = () => form
                             <dd class="mt-0.5 truncate text-slate-700">{{ value }}</dd>
                         </div>
                     </div>
+
+                    <!-- Members cannot change the Google account they sign in with, so
+                         this is information rather than a prompt: an agency account is
+                         disabled when government service ends, and knowing that in
+                         advance is what lets someone save their records first. -->
+                    <div class="flex items-start gap-2.5 border-t border-slate-100 pt-4">
+                        <AppIcon name="information-circle" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                        <p class="text-xs leading-relaxed text-slate-500">
+                            You sign in with Google. If that account belongs to your agency, it stops
+                            working when you resign or retire — download any certificates and service
+                            records you need before then, or ask CSC RO VIII for a copy afterwards.
+                        </p>
+                    </div>
                 </dl>
 
                 <form v-else class="space-y-4 p-6" novalidate @submit.prevent="submit">
@@ -173,13 +186,19 @@ const submit = () => form
                             :error="form.errors.suffix"
                         />
                     </div>
+                    <!-- The previous hint claimed this address was used to sign in with
+                         Google and that changing it could affect sign-in. It isn't and it
+                         can't: updateProfile writes members.email only, while Google
+                         matches on users.email and google_id. The warning discouraged
+                         members from correcting the one address the system actually
+                         contacts them on. -->
                     <TextInput
                         v-model="form.email"
                         label="Email Address"
                         type="email"
                         required
                         :error="form.errors.email"
-                        hint="Also used to sign in with Google — changing it may affect your next sign-in."
+                        hint="Where we send assignment confirmations and certificate notices — keep it an address you can read. This doesn't change how you sign in."
                     />
                     <TextInput
                         v-model="form.mobile_number"

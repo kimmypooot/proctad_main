@@ -240,3 +240,76 @@ oversight. Test administrators are teachers and government employees for whom
 English is the working language of the examinations themselves. Revisit only if
 CSC RO VIII asks for it, and scope it deliberately — retrofitting translation
 across every page and email template is not a small change.
+
+### 8.6 Member account access and recovery (2026-07-20)
+
+Members register through Google only — `RegisteredUserController` stores an unusable random
+password — so their Google account is the sole key to their record. What happens when it
+stops working depends on why.
+
+**Facts confirmed with DepEd (2026-07-20, via the owner):**
+
+- **Transferring division retains both the Google account and the mailbox.** IT coordination
+  is required, but nothing is lost. Transfers are not a lockout scenario.
+- **Resignation or retirement disables the account, and the mailbox dies at the same time.**
+
+#### Case A — Google sign-in fails, the registered email still works
+
+Forgot which of two Google accounts was used, an account problem, or an IT issue mid-transfer.
+
+- **Self-service:** `/forgot-password` → set a password → sign in at `/login`. There is no
+  role restriction on staff sign-in, so members can use it. The member sign-in page now links
+  to this directly ("sign in with a password instead"); previously nothing did, and a member
+  who never had a password had no reason to look for a password reset.
+- **Staff-assisted:** Settings → Users → **Send password reset**
+  (`UserController::sendPasswordReset`). The admin never sees or sets a password.
+
+#### Case B — resigned or retired, both lost together
+
+**No account recovery, by design.** CSC accredits serving employees; someone who has left
+government service should not retain access, and `MemberStatus::Inactive` exists for that
+state.
+
+Their legitimate need is their **records**, which staff can produce without the member
+signing in at all: service history print and Excel export, certificate downloads, and the ID
+card, all from the member's record in the registry.
+
+Members are told this in advance — the profile page carries a standing note advising them to
+download what they need before leaving service.
+
+#### Residual case — a serving member who loses a personal Google account
+
+Rare, and it has no UI. It requires a direct database edit, and two constraints make it
+non-obvious:
+
+1. **`google_id` must be cleared.** `GoogleAuthController` matches `google_id` *before* email
+   in an `orWhere`, and never overwrites an existing value. Changing only the email leaves the
+   old Google account able to sign straight into the record — the "recovery" would enable a
+   takeover.
+2. **Both `users.email` and `members.email` must be updated.** There is no sync between them.
+   `users.email` governs sign-in and password reset; `members.email` is where assignment
+   confirmations are sent.
+
+Also clear `remember_token` and delete the user's rows from `sessions` — Google sign-in uses
+`remember: true` and `SESSION_DRIVER=database`, so clearing the Google link alone does not end
+an existing session.
+
+A Super Admin screen for this is deferred post-cutover; see §8.7.
+
+#### Prevention — policy note for CSC
+
+Encourage members to register with a **personal** Google account rather than an agency one.
+This avoids the problem rather than recovering from it, and is an instruction in the
+registration guidance rather than a code change. The registration page now carries this advice
+at the point the account is chosen.
+
+### 8.7 Deferred: Super Admin email change, and the users/members email split
+
+- **Super Admin email-change UI.** Would make the residual case above self-serve. Needs its own
+  policy ability (Super Admin only — it grants account access rather than changing what an
+  account may do), and must handle every constraint listed in §8.6.
+- **`users.email` / `members.email` divergence.** Neither `MyProctadController::updateProfile`
+  nor `MemberController::update` syncs to `users`. Today this only misdirects notifications,
+  but it is the root cause of the recovery difficulty. Worth deciding deliberately: arguably a
+  member-record edit should not be able to move a login identity at all, and the better fix may
+  be to reject an email change there when a linked user exists.
