@@ -20,6 +20,9 @@ const props = defineProps({
     /** Own assignments, when signed in. Always empty for guests — the anonymous
      *  search below stays the primary path and must keep working without login. */
     myAssignments: { type: Array, default: () => [] },
+    /** Whether the viewer has a PROCTAD member record. Separates "a member with
+     *  nothing left to evaluate" from a guest, who still needs the search. */
+    isMember: { type: Boolean, default: false },
 });
 
 const flashSuccess = computed(() => usePage().props.flash?.success);
@@ -35,6 +38,14 @@ const flashSuccess = computed(() => usePage().props.flash?.success);
  * exam-critical, and two implementations would eventually disagree.
  */
 const layout = computed(() => (usePage().props.auth?.user ? DashboardLayout : PublicLayout));
+
+/**
+ * A member's assignments are already known, so asking them to pick an
+ * examination and then search for their own name is redundant — they choose
+ * from their own list and nothing else is shown. Guests, and signed-in staff
+ * without a member record, keep the anonymous search.
+ */
+const selfService = computed(() => props.isMember);
 
 const examinationId = ref('');
 const searchQuery = ref('');
@@ -191,8 +202,10 @@ const submit = () => {
             <BaseAlert v-if="flashSuccess" class="mt-6" variant="success">{{ flashSuccess }}</BaseAlert>
 
             <form v-else class="mt-8 space-y-10" @submit.prevent="submit">
-                <!-- Step 1: Examination -->
-                <div class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <!-- Step 1: Examination. Hidden for members — their assignments
+                     already name the examination, so choosing one first is a step
+                     that only exists to narrow an anonymous search. -->
+                <div v-if="!selfService" class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                     <SectionTitle icon="calendar" label="Select the Examination" />
                     <SelectInput
                         v-model="examinationId"
@@ -203,6 +216,20 @@ const submit = () => {
                     />
                 </div>
 
+                <!-- A member with nothing outstanding should be told so, not left
+                     looking at a form with no way to begin. -->
+                <div
+                    v-if="selfService && !resolved && !myAssignments.length"
+                    class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+                >
+                    <SectionTitle icon="check-badge" label="Nothing to evaluate" />
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">
+                        You have no examinations awaiting your evaluation. This appears after you
+                        serve an examination and your attendance is confirmed, and each assignment
+                        is evaluated once.
+                    </p>
+                </div>
+
                 <!-- Signed in: pick from your own assignments instead of searching. -->
                 <div
                     v-if="!resolved && myAssignments.length"
@@ -210,7 +237,7 @@ const submit = () => {
                 >
                     <SectionTitle icon="user-circle" label="Your Assignments" />
                     <p class="text-sm text-slate-600">
-                        You're signed in, so you can pick your assignment directly.
+                        Choose the examination you're evaluating.
                     </p>
 
                     <ul class="divide-y divide-brand-100 rounded-lg border border-brand-100 bg-white">
@@ -230,8 +257,9 @@ const submit = () => {
                     </ul>
                 </div>
 
-                <!-- Step 2: Find yourself -->
-                <div v-if="examinationId && !resolved" class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <!-- Step 2: Find yourself. Anonymous respondents only — a member
+                     never searches for their own name. -->
+                <div v-if="!selfService && examinationId && !resolved" class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                     <SectionTitle icon="identification" label="Find Your Assignment" />
                     <p class="text-sm text-slate-600">
                         Search your name or PROCTAD ID to load your designation and testing assignment automatically.

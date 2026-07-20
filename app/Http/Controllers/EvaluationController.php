@@ -44,12 +44,18 @@ class EvaluationController extends Controller
                     'exam_date' => $exam->exam_date->format('F j, Y'),
                 ]),
             'criteria' => EvaluationCriteria::toArray(),
-            // A signed-in member should not have to search for themselves. The
-            // anonymous search stays the primary path — this page must keep
-            // working with no login at all, on exam day — so this is an
-            // additional shortcut, empty for guests, and every entry still
-            // resolves through the same resolve() endpoint.
+            // A signed-in member should not have to search for themselves: the
+            // system already knows who they are and which examinations they
+            // attended. Their own assignments replace the examination picker and
+            // the name search entirely — see the page component.
+            //
+            // The anonymous flow is untouched for everyone else, because this
+            // page must keep working with no login at all on exam day.
             'myAssignments' => $this->ownEligibleAssignments($request),
+            // Distinguishes "a member with nothing left to evaluate" — who should
+            // be told so — from a guest or a staff user without a member record,
+            // who still needs the search.
+            'isMember' => $request->user()?->member !== null,
         ]);
     }
 

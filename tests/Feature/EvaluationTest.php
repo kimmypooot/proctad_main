@@ -38,7 +38,49 @@ class EvaluationTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Evaluations/Create')
                 ->has('examinations')
+                ->has('myAssignments', 0)
+                // Drives the search flow: a guest must still be able to find
+                // themselves by name on exam day.
+                ->where('isMember', false));
+    }
+
+    /**
+     * A member never searches for their own name — the system already knows who
+     * they are and which examinations they attended. isMember is what suppresses
+     * the examination picker and the search on the page.
+     */
+    public function test_a_member_is_marked_for_the_self_service_flow(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $this->attendedAssignment($member);
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('isMember', true)
+                ->has('myAssignments', 1));
+    }
+
+    /** With nothing outstanding they are told so, rather than shown a search. */
+    public function test_a_member_with_nothing_outstanding_is_still_self_service(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('isMember', true)
                 ->has('myAssignments', 0));
+    }
+
+    /** Staff with no member record of their own keep the anonymous search. */
+    public function test_staff_without_a_member_record_keep_the_search(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => UserRole::FoAdmin]))
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page->where('isMember', false));
     }
 
     public function test_signed_in_member_is_offered_their_own_attended_assignments(): void
