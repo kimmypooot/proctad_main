@@ -125,6 +125,11 @@ class MyProctadController extends Controller
                     'examinationSchool.school:id,name',
                     'room:id,room_number,designation,examination_school_id',
                     'confirmedBy:id,name',
+                    // Eager-loaded for the needs_evaluation flag below — a lazy
+                    // read would be one query per row across a whole history.
+                    // Not column-constrained: evaluation() uses latestOfMany(),
+                    // whose self-join makes an unqualified column list ambiguous.
+                    'evaluation',
                 ])
                 ->get()
                 ->sortByDesc(fn ($assignment) => $assignment->examination?->exam_date)
@@ -169,6 +174,12 @@ class MyProctadController extends Controller
                         'rating_variant' => $rating?->badgeVariant(),
                         'rating_average' => $computed['average'] ?? null,
                         'rating_count' => $computed['ratings_count'] ?? null,
+                        // Same conditions the evaluation form enforces, so a
+                        // record is never flagged as needing one that the form
+                        // would then refuse — see ExamAssignment::scopeAwaitingEvaluationFor.
+                        'needs_evaluation' => $assignment->role->isEvaluable()
+                            && $assignment->attendance_confirmed_at !== null
+                            && $assignment->evaluation === null,
                     ];
                 }) ?? [],
         ]);

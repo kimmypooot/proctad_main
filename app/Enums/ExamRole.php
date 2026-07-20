@@ -88,4 +88,29 @@ enum ExamRole: string
             ExamRoleGroup::School => false,
         };
     }
+
+    /**
+     * Designations the post-examination evaluation form covers.
+     *
+     * Lives here rather than on EvaluationController because three places now
+     * need the same answer — the form itself, the member dashboard, and service
+     * history — and they must agree, or a member is told an evaluation is due
+     * on a page that then refuses to accept one.
+     *
+     * @return array<int, self>
+     */
+    public static function evaluableCases(): array
+    {
+        return [
+            self::ChiefExaminer,
+            self::SupervisingExaminer,
+            self::Proctor,
+            self::RoomExaminer,
+        ];
+    }
+
+    public function isEvaluable(): bool
+    {
+        return in_array($this, self::evaluableCases(), true);
+    }
 }

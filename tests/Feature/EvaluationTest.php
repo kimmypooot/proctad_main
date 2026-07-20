@@ -90,6 +90,56 @@ class EvaluationTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('myAssignments', 0));
     }
 
+    /**
+     * The member area must agree with the form about what is outstanding. All
+     * three read ExamAssignment::scopeAwaitingEvaluationFor, so a member is
+     * never told an evaluation is due on something the form would then reject.
+     */
+    public function test_service_history_flags_the_same_assignment_the_form_offers(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $this->attendedAssignment($member);
+
+        $this->actingAs($user)
+            ->get('/my/service-history')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('records.0.needs_evaluation', true));
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page->has('myAssignments', 1));
+    }
+
+    public function test_service_history_does_not_flag_an_uncovered_designation(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $this->attendedAssignment($member, ExamRole::Driver);
+
+        $this->actingAs($user)
+            ->get('/my/service-history')
+            ->assertInertia(fn (Assert $page) => $page->where('records.0.needs_evaluation', false));
+    }
+
+    public function test_the_member_dashboard_counts_outstanding_evaluations(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $this->attendedAssignment($member);
+        $this->attendedAssignment($member, ExamRole::RoomExaminer);
+
+        // Not evaluable, so it must not inflate the count.
+        $this->attendedAssignment($member, ExamRole::Driver);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats', fn ($stats) => collect($stats)
+                    ->firstWhere('label', 'Evaluations to Complete')['value'] === 2));
+    }
+
     /** A member never sees somebody else's assignment in their own shortcut. */
     public function test_shortcut_is_scoped_to_the_signed_in_member(): void
     {

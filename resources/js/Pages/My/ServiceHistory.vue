@@ -19,6 +19,7 @@ const props = defineProps({
 
 const confirmedCount = computed(() => props.records.filter((r) => r.attended).length);
 const latestRecord = computed(() => props.records[0] ?? null);
+const pendingEvaluations = computed(() => props.records.filter((r) => r.needs_evaluation).length);
 
 /* --- Filters (client-side; the list is scoped to the logged-in member) --- */
 const search = ref('');
@@ -97,6 +98,27 @@ const closeViewer = () => (viewing.value = null);
                 <StatCard compact label="Most Recent" :value="latestRecord?.exam_title ?? '—'" icon="clock" />
             </div>
 
+            <!-- Surfaced above the table as well as per row: a member with a long
+                 history would otherwise have to scan for the flag to notice. -->
+            <div
+                v-if="pendingEvaluations"
+                class="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"
+            >
+                <div class="flex items-start gap-2.5">
+                    <AppIcon name="exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <p class="text-sm text-amber-900">
+                        <span class="font-semibold">
+                            {{ pendingEvaluations }} examination{{ pendingEvaluations === 1 ? '' : 's' }}
+                            awaiting your evaluation.
+                        </span>
+                        Your feedback on how the examination was run is submitted once per assignment.
+                    </p>
+                </div>
+                <BaseButton href="/evaluation" external variant="outline" size="sm">
+                    Evaluate now
+                </BaseButton>
+            </div>
+
             <!-- Filters -->
             <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
                 <div>
@@ -163,6 +185,17 @@ const closeViewer = () => (viewing.value = null);
                                     {{ record.rating_label }}
                                 </BaseBadge>
                                 <span v-else class="text-slate-400">—</span>
+                                <!-- The evaluation is theirs to submit, so this is a
+                                     prompt rather than a status: link straight to the
+                                     form instead of only marking it outstanding. -->
+                                <a
+                                    v-if="record.needs_evaluation"
+                                    href="/evaluation"
+                                    class="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700 hover:underline"
+                                >
+                                    <AppIcon name="exclamation-triangle" class="h-3.5 w-3.5 shrink-0" />
+                                    Evaluation needed
+                                </a>
                             </td>
                             <td class="px-3 py-2 text-center">
                                 <IconButton icon="eye" label="View details" @click="viewRecord(record)" />

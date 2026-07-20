@@ -7,6 +7,7 @@ use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -106,5 +107,23 @@ class ExamAssignment extends Model
     public function isCoverageRole(): bool
     {
         return $this->role->isCoverageRole();
+    }
+
+    /**
+     * Assignments a member has served but not yet evaluated.
+     *
+     * Mirrors exactly what EvaluationController::resolve() will accept — a
+     * covered designation and confirmed attendance — so the dashboard and
+     * service history cannot tell a member an evaluation is due on something
+     * the form would then reject.
+     *
+     * @param  Builder<ExamAssignment>  $query
+     */
+    public function scopeAwaitingEvaluationFor(Builder $query, int $memberId): void
+    {
+        $query->where('member_id', $memberId)
+            ->whereIn('role', array_column(ExamRole::evaluableCases(), 'value'))
+            ->whereNotNull('attendance_confirmed_at')
+            ->whereDoesntHave('evaluation');
     }
 }

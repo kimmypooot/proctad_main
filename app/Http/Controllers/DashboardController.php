@@ -482,6 +482,16 @@ class DashboardController extends Controller
                     $member?->status->label() ?? 'Not yet registered',
                     '/my/profile',
                 ),
+                // Members are asked to evaluate an examination they served, but
+                // nothing told them one was outstanding — they had to think to
+                // visit the public evaluation page and search for themselves.
+                $this->stat(
+                    'Evaluations to Complete',
+                    $member ? ExamAssignment::query()->awaitingEvaluationFor($member->id)->count() : 0,
+                    'clipboard-check',
+                    'Examinations you served that still need your evaluation',
+                    '/evaluation',
+                ),
             ],
         };
     }

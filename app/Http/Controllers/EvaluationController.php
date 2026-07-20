@@ -71,10 +71,7 @@ class EvaluationController extends Controller
         }
 
         return ExamAssignment::query()
-            ->where('member_id', $member->id)
-            ->whereIn('role', array_column(self::DESIGNATIONS, 'value'))
-            ->whereNotNull('attendance_confirmed_at')
-            ->whereDoesntHave('evaluation')
+            ->awaitingEvaluationFor($member->id)
             ->with('examination:id,title,exam_date')
             ->get()
             ->sortByDesc(fn (ExamAssignment $a) => $a->examination?->exam_date)
