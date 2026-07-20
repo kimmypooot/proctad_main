@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
+import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseAlert from '@/Components/BaseAlert.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -22,6 +23,18 @@ const props = defineProps({
 });
 
 const flashSuccess = computed(() => usePage().props.flash?.success);
+
+/**
+ * One page, two frames. A signed-in member reaches this from their dashboard and
+ * keeps their sidebar and notifications; everyone else — including respondents
+ * filling it in on exam day with no login, which this page must always support —
+ * gets the public shell exactly as before.
+ *
+ * Swapping the wrapper rather than adding a second page keeps one copy of the
+ * form: the rating grids and the supervising-examiner branching are
+ * exam-critical, and two implementations would eventually disagree.
+ */
+const layout = computed(() => (usePage().props.auth?.user ? DashboardLayout : PublicLayout));
 
 const examinationId = ref('');
 const searchQuery = ref('');
@@ -159,10 +172,15 @@ const submit = () => {
 </script>
 
 <template>
-    <PublicLayout>
+    <component :is="layout">
         <Head title="Post-Examination Evaluation" />
 
-        <section class="mx-auto max-w-3xl px-4 py-12 sm:py-16">
+        <!-- DashboardLayout supplies its own page padding; the public shell does
+             not, so the generous vertical spacing only applies there. -->
+        <section
+            class="mx-auto max-w-3xl"
+            :class="layout === PublicLayout ? 'px-4 py-12 sm:py-16' : ''"
+        >
             <p class="text-xs font-semibold uppercase tracking-wide text-brand-700">PROCTAD Post-Examination Evaluation</p>
             <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Test Administrator Performance Evaluation</h1>
             <p class="mt-3 text-sm leading-relaxed text-slate-600">
@@ -475,5 +493,5 @@ const submit = () => {
                 </template>
             </form>
         </section>
-    </PublicLayout>
+    </component>
 </template>

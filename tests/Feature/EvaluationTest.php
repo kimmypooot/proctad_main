@@ -140,6 +140,27 @@ class EvaluationTest extends TestCase
                     ->firstWhere('label', 'Evaluations to Complete')['value'] === 2));
     }
 
+    /**
+     * The form is one page in two frames — a signed-in member keeps their
+     * dashboard shell, a guest gets the public one. Asserted at the route level
+     * since the layout swap itself is client-side: both must return the same
+     * component, so no second page has crept in.
+     */
+    public function test_the_form_is_one_page_for_both_guests_and_members(): void
+    {
+        $this->get('/evaluation')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('Evaluations/Create'));
+
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('Evaluations/Create'));
+    }
+
     /** A member never sees somebody else's assignment in their own shortcut. */
     public function test_shortcut_is_scoped_to_the_signed_in_member(): void
     {

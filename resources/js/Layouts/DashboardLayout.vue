@@ -118,6 +118,10 @@ const navByRole = {
                 { label: 'Service History', icon: 'clock', href: '/my/service-history' },
                 { label: 'Certificates', icon: 'document-check', href: '/my/certificates' },
                 { label: 'Trainings', icon: 'academic-cap', href: '/my/trainings' },
+                // Public route by design — it must work on exam day without a
+                // login — but it renders inside this layout for signed-in
+                // members, so it belongs in their navigation like anything else.
+                { label: 'Evaluation', icon: 'clipboard-check', href: '/evaluation' },
             ],
         },
     ],
