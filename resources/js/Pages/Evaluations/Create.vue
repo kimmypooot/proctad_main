@@ -164,6 +164,16 @@ const selectResult = async (result) => {
                 ? data.subordinates.map((s) => ({ ...emptyRoomRating(), ...s }))
                 : [emptyRoomRating()];
         }
+
+        // After the defaults, so restored answers win over a fresh prefill.
+        const draft = readDraft(`proctad.evaluation.draft.${data.exam_assignment_id}`);
+
+        if (draft) {
+            draftFields.forEach((field) => {
+                if (draft[field] !== undefined) form[field] = draft[field];
+            });
+            draftRestored.value = true;
+        }
     } catch (e) {
         searchError.value = messageFor(e, 'Could not load that assignment — please try again.');
     } finally {
@@ -173,6 +183,58 @@ const selectResult = async (result) => {
 
 const addRoomRating = () => form.room_ratings.push(emptyRoomRating());
 const removeRoomRating = (index) => form.room_ratings.splice(index, 1);
+
+/* --- Draft persistence ---------------------------------------------------
+ * A supervising examiner with three subordinates answers 53 rating questions
+ * plus checkboxes and free text, on one page, usually on a phone on mobile data
+ * at a venue. A dropped connection, a stray back gesture or a locked screen
+ * previously lost all of it — and nobody re-answers 53 questions.
+ *
+ * Kept in localStorage rather than on the server: the page is public and this
+ * needs no session, and a half-finished evaluation is not something to store
+ * against a record that reports compliance.
+ */
+const draftKey = computed(() => (
+    form.exam_assignment_id ? `proctad.evaluation.draft.${form.exam_assignment_id}` : null
+));
+
+const draftRestored = ref(false);
+
+const readDraft = (key) => {
+    try {
+        return JSON.parse(window.localStorage.getItem(key) ?? 'null');
+    } catch {
+        return null; // Corrupt or unavailable storage must never block the form.
+    }
+};
+
+const clearDraft = () => {
+    if (draftKey.value) {
+        try {
+            window.localStorage.removeItem(draftKey.value);
+        } catch { /* storage unavailable — nothing to clean up */ }
+    }
+};
+
+/** Answers only. The identifying fields come from resolve(), so a stale draft
+ *  can never repoint an evaluation at a different assignment. */
+const draftFields = [
+    'room_ratings', 'room_readiness', 'exam_preparation', 'venue_readiness', 'venue_comment',
+    'committee_coordination', 'committee_comment', 'conduct_of_exam', 'conduct_comment',
+    'examinee_experience', 'examinee_comment', 'overall_rating',
+    'what_worked', 'challenges', 'improvements', 'suggestions',
+];
+
+watch(() => draftFields.map((f) => form[f]), () => {
+    if (!draftKey.value || !resolved.value) return;
+
+    try {
+        window.localStorage.setItem(
+            draftKey.value,
+            JSON.stringify(Object.fromEntries(draftFields.map((f) => [f, form[f]]))),
+        );
+    } catch { /* quota or private mode — saving is best-effort, never fatal */ }
+}, { deep: true });
 
 /** Everyone at this venue who may be rated, from resolve(). */
 const availableRatees = ref([]);
@@ -219,12 +281,63 @@ const submit = () => {
     form.post('/evaluation', {
         preserveScroll: true,
         onSuccess: () => {
+            clearDraft(); // Submitted — keeping it would restore over a finished form.
+            draftRestored.value = false;
             form.reset();
             examinationId.value = '';
             resetSelection();
         },
+        // Validation errors are scattered through a page this long, so the reply
+        // otherwise looks like nothing happened. Take them to the summary.
+        onError: () => {
+            document.getElementById('evaluation-errors')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        },
     });
 };
+
+/* --- Completeness ---------------------------------------------------------
+ * With 50+ inputs behind one button at the foot of the page, "what is still
+ * missing" is not answerable by scrolling. Counts only what applies to this
+ * respondent's designation, so a proctor is not measured against a supervising
+ * examiner's sections.
+ */
+const progress = computed(() => {
+    const answered = (values) => values.filter((v) => v !== null && v !== '').length;
+    let done = 0;
+    let total = 0;
+
+    const count = (values) => {
+        total += values.length;
+        done += answered(values);
+    };
+
+    if (isSupervisingExaminer.value) {
+        form.room_ratings.forEach((r) => {
+            count([r.exam_assignment_id]);
+            count(r.punctuality);
+            count(r.decorum);
+            count(r.procedures);
+        });
+    }
+
+    if (isSupervisingExaminer.value || isRoomRole.value) {
+        // Checkboxes are deliberately excluded: false is a valid answer, so
+        // "unanswered" is indistinguishable from "answered no".
+        if (isRoomRole.value) count(form.exam_preparation);
+    }
+
+    if (showAdministrationSection.value) {
+        count(form.venue_readiness);
+        count(form.committee_coordination);
+        count(form.conduct_of_exam);
+        count(form.examinee_experience);
+        count([form.overall_rating]);
+    }
+
+    return { done, total, complete: total > 0 && done === total };
+});
+
+const errorCount = computed(() => Object.keys(form.errors).length);
 </script>
 
 <template>
@@ -407,6 +520,20 @@ const submit = () => {
                 <p v-if="resolving" class="text-sm text-slate-500">Loading your assignment…</p>
 
                 <template v-if="resolved">
+                    <!-- Anchored so a failed submit can scroll here: on a page
+                         this long, inline errors alone look like nothing happened. -->
+                    <div id="evaluation-errors">
+                        <BaseAlert v-if="errorCount" variant="error">
+                            {{ errorCount }} {{ errorCount === 1 ? 'answer needs' : 'answers need' }} attention before
+                            this can be submitted. The affected questions are marked below.
+                        </BaseAlert>
+                    </div>
+
+                    <!-- Work is kept on this device as it is entered; say so, or a
+                         respondent returning to a filled form assumes it submitted. -->
+                    <BaseAlert v-if="draftRestored && !errorCount" variant="info">
+                        We've restored your unsubmitted answers from this device. Review them and submit when ready.
+                    </BaseAlert>
                     <!-- Supervising Examiner: rate each Room Examiner / Proctor -->
                     <div v-if="isSupervisingExaminer" class="space-y-6">
                         <SectionTitle icon="users" label="Evaluation of Room Examiners/Proctors" />
@@ -448,18 +575,21 @@ const submit = () => {
                             />
 
                             <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                                 v-model="rating.punctuality"
                                 title="Punctuality"
                                 :statements="criteria.punctuality"
                                 :error="form.errors[`room_ratings.${index}.punctuality`]"
                             />
                             <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                                 v-model="rating.decorum"
                                 title="Decorum"
                                 :statements="criteria.decorum"
                                 :error="form.errors[`room_ratings.${index}.decorum`]"
                             />
                             <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                                 v-model="rating.procedures"
                                 title="Procedures"
                                 :statements="criteria.procedures"
@@ -500,6 +630,7 @@ const submit = () => {
                     <div v-if="isRoomRole" class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                         <SectionTitle icon="clipboard-check" label="Exam Preparation" />
                         <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                             v-model="form.exam_preparation"
                             :statements="criteria.exam_preparation"
                             :error="form.errors.exam_preparation"
@@ -516,6 +647,7 @@ const submit = () => {
                             </p>
 
                             <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                                 v-model="form.venue_readiness"
                                 title="Venue Readiness"
                                 :statements="criteria.venue_readiness"
@@ -524,6 +656,7 @@ const submit = () => {
                             <TextArea v-model="form.venue_comment" label="Comments on the venue preparation" optional :error="form.errors.venue_comment" />
 
                             <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                                 v-model="form.committee_coordination"
                                 title="Examination Committee Performance and Coordination"
                                 :statements="criteria.committee_coordination"
@@ -537,6 +670,7 @@ const submit = () => {
                             />
 
                             <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                                 v-model="form.conduct_of_exam"
                                 title="Conduct of Examination"
                                 :statements="criteria.conduct_of_exam"
@@ -550,6 +684,7 @@ const submit = () => {
                             />
 
                             <RatingGrid
+                                :scale-labels="criteria.rating_scale"
                                 v-model="form.examinee_experience"
                                 title="Examinee Experience"
                                 :statements="criteria.examinee_experience"
@@ -595,16 +730,32 @@ const submit = () => {
                         </div>
                     </template>
 
-                    <BaseButton
-                        type="submit"
-                        variant="primary"
-                        size="lg"
-                        block
-                        :loading="form.processing"
-                        :disabled="form.processing"
-                    >
-                        Submit Evaluation
-                    </BaseButton>
+                    <div class="sticky bottom-0 -mx-1 rounded-t-xl border-t border-slate-200 bg-white/95 px-1 py-4 backdrop-blur">
+                        <div v-if="progress.total" class="mb-3">
+                            <div class="flex items-center justify-between text-xs text-slate-500">
+                                <span>{{ progress.done }} of {{ progress.total }} answered</span>
+                                <span v-if="progress.complete" class="font-semibold text-emerald-700">Ready to submit</span>
+                            </div>
+                            <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                    class="h-full rounded-full transition-all"
+                                    :class="progress.complete ? 'bg-emerald-500' : 'bg-brand-500'"
+                                    :style="{ width: `${Math.round((progress.done / progress.total) * 100)}%` }"
+                                />
+                            </div>
+                        </div>
+
+                        <BaseButton
+                            type="submit"
+                            variant="primary"
+                            size="lg"
+                            block
+                            :loading="form.processing"
+                            :disabled="form.processing"
+                        >
+                            Submit Evaluation
+                        </BaseButton>
+                    </div>
                 </template>
             </form>
         </section>
