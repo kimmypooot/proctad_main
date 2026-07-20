@@ -9,6 +9,7 @@ use App\Models\Member;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -88,11 +89,7 @@ class RegisteredUserController extends Controller
         // Center registered this person directly) even though no login account
         // was linked to it yet. `members.email` is DB-unique, so a plain email
         // collision must always be caught here first — check it explicitly for
-        // a clean validation error instead of a raw SQL failure. Beyond that,
-        // also catch the "same person registering under a different email"
-        // case: block when mobile number AND full name both match, even if the
-        // email doesn't — any ONE field alone (e.g. name only) isn't reliable
-        // enough on its own to be worth blocking.
+        // a clean validation error instead of a raw SQL failure.
         if (Member::where('email', $email)->exists()) {
             throw ValidationException::withMessages([
                 'email' => 'A PROCTAD record already exists with this email address. '
@@ -100,15 +97,40 @@ class RegisteredUserController extends Controller
             ]);
         }
 
-        $duplicate = Member::where('mobile_number', $validated['mobile_number'])
-            ->where('first_name', mb_strtoupper($validated['first_name']))
-            ->where('last_name', mb_strtoupper($validated['last_name']))
-            ->exists();
+        // Then the "same person registering under a different email" case —
+        // increasingly likely now that members are advised to move off agency
+        // Google accounts, which changes their email but not who they are.
+        //
+        // Name + date of birth, not mobile number: dual-SIM is the norm here, so
+        // the same person routinely holds two numbers and would slip past a
+        // phone match. The old check also compared first and last name without
+        // suffix, so a "Jr." sharing a household number with his father was
+        // falsely blocked — a birth date separates them.
+        //
+        // Names are stored uppercase (see the Member name mutators); TRIM as
+        // well so this agrees with DuplicateMembersController's normalisation,
+        // or prevention and detection disagree about what "same name" means.
+        // withTrashed: PROCTAD IDs are permanently reserved, so a removed
+        // member re-registering is still a duplicate.
+        //
+        // The birth date is compared in PHP, not SQL: `date_of_birth` is an
+        // encrypted cast (PII, RA 10173) and Laravel encrypts with a random IV,
+        // so the ciphertext differs on every write and no WHERE clause against
+        // it can ever match. Narrowing by name first keeps the decrypted set to
+        // the handful of people who share that name.
+        $birthDate = Carbon::parse($validated['date_of_birth'])->toDateString();
+
+        $duplicate = Member::withTrashed()
+            ->whereRaw('UPPER(TRIM(first_name)) = ?', [mb_strtoupper(trim($validated['first_name']))])
+            ->whereRaw('UPPER(TRIM(last_name)) = ?', [mb_strtoupper(trim($validated['last_name']))])
+            ->get()
+            ->contains(fn (Member $existing) => $existing->date_of_birth === $birthDate);
 
         if ($duplicate) {
             throw ValidationException::withMessages([
-                'email' => 'A PROCTAD record already exists with this mobile number and name. '
-                    .'Please sign in instead, or contact your Testing Center if you believe this is an error.',
+                'email' => 'A PROCTAD record already exists for this name and date of birth. '
+                    .'If that is you, please sign in instead — you can use the password option if you '
+                    .'can no longer access your Google account. Otherwise contact your Testing Center.',
             ]);
         }
 

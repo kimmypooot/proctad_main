@@ -118,17 +118,25 @@ class RegistrationTest extends TestCase
         $this->assertSame(0, User::count());
     }
 
-    public function test_registration_blocks_a_duplicate_matching_only_mobile_and_name(): void
+    /**
+     * The same person re-registering under a different email — the case that
+     * matters most now members are advised off agency Google accounts, since
+     * that changes their email but not who they are.
+     *
+     * The mobile number differs deliberately: dual-SIM is the norm in the
+     * Philippines, so the same person routinely holds two numbers and a phone
+     * match would let this straight through.
+     */
+    public function test_registration_blocks_a_duplicate_name_and_date_of_birth_despite_a_different_number(): void
     {
         $fieldOffice = FieldOffice::factory()->create();
 
-        // Different email, but the same mobile number and name — still a
-        // confident-enough signal that this is the same person re-registering.
         Member::factory()->create([
             'first_name' => 'JUAN',
             'last_name' => 'DELA CRUZ',
+            'date_of_birth' => '1990-05-15',
             'email' => 'someone-else@example.test',
-            'mobile_number' => '09171234567',
+            'mobile_number' => '09179999999',
             'field_office_id' => $fieldOffice->id,
         ]);
 
@@ -137,17 +145,18 @@ class RegistrationTest extends TestCase
             ->assertSessionHasErrors('email');
 
         $this->assertGuest();
+        $this->assertSame(0, User::count());
     }
 
-    public function test_registration_allows_a_partial_match_that_is_not_a_true_duplicate(): void
+    /** Common surnames are ordinary here; a shared name alone must not block. */
+    public function test_registration_allows_a_namesake_with_a_different_date_of_birth(): void
     {
         $fieldOffice = FieldOffice::factory()->create();
 
-        // Same name only — a different email AND a different mobile number.
-        // Common names alone shouldn't block a legitimately different person.
         Member::factory()->create([
             'first_name' => 'JUAN',
             'last_name' => 'DELA CRUZ',
+            'date_of_birth' => '1975-01-02',
             'email' => 'someone-else@example.test',
             'mobile_number' => '09179999999',
             'field_office_id' => $fieldOffice->id,
@@ -158,5 +167,77 @@ class RegistrationTest extends TestCase
             ->assertRedirect(route('dashboard'));
 
         $this->assertAuthenticated();
+    }
+
+    /**
+     * Regression against the previous mobile-number rule, which compared first
+     * and last name without suffix: a "Jr." sharing a household phone with his
+     * father was falsely blocked. Their birth dates differ, so this is allowed.
+     */
+    public function test_registration_allows_a_junior_sharing_a_household_number(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+
+        Member::factory()->create([
+            'first_name' => 'JUAN',
+            'last_name' => 'DELA CRUZ',
+            'suffix' => null,
+            'date_of_birth' => '1962-03-08',
+            'email' => 'father@example.test',
+            'mobile_number' => '09171234567',
+            'field_office_id' => $fieldOffice->id,
+        ]);
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice, ['suffix' => 'Jr.']))
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticated();
+    }
+
+    /** PROCTAD IDs are permanently reserved, so a removed member still counts. */
+    public function test_registration_blocks_a_duplicate_of_a_soft_deleted_member(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+
+        $member = Member::factory()->create([
+            'first_name' => 'JUAN',
+            'last_name' => 'DELA CRUZ',
+            'date_of_birth' => '1990-05-15',
+            'email' => 'someone-else@example.test',
+            'mobile_number' => '09179999999',
+            'field_office_id' => $fieldOffice->id,
+        ]);
+        $member->delete();
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice))
+            ->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+    }
+
+    /** Prevention and detection must agree on what "same name" means. */
+    public function test_registration_normalises_whitespace_when_matching(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+
+        Member::factory()->create([
+            'first_name' => 'JUAN',
+            'last_name' => 'DELA CRUZ',
+            'date_of_birth' => '1990-05-15',
+            'email' => 'someone-else@example.test',
+            'mobile_number' => '09179999999',
+            'field_office_id' => $fieldOffice->id,
+        ]);
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice, [
+                'first_name' => '  Juan  ',
+                'last_name' => ' Dela Cruz ',
+            ]))
+            ->assertSessionHasErrors('email');
+
+        $this->assertGuest();
     }
 }
