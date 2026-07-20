@@ -222,6 +222,64 @@ class EvaluationTest extends TestCase
                 ->has('myAssignments', 0));
     }
 
+    /**
+     * "Nothing to evaluate" is true but misleading when the real reason is that
+     * attendance has not been recorded. CSC examinations are half-day, so a
+     * respondent is often free to evaluate while the secretariat is still
+     * scanning — they need to know it is a wait, not an absence.
+     */
+    public function test_a_member_blocked_on_attendance_is_told_why(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+
+        ExamAssignment::factory()->create([
+            'member_id' => $member->id,
+            'role' => ExamRole::SupervisingExaminer,
+            'attendance_confirmed_at' => null,
+            'examination_id' => Examination::factory()->create(['exam_date' => now()->subDay()])->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('myAssignments', 0)
+                ->has('awaitingAttendance', 1)
+                ->where('awaitingAttendance.0.designation_label', 'Supervising Examiner'));
+    }
+
+    /** A future examination is not waiting on anything yet. */
+    public function test_an_upcoming_assignment_is_not_reported_as_awaiting_attendance(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+
+        ExamAssignment::factory()->create([
+            'member_id' => $member->id,
+            'role' => ExamRole::Proctor,
+            'attendance_confirmed_at' => null,
+            'examination_id' => Examination::factory()->create(['exam_date' => now()->addWeek()])->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page->has('awaitingAttendance', 0));
+    }
+
+    /** Once confirmed, it moves from blocked to actionable. */
+    public function test_confirming_attendance_moves_it_out_of_the_waiting_list(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+        $this->attendedAssignment($member);
+
+        $this->actingAs($user)
+            ->get('/evaluation')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('myAssignments', 1)
+                ->has('awaitingAttendance', 0));
+    }
+
     /** Staff with no member record of their own keep the anonymous search. */
     public function test_staff_without_a_member_record_keep_the_search(): void
     {

@@ -24,6 +24,8 @@ const props = defineProps({
     /** Whether the viewer has a PROCTAD member record. Separates "a member with
      *  nothing left to evaluate" from a guest, who still needs the search. */
     isMember: { type: Boolean, default: false },
+    /** Served, but attendance not yet recorded — blocked rather than finished. */
+    awaitingAttendance: { type: Array, default: () => [] },
 });
 
 const flashSuccess = computed(() => usePage().props.flash?.success);
@@ -274,10 +276,32 @@ const submit = () => {
                     />
                 </div>
 
+                <!-- Blocked, not finished. Naming the actual reason turns a dead
+                     end into something the member can ask their Testing Center
+                     about — which on a half-day examination is the difference
+                     between evaluating that afternoon and not at all. -->
+                <div
+                    v-if="selfService && !resolved && !myAssignments.length && awaitingAttendance.length"
+                    class="rounded-xl border border-amber-200 bg-amber-50 p-6"
+                >
+                    <SectionTitle icon="clock" label="Waiting on attendance confirmation" />
+                    <p class="mt-3 text-sm leading-relaxed text-amber-900">
+                        Your attendance hasn't been recorded yet, so the evaluation isn't open to you.
+                        Your Testing Center needs to confirm it first — this usually happens shortly
+                        after the examination.
+                    </p>
+                    <ul class="mt-3 space-y-1 text-sm text-amber-900">
+                        <li v-for="item in awaitingAttendance" :key="`${item.exam_title}-${item.exam_date}`">
+                            <span class="font-semibold">{{ item.exam_title }}</span>
+                            — {{ item.exam_date }} ({{ item.designation_label }})
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- A member with nothing outstanding should be told so, not left
                      looking at a form with no way to begin. -->
                 <div
-                    v-if="selfService && !resolved && !myAssignments.length"
+                    v-else-if="selfService && !resolved && !myAssignments.length"
                     class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
                 >
                     <SectionTitle icon="check-badge" label="Nothing to evaluate" />

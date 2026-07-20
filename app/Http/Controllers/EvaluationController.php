@@ -57,7 +57,48 @@ class EvaluationController extends Controller
             // be told so — from a guest or a staff user without a member record,
             // who still needs the search.
             'isMember' => $request->user()?->member !== null,
+            // Served, but attendance not yet recorded. CSC examinations are
+            // half-day, so the whole cycle lands in one afternoon: a respondent
+            // is often free to evaluate while the secretariat is still working
+            // through attendance scans. Without this the page says "nothing to
+            // evaluate", which is true but reads as though the assignment is
+            // missing — and the member goes home instead of asking.
+            'awaitingAttendance' => $this->ownAssignmentsAwaitingAttendance($request),
         ]);
+    }
+
+    /**
+     * The member's own assignments in a covered designation whose attendance has
+     * not been recorded yet — they served, but cannot evaluate until a Testing
+     * Center confirms it.
+     *
+     * Past examinations only: a future one is not waiting on anything.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function ownAssignmentsAwaitingAttendance(Request $request): array
+    {
+        $member = $request->user()?->member;
+
+        if ($member === null) {
+            return [];
+        }
+
+        return ExamAssignment::query()
+            ->where('member_id', $member->id)
+            ->whereIn('role', array_column(ExamRole::evaluableCases(), 'value'))
+            ->whereNull('attendance_confirmed_at')
+            ->whereHas('examination', fn ($q) => $q->whereDate('exam_date', '<=', today()))
+            ->with('examination:id,title,exam_date')
+            ->get()
+            ->sortByDesc(fn (ExamAssignment $a) => $a->examination?->exam_date)
+            ->values()
+            ->map(fn (ExamAssignment $a) => [
+                'exam_title' => $a->examination?->title,
+                'exam_date' => $a->examination?->exam_date?->format('F j, Y'),
+                'designation_label' => $this->designationLabel($a->role),
+            ])
+            ->all();
     }
 
     /**

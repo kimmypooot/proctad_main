@@ -128,6 +128,10 @@ No open parity gaps found.
    - A known certificate's `/verify-certificate/{certificate_no}` page resolves.
    - Scanner correctly reads a physical legacy-printed member QR card.
    - `php artisan schedule:list` shows all three commands; cron is installed.
+   - Confirm attendance for one assignment, then check that member's
+     `/evaluation` page moves it out of the waiting list and offers it — the
+     attendance-before-evaluations ordering in §9, which nothing enforces
+     automatically.
 6. **Rollback plan**: keep the legacy app and its database untouched (read-only)
    for at least one full examination cycle after cutover. If a blocking issue is
    found, revert DNS/web server config back to legacy and re-open it read-write;
@@ -313,3 +317,44 @@ at the point the account is chosen.
   but it is the root cause of the recovery difficulty. Worth deciding deliberately: arguably a
   member-record edit should not be able to move a login identity at all, and the better fix may
   be to reject an email change there when a linked user exists.
+
+## 9. Examination-day sequencing: attendance before evaluations
+
+Recorded 2026-07-20. This is an **operational ordering requirement**, not a code
+defect — nothing in the application will report it, and it only shows up while an
+examination is actually running.
+
+**The rule: confirm attendance before telling test administrators to evaluate.**
+
+A member can only submit a post-examination evaluation once their own
+`attendance_confirmed_at` is set. That requirement is deliberate — it is what
+stops someone who never served from filing an evaluation, and it was chosen over
+the alternatives on 2026-07-20. It also means a member whose attendance has not
+yet been scanned cannot evaluate, however recently they served.
+
+**Why this bites on CSC examinations specifically:** they are half-day. The whole
+cycle lands in a single afternoon — the examination ends around midday, the
+secretariat works through attendance scans, and respondents are free to evaluate
+immediately. A supervising examiner sitting down at 1pm may well be ahead of the
+scanning, and the evaluation is most accurate when memory is freshest.
+
+The page now names the reason rather than saying "nothing to evaluate", listing
+the examinations waiting on confirmation, so a blocked member has something
+specific to ask their Testing Center about instead of assuming the system is
+broken. That softens the failure; it does not remove the ordering requirement.
+
+**On the day:**
+
+1. Complete attendance scanning / manual entry for the venue first.
+2. Then direct test administrators to the evaluation.
+
+**Verification during the smoke test (§6.5)**, once real assignments exist:
+confirm attendance for one assignment, then check that the same member's
+`/evaluation` page moves it out of the waiting list and offers it. Both states
+are covered by `tests/Feature/EvaluationTest`, but the ordering itself is a human
+process and worth walking once.
+
+**Related, and already fixed:** the people a respondent *rates* are drawn from
+the venue's assigned roster and are deliberately **not** filtered on confirmed
+attendance, for exactly this reason — filtering them emptied the roster at the
+moment the form was used. Only the respondent's own eligibility requires it.
