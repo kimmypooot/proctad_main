@@ -131,6 +131,35 @@ class EvaluationTest extends TestCase
         $this->assertSame(1, \App\Models\Evaluation::count());
     }
 
+    /**
+     * The room group is pre-filled even before attendance is scanned. Filtering
+     * the inference on confirmed attendance made it return nobody on real data,
+     * so a supervising examiner was asked to pick a roster the system had
+     * already worked out correctly.
+     */
+    public function test_the_supervised_group_is_prefilled_before_attendance_is_confirmed(): void
+    {
+        $examination = Examination::factory()->create(['exam_date' => now()->subDay()]);
+        $venue = \App\Models\ExaminationSchool::factory()->create(['examination_id' => $examination->id]);
+        $room = \App\Models\ExamRoom::factory()->create(['examination_school_id' => $venue->id, 'room_number' => 'Room-001']);
+
+        $make = fn (ExamRole $role, ?string $attended) => ExamAssignment::factory()->create([
+            'member_id' => Member::factory()->create()->id,
+            'role' => $role,
+            'attendance_confirmed_at' => $attended,
+            'examination_id' => $examination->id,
+            'examination_school_id' => $venue->id,
+            'exam_room_id' => $room->id,
+        ]);
+
+        $supervisor = $make(ExamRole::SupervisingExaminer, now()->toDateTimeString());
+        $proctor = $make(ExamRole::Proctor, null);
+
+        $this->getJson("/evaluation/assignments/{$supervisor->id}")
+            ->assertOk()
+            ->assertJsonPath('subordinates.0.exam_assignment_id', $proctor->id);
+    }
+
     public function test_a_rating_is_stored_against_the_selected_assignment(): void
     {
         [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();
