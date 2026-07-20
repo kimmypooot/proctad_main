@@ -20,6 +20,10 @@ const props = defineProps({
     /** Character limit. Declared as a prop because fallthrough attributes land
      *  on the outer wrapper, not the `<input>` — see `inputClass` below. */
     maxlength: { type: [String, Number], default: null },
+    /** AppIcon name shown inside the field, on the left. Added because search
+     *  boxes wanting one were hand-rolled instead — three copies of raw markup
+     *  that each lost the label/input association this component provides. */
+    icon: { type: String, default: null },
     /** Extra classes for the `<input>` itself — plain `class` on this component lands on the outer wrapper instead. */
     inputClass: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
@@ -51,6 +55,13 @@ const describedBy = computed(() => {
         </label>
 
         <div class="relative">
+            <AppIcon
+                v-if="icon"
+                :name="icon"
+                class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
+            />
+
             <input
                 :id="id"
                 v-model="model"
@@ -71,6 +82,7 @@ const describedBy = computed(() => {
                         ? 'border-accent-400 focus:border-accent-500 focus:ring-accent-200'
                         : 'border-slate-300 focus:border-brand-500 focus:ring-brand-100',
                     isPassword ? 'pr-12' : '',
+                    icon ? 'pl-10' : '',
                     inputClass,
                 ]"
             >
