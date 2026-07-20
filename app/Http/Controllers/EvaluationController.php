@@ -12,6 +12,7 @@ use App\Support\EvaluationCriteria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -167,6 +168,17 @@ class EvaluationController extends Controller
                 'room_no' => $s->room?->room_number,
                 'ratee_name' => $s->member->name,
             ]),
+            // Everyone at this venue the respondent could legitimately rate.
+            // The names above are the positional inference's best guess and are
+            // pre-selected; this is what the picker offers when that guess is
+            // wrong or incomplete — which SupervisionHierarchyResolver warns it
+            // can be whenever staffing was done manually room-by-room.
+            //
+            // A picker rather than a free-text name because a typed name submits
+            // with no exam_assignment_id, and PerformanceRatingCalculator matches
+            // ratings by that id alone: the rating would attach to nobody, and
+            // nothing would report it.
+            'available_ratees' => $this->rateeOptionsFor($assignment),
         ]);
     }
 
@@ -188,9 +200,17 @@ class EvaluationController extends Controller
         $rules = [];
 
         if ($designation === ExamRole::SupervisingExaminer->value) {
+            // Every rated person must be a real assignment at this venue.
+            // Previously nullable, and the name was free text: a typo produced a
+            // rating with no exam_assignment_id, which PerformanceRatingCalculator
+            // matches on exclusively — so the rating attached to nobody and
+            // nothing reported it. Constrained to the venue's own staff so a
+            // submitted id cannot point at someone the respondent never worked with.
+            $rateeIds = $this->rateeOptionsFor($assignment)->pluck('exam_assignment_id')->all();
+
             $rules += [
                 'room_ratings' => ['required', 'array', 'min:1'],
-                'room_ratings.*.exam_assignment_id' => ['nullable', 'integer', 'exists:exam_assignments,id'],
+                'room_ratings.*.exam_assignment_id' => ['required', 'integer', Rule::in($rateeIds)],
                 'room_ratings.*.room_no' => ['required', 'string', 'max:50'],
                 'room_ratings.*.ratee_name' => ['required', 'string', 'max:255'],
                 'room_ratings.*.punctuality' => ['required', 'array', 'size:'.count(EvaluationCriteria::PUNCTUALITY)],
@@ -224,6 +244,42 @@ class EvaluationController extends Controller
         ]);
 
         return back()->with('success', 'Thank you — your evaluation has been submitted.');
+    }
+
+    /**
+     * Room Examiners and Proctors at the same venue whose attendance was
+     * confirmed — the only people a respondent may rate.
+     *
+     * Scoped to the venue rather than the examination: a supervising examiner
+     * has no business rating staff at a testing centre they were never at. This
+     * is also the set store() validates a submitted ratee against.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function rateeOptionsFor(ExamAssignment $assignment): Collection
+    {
+        if ($assignment->examination_school_id === null) {
+            return collect();
+        }
+
+        return ExamAssignment::query()
+            ->where('examination_school_id', $assignment->examination_school_id)
+            ->whereIn('role', [ExamRole::RoomExaminer->value, ExamRole::Proctor->value])
+            ->whereNotNull('attendance_confirmed_at')
+            ->with('member:id,first_name,middle_name,last_name,suffix', 'room:id,room_number')
+            ->get()
+            ->sortBy(fn (ExamAssignment $a) => sprintf(
+                '%06d-%s',
+                (int) preg_replace('/\D/', '', (string) $a->room?->room_number),
+                $a->member?->name,
+            ))
+            ->values()
+            ->map(fn (ExamAssignment $a) => [
+                'exam_assignment_id' => $a->id,
+                'room_no' => $a->room?->room_number,
+                'ratee_name' => $a->member?->name,
+                'role_label' => $a->role->label(),
+            ]);
     }
 
     private function designationLabel(ExamRole $role): string

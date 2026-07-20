@@ -101,6 +101,9 @@ const resetSelection = () => {
     searchResults.value = [];
     form.exam_assignment_id = '';
     form.room_ratings = [];
+    // Ratees belong to one venue; leaving them would offer the previous
+    // testing center's staff against a new assignment.
+    availableRatees.value = [];
 };
 
 watch(examinationId, () => resetSelection());
@@ -150,6 +153,11 @@ const selectResult = async (result) => {
         searchQuery.value = '';
 
         if (data.designation.value === 'supervising_examiner') {
+            availableRatees.value = data.available_ratees ?? [];
+
+            // The positional inference's guess is pre-selected, not imposed —
+            // SupervisionHierarchyResolver is explicit that it can be wrong when
+            // staffing was done manually, so every row stays changeable.
             form.room_ratings = data.subordinates.length
                 ? data.subordinates.map((s) => ({ ...emptyRoomRating(), ...s }))
                 : [emptyRoomRating()];
@@ -163,6 +171,38 @@ const selectResult = async (result) => {
 
 const addRoomRating = () => form.room_ratings.push(emptyRoomRating());
 const removeRoomRating = (index) => form.room_ratings.splice(index, 1);
+
+/** Everyone at this venue who may be rated, from resolve(). */
+const availableRatees = ref([]);
+
+/**
+ * Already-chosen people are hidden from the other rows so the same person
+ * cannot be rated twice — except in the row that holds them, which must keep
+ * its own selection visible.
+ */
+const rateeOptionsFor = (index) => {
+    const takenElsewhere = form.room_ratings
+        .filter((_, i) => i !== index)
+        .map((r) => r.exam_assignment_id)
+        .filter(Boolean);
+
+    return availableRatees.value
+        .filter((r) => !takenElsewhere.includes(r.exam_assignment_id))
+        .map((r) => ({
+            value: r.exam_assignment_id,
+            label: `${r.room_no ? `Room ${r.room_no} — ` : ''}${r.ratee_name} (${r.role_label})`,
+        }));
+};
+
+/** Carries the name and room with the selection: both are still submitted, and
+ *  both must describe the person the id points at rather than whatever was typed. */
+const selectRatee = (index, value) => {
+    const chosen = availableRatees.value.find((r) => r.exam_assignment_id === Number(value));
+
+    form.room_ratings[index].exam_assignment_id = chosen?.exam_assignment_id ?? null;
+    form.room_ratings[index].ratee_name = chosen?.ratee_name ?? '';
+    form.room_ratings[index].room_no = chosen?.room_no ?? '';
+};
 
 const overallRatingOptions = computed(() =>
     [5, 4, 3, 2, 1].map((value) => ({ value, label: props.criteria.overall_rating_options[value] })),
@@ -362,20 +402,21 @@ const submit = () => {
                                 </BaseButton>
                             </div>
 
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <TextInput
-                                    v-model="rating.room_no"
-                                    label="Room No."
-                                    required
-                                    :error="form.errors[`room_ratings.${index}.room_no`]"
-                                />
-                                <TextInput
-                                    v-model="rating.ratee_name"
-                                    label="Name of Room Examiner/Proctor"
-                                    required
-                                    :error="form.errors[`room_ratings.${index}.ratee_name`]"
-                                />
-                            </div>
+                            <!-- Chosen, never typed. A hand-entered name submits
+                                 without an exam_assignment_id, and ratings are
+                                 matched by that id alone — so it would attach to
+                                 nobody, silently. -->
+                            <SelectInput
+                                :model-value="rating.exam_assignment_id"
+                                label="Room Examiner / Proctor"
+                                required
+                                placeholder="Select the person you are rating"
+                                :options="rateeOptionsFor(index)"
+                                :error="form.errors[`room_ratings.${index}.exam_assignment_id`]
+                                    || form.errors[`room_ratings.${index}.ratee_name`]"
+                                :hint="availableRatees.length ? null : 'No room examiners or proctors with confirmed attendance were found at this testing center.'"
+                                @update:model-value="(value) => selectRatee(index, value)"
+                            />
 
                             <RatingGrid
                                 v-model="rating.punctuality"

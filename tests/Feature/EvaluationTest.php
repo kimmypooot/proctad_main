@@ -8,6 +8,7 @@ use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\Member;
 use App\Models\User;
+use App\Support\EvaluationCriteria;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -29,6 +30,107 @@ class EvaluationTest extends TestCase
             'attendance_confirmed_at' => now(),
             'examination_id' => Examination::factory()->create(['exam_date' => now()->subDays(3)])->id,
         ]);
+    }
+
+    /**
+     * A venue with a supervising examiner and one room examiner, all attendance
+     * confirmed, so the SE has somebody it is legitimate to rate.
+     *
+     * @return array{0: ExamAssignment, 1: ExamAssignment}
+     */
+    private function venueWithSupervisorAndRatee(): array
+    {
+        $examination = Examination::factory()->create(['exam_date' => now()->subDays(3)]);
+        $venue = \App\Models\ExaminationSchool::factory()->create(['examination_id' => $examination->id]);
+
+        $make = fn (ExamRole $role) => ExamAssignment::factory()->create([
+            'member_id' => Member::factory()->create()->id,
+            'role' => $role,
+            'attendance_confirmed_at' => now(),
+            'examination_id' => $examination->id,
+            'examination_school_id' => $venue->id,
+        ]);
+
+        return [$make(ExamRole::SupervisingExaminer), $make(ExamRole::RoomExaminer)];
+    }
+
+    /** Sizes come from the criteria constants so the payload cannot drift from the rules. */
+    private function supervisorPayload(ExamAssignment $supervisor, array $roomRating): array
+    {
+        $scores = fn (array $criteria) => array_fill(0, count($criteria), 4);
+
+        return [
+            'examination_id' => $supervisor->examination_id,
+            'exam_assignment_id' => $supervisor->id,
+            'room_ratings' => [$roomRating + [
+                'punctuality' => $scores(EvaluationCriteria::PUNCTUALITY),
+                'decorum' => $scores(EvaluationCriteria::DECORUM),
+                'procedures' => $scores(EvaluationCriteria::PROCEDURES),
+            ]],
+            'room_readiness' => array_fill(0, count(EvaluationCriteria::ROOM_READINESS), true),
+            'venue_readiness' => $scores(EvaluationCriteria::VENUE_READINESS),
+            'committee_coordination' => $scores(EvaluationCriteria::COMMITTEE_COORDINATION),
+            'conduct_of_exam' => $scores(EvaluationCriteria::CONDUCT_OF_EXAM),
+            'examinee_experience' => $scores(EvaluationCriteria::EXAMINEE_EXPERIENCE),
+            'overall_rating' => 4,
+        ];
+    }
+
+    /** The ratee list is what the picker offers, and what submission is checked against. */
+    public function test_resolve_offers_the_venues_room_examiners_and_proctors(): void
+    {
+        [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();
+
+        $this->getJson("/evaluation/assignments/{$supervisor->id}")
+            ->assertOk()
+            ->assertJsonPath('available_ratees.0.exam_assignment_id', $ratee->id);
+    }
+
+    public function test_a_rating_is_stored_against_the_selected_assignment(): void
+    {
+        [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();
+
+        $this->post('/evaluation', $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => $ratee->id,
+            'room_no' => '001',
+            'ratee_name' => $ratee->member->name,
+        ]))->assertRedirect();
+
+        $stored = \App\Models\Evaluation::firstOrFail();
+        $this->assertSame($ratee->id, $stored->room_ratings[0]['exam_assignment_id']);
+    }
+
+    /**
+     * The whole point of the picker: a rating with no assignment id is matched by
+     * PerformanceRatingCalculator against nobody, so it is silently lost. It used
+     * to be accepted, because the name was free text and the id was nullable.
+     */
+    public function test_a_rating_without_an_assignment_id_is_rejected(): void
+    {
+        [$supervisor] = $this->venueWithSupervisorAndRatee();
+
+        $this->post('/evaluation', $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => null,
+            'room_no' => '001',
+            'ratee_name' => 'Someone Typed By Hand',
+        ]))->assertSessionHasErrors('room_ratings.0.exam_assignment_id');
+
+        $this->assertSame(0, \App\Models\Evaluation::count());
+    }
+
+    /** A respondent may only rate staff at the venue they actually served. */
+    public function test_a_ratee_from_another_venue_is_rejected(): void
+    {
+        [$supervisor] = $this->venueWithSupervisorAndRatee();
+        [, $elsewhere] = $this->venueWithSupervisorAndRatee();
+
+        $this->post('/evaluation', $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => $elsewhere->id,
+            'room_no' => '001',
+            'ratee_name' => $elsewhere->member->name,
+        ]))->assertSessionHasErrors('room_ratings.0.exam_assignment_id');
+
+        $this->assertSame(0, \App\Models\Evaluation::count());
     }
 
     public function test_guests_still_get_the_public_form_with_no_shortcut(): void
