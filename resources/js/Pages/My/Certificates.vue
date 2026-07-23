@@ -144,16 +144,14 @@ const closeViewer = () => (viewing.value = null);
                     <div class="flex items-center gap-3">
                         <BaseBadge :variant="certificate.status_variant">{{ certificate.status_label }}</BaseBadge>
                         <template v-if="certificate.status === 'released'">
-                            <BaseButton variant="link" @click="viewCertificate(certificate)">
-                                <AppIcon name="eye" class="h-4 w-4" />
+                            <BaseButton variant="link" @click="viewCertificate(certificate)" icon="eye">
                                 View
                             </BaseButton>
                             <BaseButton
                                 variant="link"
                                 external
-                                :href="`/certificates/${certificate.id}/download`"
+                                :href="`/certificates/${certificate.id}/download`" icon="arrow-down-tray"
                             >
-                                <AppIcon name="arrow-down-tray" class="h-4 w-4" />
                                 Download
                             </BaseButton>
                         </template>
@@ -194,9 +192,8 @@ const closeViewer = () => (viewing.value = null);
                     variant="primary"
                     size="sm"
                     external
-                    :href="`/certificates/${viewing.id}/download`"
+                    :href="`/certificates/${viewing.id}/download`" icon="arrow-down-tray"
                 >
-                    <AppIcon name="arrow-down-tray" class="h-4 w-4" />
                     Download
                 </BaseButton>
             </template>

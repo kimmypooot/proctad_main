@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Certificate;
 use App\Models\Setting;
+use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -48,6 +49,11 @@ class HandleInertiaRequests extends Middleware
                         ?? ($user->member?->photo_path ? route('members.photo', $user->member) : null),
                 ] : null,
             ],
+            // Which hat the user is wearing, and whether they have a second one
+            // to switch to. Drives navigation and the dashboard only — never
+            // access. See App\Support\Workspace.
+            'workspace' => Workspace::current($request),
+            'canSwitchWorkspace' => Workspace::availableTo($user),
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

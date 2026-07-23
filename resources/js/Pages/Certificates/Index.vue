@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
@@ -259,9 +258,8 @@ const submitResign = () => {
                     variant="primary"
                     size="sm"
                     external
-                    :href="`/certificates/${viewing.certificate.id}/download`"
+                    :href="`/certificates/${viewing.certificate.id}/download`" icon="arrow-down-tray"
                 >
-                    <AppIcon name="arrow-down-tray" class="h-4 w-4" />
                     Download
                 </BaseButton>
             </template>

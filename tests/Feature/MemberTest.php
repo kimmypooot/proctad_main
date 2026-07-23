@@ -141,7 +141,7 @@ class MemberTest extends TestCase
 
         // Management is region-wide oversight only. Field Directors run their own
         // Testing Center's operations and are covered separately below.
-        $user = $this->staff(UserRole::Management);
+        $user = $this->staff(UserRole::DirectorIv);
 
         $this->actingAs($user)->get("/members/{$member->id}")->assertRedirect('/members');
         $this->actingAs($user)->post('/members', $this->memberPayload($this->leyte, ['email' => 'x-management@example.com']))

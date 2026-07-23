@@ -98,8 +98,8 @@ class Certificate extends Model
     /**
      * Certificate types $user is entitled to decide on. Field Directors and the
      * region-wide admins handle all three approvable types (Completion never
-     * reaches an approver — see CertificateType::approverRole()); Management
-     * handles Appreciation only. Anyone else gets none.
+     * reaches an approver — see CertificateType::approverRoles()); the regional
+     * directors handle Appreciation only. Anyone else gets none.
      *
      * @return array<int, CertificateType>
      */
@@ -109,7 +109,7 @@ class Certificate extends Model
             UserRole::FieldDirector, UserRole::SuperAdmin, UserRole::EsdAdmin => [
                 CertificateType::Appearance, CertificateType::DesignationOrder, CertificateType::Appreciation,
             ],
-            UserRole::Management => [CertificateType::Appreciation],
+            UserRole::DirectorIv, UserRole::DirectorIii => [CertificateType::Appreciation],
             default => [],
         };
     }

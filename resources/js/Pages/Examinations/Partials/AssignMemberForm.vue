@@ -25,9 +25,25 @@ const assignForm = useForm({ member_ids: [], role: '', examination_school_id: ''
 
 const isCoverageRole = computed(() => props.roles.find((r) => r.value === assignForm.role)?.is_coverage ?? false);
 
+/*
+ * Ex officio seats: REC Chair belongs to the Director IV, Co-Chair to the
+ * Director III. The server rejects anyone else (see reservedSeatRule), so the
+ * picker selects the right person rather than letting an admin choose someone
+ * and only then be told no. Null when the post is vacant or its holder isn't
+ * enrolled — the seat is genuinely open then, and the picker stays normal.
+ */
+const reservedMemberId = computed(
+    () => props.roles.find((r) => r.value === assignForm.role)?.reserved_member_id ?? null,
+);
+const reservedMember = computed(() => (reservedMemberId.value
+    ? props.assignableMembers.find((m) => m.id === reservedMemberId.value) ?? null
+    : null));
+
 watch(() => assignForm.role, (role, previous) => {
     const wasCoverage = props.roles.find((r) => r.value === previous)?.is_coverage ?? false;
     if (wasCoverage && !isCoverageRole.value) assignForm.covered_school_ids = [];
+
+    if (reservedMemberId.value) selected.value = [reservedMemberId.value];
 });
 
 const toggleCoveredSchool = (id) => {
@@ -43,11 +59,40 @@ watch(() => props.prefillVenueId, (venueId) => {
     if (venueId) assignForm.examination_school_id = venueId;
 }, { immediate: true });
 
+/*
+ * The testing center of the venue currently chosen, or null when none is.
+ * Members who also hold a field-office-scoped staff post (Testing Center Staff,
+ * Field Director) serve only where they work, so they drop out of the list
+ * until a venue in their own office is picked — the server enforces this in
+ * staffJurisdictionRule; hiding them here just avoids offering a choice that
+ * would be rejected.
+ */
+const selectedVenueOfficeId = computed(() => props.venues
+    .find((v) => v.id === Number(assignForm.examination_school_id))?.field_office_id ?? null);
+
+const isEligible = (member) => member.confined_to_office_id === null
+    || member.confined_to_office_id === selectedVenueOfficeId.value;
+
+const eligibleMembers = computed(() => props.assignableMembers.filter(isEligible));
+
+// How many the venue choice is currently excluding, so the count below can say
+// so rather than looking like people have gone missing.
+const confinedOutCount = computed(
+    () => props.assignableMembers.length - eligibleMembers.value.length,
+);
+
+// Changing the venue can strip eligibility from someone already ticked; without
+// this their id would ride along in the payload and fail validation.
+watch(selectedVenueOfficeId, () => {
+    const stillEligible = new Set(eligibleMembers.value.map((m) => m.id));
+    selected.value = selected.value.filter((id) => stillEligible.has(id));
+});
+
 const filteredMembers = computed(() => {
     const term = memberSearch.value.toLowerCase();
     const pool = term
-        ? props.assignableMembers.filter((m) => m.label.toLowerCase().includes(term))
-        : props.assignableMembers;
+        ? eligibleMembers.value.filter((m) => m.label.toLowerCase().includes(term))
+        : eligibleMembers.value;
     return pool.slice(0, 100);
 });
 
@@ -156,33 +201,49 @@ const assign = () => assignForm
                 <p v-else class="mt-2 text-xs text-slate-400">No venues attached yet — add venues in Step 1 first.</p>
             </div>
 
-            <div class="mt-4 flex items-center justify-between">
-                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">
-                    {{ filteredMembers.length }} eligible member{{ filteredMembers.length === 1 ? '' : 's' }}
-                </p>
-                <button type="button" class="text-xs font-semibold text-brand-700 hover:underline" @click="selectAllFiltered">
-                    Select / clear all filtered
-                </button>
+            <!--
+                A reserved seat has exactly one rightful holder, already
+                selected above. Showing the pool here would only invite a
+                choice the server is going to reject.
+            -->
+            <div v-if="reservedMemberId" class="mt-4 rounded-lg border border-brand-200 bg-brand-50/60 px-3 py-2.5 text-sm text-brand-800">
+                This designation is held ex officio by
+                <span class="font-semibold">{{ reservedMember ? reservedMember.label : 'the incumbent director' }}</span>,
+                who has been selected automatically.
             </div>
 
-            <div class="mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-200">
-                <label
-                    v-for="member in filteredMembers"
-                    :key="member.id"
-                    class="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50"
-                >
-                    <input
-                        type="checkbox"
-                        :checked="selected.includes(member.id)"
-                        class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
-                        @change="toggle(member.id)"
+            <template v-else>
+                <div class="mt-4 flex items-center justify-between">
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        {{ filteredMembers.length }} eligible member{{ filteredMembers.length === 1 ? '' : 's' }}
+                        <span v-if="confinedOutCount" class="normal-case tracking-normal text-slate-400">
+                            · {{ confinedOutCount }} hidden — Testing Center Staff serve only at their own center
+                        </span>
+                    </p>
+                    <button type="button" class="text-xs font-semibold text-brand-700 hover:underline" @click="selectAllFiltered">
+                        Select / clear all filtered
+                    </button>
+                </div>
+
+                <div class="mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-200">
+                    <label
+                        v-for="member in filteredMembers"
+                        :key="member.id"
+                        class="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50"
                     >
-                    <span class="text-slate-700">{{ member.label }}</span>
-                </label>
-                <p v-if="!filteredMembers.length" class="px-3 py-4 text-center text-sm text-slate-400">
-                    No eligible members match your search.
-                </p>
-            </div>
+                        <input
+                            type="checkbox"
+                            :checked="selected.includes(member.id)"
+                            class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
+                            @change="toggle(member.id)"
+                        >
+                        <span class="text-slate-700">{{ member.label }}</span>
+                    </label>
+                    <p v-if="!filteredMembers.length" class="px-3 py-4 text-center text-sm text-slate-400">
+                        No eligible members match your search.
+                    </p>
+                </div>
+            </template>
             <p v-if="assignForm.errors.member_ids" class="mt-1.5 text-sm text-accent-600" role="alert">{{ assignForm.errors.member_ids }}</p>
 
             <div class="mt-4 flex items-center justify-between">

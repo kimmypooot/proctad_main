@@ -153,7 +153,7 @@ class ScannerOepAndCompatibilityTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('attendanceSummary.total', 2)
                 ->where('attendanceSummary.present', 1)
-                ->where('attendanceSummary.absent', 1)
+                ->where('attendanceSummary.awaiting', 1)
                 ->where('attendanceSummary.roster.0.value', "oep:{$absentAssignment->id}")
                 ->where('attendanceSummary.roster.0.code', $absent->oep_id));
     }

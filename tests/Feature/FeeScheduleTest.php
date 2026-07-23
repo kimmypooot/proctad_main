@@ -22,7 +22,7 @@ class FeeScheduleTest extends TestCase
                 ->assertOk();
         }
 
-        foreach ([UserRole::Management, UserRole::FieldDirector, UserRole::FoAdmin, UserRole::Member] as $role) {
+        foreach ([UserRole::DirectorIv, UserRole::DirectorIii, UserRole::FieldDirector, UserRole::FoAdmin, UserRole::Member] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/fee-schedules')
                 ->assertForbidden();

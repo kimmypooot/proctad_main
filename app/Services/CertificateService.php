@@ -53,7 +53,7 @@ class CertificateService
             return $certificate;
         }
 
-        if ($type->approverRole() === null) {
+        if (! $type->needsApproval()) {
             return $this->release($certificate, $requestedBy);
         }
 
@@ -194,16 +194,16 @@ class CertificateService
      */
     private function notifyApprovers(Certificate $certificate): void
     {
-        $approverRole = $certificate->type->approverRole();
+        $approverRoles = $certificate->type->approverRoles();
 
-        if ($approverRole === null) {
+        if ($approverRoles === []) {
             return;
         }
 
         $recipients = User::query()
-            ->where(function ($query) use ($approverRole, $certificate) {
-                $query->where('role', $approverRole)
-                    ->when($approverRole === UserRole::FieldDirector,
+            ->where(function ($query) use ($approverRoles, $certificate) {
+                $query->whereIn('role', $approverRoles)
+                    ->when(in_array(UserRole::FieldDirector, $approverRoles, true),
                         fn ($q) => $q->where('field_office_id', $certificate->field_office_id));
             })
             ->orWhereIn('role', [UserRole::SuperAdmin, UserRole::EsdAdmin])

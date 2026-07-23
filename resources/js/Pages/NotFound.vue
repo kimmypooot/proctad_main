@@ -2,7 +2,6 @@
 import { Head } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import BaseButton from '@/Components/BaseButton.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 </script>
 
 <template>
@@ -20,8 +19,7 @@ import AppIcon from '@/Components/AppIcon.vue';
                     moved, renamed, or no longer exists.
                 </p>
                 <div class="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
-                    <BaseButton href="/" variant="primary">
-                        <AppIcon name="home" class="h-4 w-4" />
+                    <BaseButton href="/" variant="primary" icon="home">
                         Back to Home
                     </BaseButton>
                     <BaseButton href="/contact" variant="outline">Contact Support</BaseButton>

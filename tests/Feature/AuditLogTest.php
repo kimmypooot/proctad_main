@@ -75,7 +75,7 @@ class AuditLogTest extends TestCase
 
     public function test_access_is_limited_to_authorized_roles(): void
     {
-        foreach ([UserRole::SuperAdmin, UserRole::Management] as $role) {
+        foreach ([UserRole::SuperAdmin, UserRole::DirectorIv, UserRole::DirectorIii] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/audit-logs')
                 ->assertOk();

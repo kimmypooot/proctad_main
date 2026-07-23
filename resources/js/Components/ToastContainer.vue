@@ -1,8 +1,22 @@
 <script setup>
+import { computed } from 'vue';
 import { useToasts } from '@/Composables/useToasts';
 import AppIcon from './AppIcon.vue';
 
 const { toasts, dismiss } = useToasts();
+
+/**
+ * 'bottom' keeps toasts clear of the top of the screen. The public scanner
+ * needs it: its scan verdict and sync status both sit at the top, and toasts
+ * landing over them hide exactly what the operator is looking at.
+ */
+const props = defineProps({
+    position: { type: String, default: 'top' },
+});
+
+const placement = computed(() => (props.position === 'bottom'
+    ? 'bottom-4 sm:bottom-4 sm:right-4'
+    : 'top-20 sm:top-20 sm:right-4'));
 
 const config = {
     info: { icon: 'information-circle', classes: 'bg-brand-50 border-brand-200 text-brand-800', iconColor: 'text-brand-600' },
@@ -14,8 +28,11 @@ const config = {
 
 <template>
     <Teleport to="body">
-        <div class="pointer-events-none fixed inset-x-0 top-20 z-50 flex flex-col items-end gap-2 p-4 sm:inset-x-auto sm:top-20 sm:right-4">
-            <TransitionGroup name="toast">
+        <div
+            class="pointer-events-none fixed inset-x-0 z-50 flex flex-col items-end gap-2 p-4 sm:inset-x-auto"
+            :class="placement"
+        >
+            <TransitionGroup :name="position === 'bottom' ? 'toast-up' : 'toast'">
                 <div
                     v-for="toast in toasts"
                     :key="toast.id"
@@ -52,5 +69,16 @@ const config = {
 .toast-leave-to {
     opacity: 0;
     transform: translateY(-8px);
+}
+
+/* Bottom-anchored toasts slide up from the edge they sit on. */
+.toast-up-enter-active,
+.toast-up-leave-active {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.toast-up-enter-from,
+.toast-up-leave-to {
+    opacity: 0;
+    transform: translateY(8px);
 }
 </style>

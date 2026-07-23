@@ -90,7 +90,8 @@ const markAllNotificationsRead = () => {
 const roleLabels = {
     super_admin: 'Super Administrator',
     esd_admin: 'Administrator (ESD)',
-    management: 'Management',
+    director_iv: 'Regional Director IV',
+    director_iii: 'Assistant Regional Director III',
     field_director: 'Field Director / Caretaker',
     fo_admin: 'Testing Center Staff',
     member: 'PROCTAD Member',
@@ -230,7 +231,10 @@ const navByRole = {
             ],
         },
     ],
-    management: [
+    // Both regional directors get the same console — they differ only in which
+    // REC seat they hold, which is an examination concern, not a navigation one.
+    // Aliased to director_iii below.
+    director_iv: [
         {
             section: 'Overview',
             items: [
@@ -323,6 +327,8 @@ const navByRole = {
     ],
 };
 
+navByRole.director_iii = navByRole.director_iv;
+
 navByRole.super_admin = [
     {
         section: 'Overview',
@@ -399,8 +405,31 @@ navByRole.super_admin = [
     },
 ];
 
-const navItems = computed(() => navByRole[user.value?.role] ?? navByRole.member);
-const roleLabel = computed(() => roleLabels[user.value?.role] ?? 'User');
+/*
+ * Dual-role staff (a Testing Center Staff who also proctors, a Director who
+ * chairs the REC) hold one account with two hats. `workspace` says which is on;
+ * it changes navigation and the dashboard only — every page behind these links
+ * is still gated on the real role server-side. See App\Support\Workspace.
+ */
+const workspace = computed(() => page.props.workspace ?? 'staff');
+const inMemberWorkspace = computed(() => workspace.value === 'member');
+const canSwitchWorkspace = computed(() => page.props.canSwitchWorkspace ?? false);
+
+const navItems = computed(() => (inMemberWorkspace.value
+    ? navByRole.member
+    : navByRole[user.value?.role] ?? navByRole.member));
+
+// In the member workspace a staff user is acting as a PROCTAD member, so the
+// header must say so — otherwise "Super Administrator" sits above a member-only
+// sidebar and reads as a bug.
+const roleLabel = computed(() => (inMemberWorkspace.value
+    ? roleLabels.member
+    : roleLabels[user.value?.role] ?? 'User'));
+
+const switchWorkspace = (target) => {
+    userMenuOpen.value = false;
+    router.post('/workspace', { workspace: target });
+};
 
 const initials = computed(() => {
     const name = (user.value?.name ?? '').trim();
@@ -582,6 +611,24 @@ const logout = () => {
                 </button>
 
                 <div class="flex items-center gap-4">
+                    <!--
+                        Persistent reminder of which hat is on. Only a dual-role
+                        user ever sees it, and only in the member workspace —
+                        the staff console is the default, so labelling that too
+                        would be noise on every other page.
+                    -->
+                    <button
+                        v-if="canSwitchWorkspace && inMemberWorkspace"
+                        type="button"
+                        class="hidden items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 py-1 pl-2.5 pr-2 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-100 sm:flex"
+                        title="Return to the staff console"
+                        @click="switchWorkspace('staff')"
+                    >
+                        <AppIcon name="identification" class="h-3.5 w-3.5 shrink-0" />
+                        PROCTAD view
+                        <AppIcon name="x-mark" class="h-3.5 w-3.5 shrink-0 text-brand-400" />
+                    </button>
+
                     <div class="relative">
                         <Tooltip text="Notifications">
                         <button
@@ -667,8 +714,31 @@ const logout = () => {
 
                         <div
                             v-if="userMenuOpen"
-                            class="absolute right-0 z-40 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+                            class="absolute right-0 z-40 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
                         >
+                            <!-- Only for staff who also hold an accreditation. -->
+                            <template v-if="canSwitchWorkspace">
+                                <button
+                                    v-if="inMemberWorkspace"
+                                    type="button"
+                                    class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                                    @click="switchWorkspace('staff')"
+                                >
+                                    <AppIcon name="building-office" class="h-4 w-4 shrink-0 text-slate-400" />
+                                    Back to staff console
+                                </button>
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                                    @click="switchWorkspace('member')"
+                                >
+                                    <AppIcon name="identification" class="h-4 w-4 shrink-0 text-slate-400" />
+                                    Switch to my PROCTAD
+                                </button>
+                                <div class="my-1 h-px bg-slate-100" />
+                            </template>
+
                             <button
                                 type="button"
                                 class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-accent-600 transition-colors hover:bg-accent-50"

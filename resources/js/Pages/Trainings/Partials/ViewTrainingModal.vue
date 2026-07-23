@@ -10,6 +10,7 @@ import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
+import ScannerLinksPanel from '@/Pages/Examinations/Partials/ScannerLinksPanel.vue';
 import { useDetailsResource } from '@/Composables/useDetailsResource';
 
 const props = defineProps({
@@ -172,9 +173,8 @@ watch(() => props.show, (open) => {
                         v-if="can().complete"
                         variant="primary"
                         size="sm"
-                        @click="confirmingComplete = true"
+                        @click="confirmingComplete = true" icon="check-circle"
                     >
-                        <AppIcon name="check-circle" class="h-4 w-4" />
                         Mark Completed
                     </BaseButton>
                 </div>
@@ -258,6 +258,15 @@ watch(() => props.show, (open) => {
                         />
                     </div>
                 </div>
+
+                <!-- Lets whoever runs the room check people in from a phone
+                     without a staff account — see ScannerSession. -->
+                <ScannerLinksPanel
+                    :sessions="raw?.scannerSessions ?? []"
+                    :training-id="training().id"
+                    :can="can().manageScannerLinks"
+                    @changed="load"
+                />
             </div>
         </template>
 
@@ -304,9 +313,15 @@ watch(() => props.show, (open) => {
 
         <!-- Complete confirm -->
         <BaseModal :show="confirmingComplete" title="Mark training completed" @close="confirmingComplete = false">
-            <p class="text-sm leading-relaxed text-slate-600">
-                This will mark <strong>{{ training()?.title }}</strong> as completed and automatically issue and
-                email a Certificate of Completion to every attendance-confirmed participant. This cannot be undone.
+            <p v-if="training()?.issues_completion" class="text-sm leading-relaxed text-slate-600">
+                This will mark <strong>{{ training()?.title }}</strong> as completed. Attendance-confirmed participants
+                already received their Certificate of Completion when they were scanned in; anyone still missing one
+                gets it issued and emailed now. This cannot be undone.
+            </p>
+            <p v-else class="text-sm leading-relaxed text-slate-600">
+                This will mark <strong>{{ training()?.title }}</strong> as completed. A briefing carries no Certificate
+                of Completion — participants keep the Certificate of Appearance earned when they were scanned in. This
+                cannot be undone.
             </p>
             <template #footer>
                 <BaseButton variant="outline" size="sm" @click="confirmingComplete = false">Cancel</BaseButton>

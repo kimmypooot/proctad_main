@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import ViewMemberModal from './Partials/ViewMemberModal.vue';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BasePagination from '@/Components/BasePagination.vue';
@@ -188,9 +187,8 @@ const downloadSelectedIdCards = async () => {
                     size="sm"
                     :loading="downloadingIds"
                     :disabled="downloadingIds"
-                    @click="downloadSelectedIdCards"
+                    @click="downloadSelectedIdCards" icon="identification"
                 >
-                    <AppIcon name="identification" class="h-4 w-4" />
                     Download ID Cards
                 </BaseButton>
             </div>

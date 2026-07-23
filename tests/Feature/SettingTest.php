@@ -22,7 +22,7 @@ class SettingTest extends TestCase
                 ->assertOk();
         }
 
-        foreach ([UserRole::FoAdmin, UserRole::FieldDirector, UserRole::Management] as $role) {
+        foreach ([UserRole::FoAdmin, UserRole::FieldDirector, UserRole::DirectorIv, UserRole::DirectorIii] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/settings')
                 ->assertForbidden();

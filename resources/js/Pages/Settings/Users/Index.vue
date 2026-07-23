@@ -93,9 +93,20 @@ const submitEdit = () => editForm.put(`/users/${editing.value.id}`, {
     onSuccess: () => (editing.value = null),
 });
 
-/* --- Password reset --- */
+/*
+ * --- Password reset ---
+ *
+ * Confirmed first: this emails a real person a reset link and, on some setups,
+ * invalidates the password they are currently using. It sat one stray click
+ * away from the Edit button, with no way back.
+ */
+const resettingUser = ref(null);
 const resetForm = useForm({});
-const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-reset`, { preserveScroll: true });
+
+const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send-password-reset`, {
+    preserveScroll: true,
+    onSuccess: () => (resettingUser.value = null),
+});
 </script>
 
 <template>
@@ -107,7 +118,7 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
             subtitle="Staff accounts. New accounts receive an emailed link to set their own password."
         >
             <template v-if="can.create" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
+                <BaseButton variant="primary" size="sm" icon="user-plus" @click="openCreate">
                     Add User
                 </BaseButton>
             </template>
@@ -196,10 +207,10 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
                                 />
                                 <IconButton icon="pencil" label="Edit" @click="openEdit(user)" />
                                 <IconButton
-                                    icon="arrow-path"
+                                    icon="key"
                                     label="Reset Password"
                                     :disabled="resetForm.processing"
-                                    @click="sendReset(user)"
+                                    @click="resettingUser = user"
                                 />
                             </div>
                         </td>
@@ -215,6 +226,25 @@ const sendReset = (user) => resetForm.post(`/users/${user.id}/send-password-rese
         <div class="mt-6">
             <BasePagination :links="users.links" />
         </div>
+
+        <!-- Reset password confirmation -->
+        <BaseModal :show="!!resettingUser" title="Send password reset" @close="resettingUser = null">
+            <p class="text-sm leading-relaxed text-slate-600">
+                Email a password reset link to <strong>{{ resettingUser?.name }}</strong>
+                at <span class="font-medium text-slate-800">{{ resettingUser?.email }}</span>?
+            </p>
+            <p class="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+                They will be asked to choose a new password the next time they sign in.
+                Only do this if they have asked for it — an unexpected reset email is
+                indistinguishable from a phishing attempt.
+            </p>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="resettingUser = null">Cancel</BaseButton>
+                <BaseButton size="sm" icon="envelope" :loading="resetForm.processing" @click="confirmReset">
+                    Send reset link
+                </BaseButton>
+            </template>
+        </BaseModal>
 
         <!-- Create modal -->
         <BaseModal :show="showCreate" title="Add User" @close="showCreate = false">

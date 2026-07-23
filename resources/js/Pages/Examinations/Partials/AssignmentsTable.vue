@@ -81,6 +81,33 @@ const editForm = useForm({
 const editIsCoverageRole = computed(() => props.roles.find((r) => r.value === editForm.role)?.is_coverage ?? false);
 const overrideComputedRating = ref(false);
 
+// REC monitors region-wide; LEC is seated at one testing center and only ever
+// covers schools inside it. Mirrors coveredSchoolJurisdictionRule server-side —
+// offering the full region here would just produce a validation error later.
+const editIsCenterBoundCoverage = computed(
+    () => props.roles.find((r) => r.value === editForm.role)?.group === 'testing_center',
+);
+
+const editCoveredSchoolOptions = computed(() => {
+    if (!editIsCenterBoundCoverage.value) {
+        return venueOptions.value;
+    }
+
+    const center = props.venues.find((v) => v.id === Number(editForm.examination_school_id))?.field_office_id;
+    if (!center) return [];
+
+    const inCenter = props.venues.filter((v) => v.field_office_id === center).map((v) => v.id);
+
+    return venueOptions.value.filter((option) => inCenter.includes(option.value));
+});
+
+// Changing the role or venue can strip options out from under an existing
+// selection — drop the now-ineligible ones rather than submitting them.
+watch(editCoveredSchoolOptions, (options) => {
+    const allowed = options.map((option) => option.value);
+    editForm.covered_school_ids = editForm.covered_school_ids.filter((id) => allowed.includes(id));
+});
+
 const openEdit = (assignment) => {
     editingAssignment.value = assignment;
     editForm.clearErrors();
@@ -145,6 +172,54 @@ const confirmRemove = () => removeForm.delete(`/assignments/${removing.value.id}
 const sendConfirmationForm = useForm({});
 const sendConfirmation = (assignment) => sendConfirmationForm.post(`/assignments/${assignment.id}/send-confirmation`, {
     preserveScroll: true,
+});
+
+/*
+ * --- Exam-day cover ---
+ *
+ * A test administrator who does not report is marked absent, then an Alternate
+ * Examiner from this venue's standby pool takes the seat, inheriting its
+ * designation and room. The server owns every rule here (AlternateActivator);
+ * these handlers only choose what to offer.
+ */
+const markingAbsent = ref(null);
+const absenceForm = useForm({});
+
+const confirmMarkAbsent = () => absenceForm.post(`/assignments/${markingAbsent.value.id}/absent`, {
+    preserveScroll: true,
+    onSuccess: () => (markingAbsent.value = null),
+});
+
+const clearAbsence = (assignment) => absenceForm.delete(`/assignments/${assignment.id}/absent`, {
+    preserveScroll: true,
+});
+
+const standDown = (assignment) => absenceForm.delete(`/assignments/${assignment.id}/alternate`, {
+    preserveScroll: true,
+});
+
+const callingIn = ref(null);
+const alternateForm = useForm({ alternate_assignment_id: '' });
+
+// The standby pool is per venue, so only alternates at the vacant seat's own
+// venue are offered — matching AlternateActivator::cannotActivate, which would
+// refuse anyone else.
+const availableAlternates = computed(() => (callingIn.value === null ? [] : props.assignments.filter(
+    (a) => a.is_alternate
+        && !a.covering_for
+        && !a.absent
+        && a.examination_school_id === callingIn.value.examination_school_id,
+)));
+
+const openAlternates = (assignment) => {
+    callingIn.value = assignment;
+    alternateForm.clearErrors();
+    alternateForm.alternate_assignment_id = '';
+};
+
+const submitAlternate = () => alternateForm.post(`/assignments/${callingIn.value.id}/alternate`, {
+    preserveScroll: true,
+    onSuccess: () => (callingIn.value = null),
 });
 
 /* --- Force reassign (admin override — preserves confirmation status) --- */
@@ -274,7 +349,21 @@ const submitBulkConfirm = () => {
                         <p class="mt-0.5 truncate text-xs text-slate-400 xl:hidden">{{ assignment.field_office?.name }}</p>
                     </td>
                     <td class="hidden max-w-[8rem] truncate px-3 py-2 text-slate-600 xl:table-cell" :title="assignment.field_office?.name">{{ assignment.field_office?.name }}</td>
-                    <td class="max-w-[7rem] px-3 py-2 text-slate-600">{{ assignment.role_label }}</td>
+                    <td class="max-w-[7rem] px-3 py-2 text-slate-600">
+                        {{ assignment.role_label }}
+                        <!--
+                            Both sides of a substitution are stated on the row.
+                            Without this the alternate simply reads as a Proctor
+                            and the no-show as a Proctor who never attended,
+                            with nothing connecting them.
+                        -->
+                        <span v-if="assignment.covering_for" class="mt-0.5 block text-xs text-brand-700">
+                            covering for {{ assignment.covering_for.member_name }}
+                        </span>
+                        <span v-else-if="assignment.covered_by" class="mt-0.5 block text-xs text-slate-400">
+                            covered by {{ assignment.covered_by.member_name }}
+                        </span>
+                    </td>
                     <td class="hidden max-w-[9rem] px-3 py-2 text-slate-600 md:table-cell">
                         <template v-if="assignment.venue">
                             <span class="line-clamp-2">{{ assignment.venue }}<span v-if="assignment.room"> — {{ assignment.room }}</span></span>
@@ -300,6 +389,16 @@ const submitBulkConfirm = () => {
                             <AppIcon name="check-circle" class="h-4 w-4" />
                             <span class="text-xs">{{ assignment.attendance_confirmed_at }}</span>
                         </span>
+                        <!--
+                            Absent is its own state, not merely "no timestamp":
+                            everyone not yet scanned also has no timestamp, and
+                            the difference is what justifies calling an
+                            alternate in.
+                        -->
+                        <span v-else-if="assignment.absent" class="inline-flex items-center gap-1.5 text-accent-700">
+                            <AppIcon name="x-mark" class="h-4 w-4" />
+                            <span class="text-xs">Absent · {{ assignment.marked_absent_at }}</span>
+                        </span>
                         <span v-else class="text-slate-400">—</span>
                     </td>
                     <td class="hidden px-3 py-2 xl:table-cell">
@@ -321,6 +420,35 @@ const submitBulkConfirm = () => {
                                 icon="paper-airplane"
                                 :label="`${assignment.confirmation_sent_at ? 'Resend' : 'Send'} Confirmation`"
                                 @click="sendConfirmation(assignment)"
+                            />
+                            <!--
+                                Exam-day cover. Only offered where it can
+                                actually apply: a seat that is not an alternate
+                                and whose holder has not reported in.
+                            -->
+                            <IconButton
+                                v-if="!assignment.attended && !assignment.absent && !assignment.is_alternate && !assignment.covering_for"
+                                icon="x-mark"
+                                label="Mark absent"
+                                @click="markingAbsent = assignment"
+                            />
+                            <IconButton
+                                v-if="assignment.absent && !assignment.covered_by"
+                                icon="user-plus"
+                                label="Call in an alternate"
+                                @click="openAlternates(assignment)"
+                            />
+                            <IconButton
+                                v-if="assignment.absent && !assignment.covered_by"
+                                icon="arrow-path"
+                                label="Clear absence"
+                                @click="clearAbsence(assignment)"
+                            />
+                            <IconButton
+                                v-if="assignment.covering_for"
+                                icon="arrow-path"
+                                label="Stand down (return to standby pool)"
+                                @click="standDown(assignment)"
                             />
                             <IconButton icon="pencil" label="Edit" @click="openEdit(assignment)" />
                             <IconButton
@@ -412,9 +540,12 @@ const submitBulkConfirm = () => {
             <div v-if="editIsCoverageRole" class="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
                 <p class="text-sm font-medium text-slate-700">Covered schools</p>
                 <p class="mt-0.5 text-xs text-slate-500">Reference-only — no confirmation sent; scanned/entered per school on exam day.</p>
-                <div v-if="venueOptions.length" class="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+                <p v-if="editIsCenterBoundCoverage" class="mt-0.5 text-xs text-slate-500">
+                    Local Examination Committee roles cover only schools within their own testing center.
+                </p>
+                <div v-if="editCoveredSchoolOptions.length" class="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
                     <label
-                        v-for="venue in venueOptions"
+                        v-for="venue in editCoveredSchoolOptions"
                         :key="venue.value"
                         class="flex cursor-pointer items-center gap-2 text-sm text-slate-700"
                     >
@@ -427,6 +558,9 @@ const submitBulkConfirm = () => {
                         {{ venue.label }}
                     </label>
                 </div>
+                <p v-else-if="editIsCenterBoundCoverage && !editForm.examination_school_id" class="mt-2 text-xs text-slate-400">
+                    Set this assignment's venue first — it decides which testing center's schools can be covered.
+                </p>
                 <p v-else class="mt-2 text-xs text-slate-400">No venues attached yet.</p>
             </div>
         </form>
@@ -455,6 +589,65 @@ const submitBulkConfirm = () => {
             <BaseButton variant="outline" size="sm" @click="removing = null">Cancel</BaseButton>
             <BaseButton variant="accent" size="sm" :loading="removeForm.processing" @click="confirmRemove">
                 Remove
+            </BaseButton>
+        </template>
+    </BaseModal>
+
+    <!-- Mark absent -->
+    <BaseModal :show="!!markingAbsent" title="Mark absent" @close="markingAbsent = null">
+        <p class="text-sm leading-relaxed text-slate-600">
+            Record that <strong>{{ markingAbsent?.member.name }}</strong> did not report as
+            {{ markingAbsent?.role_label }}<span v-if="markingAbsent?.room"> in Room {{ markingAbsent.room }}</span>?
+        </p>
+        <p class="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+            This frees the seat so an Alternate Examiner can be called in. It is not the same as
+            &ldquo;not yet scanned&rdquo; — use it only once you are satisfied they are not coming.
+            You can clear it again until an alternate has taken the seat.
+        </p>
+        <template #footer>
+            <BaseButton variant="outline" size="sm" @click="markingAbsent = null">Cancel</BaseButton>
+            <BaseButton variant="accent" size="sm" :loading="absenceForm.processing" @click="confirmMarkAbsent">
+                Mark absent
+            </BaseButton>
+        </template>
+    </BaseModal>
+
+    <!-- Call in an alternate -->
+    <BaseModal :show="!!callingIn" title="Call in an alternate" @close="callingIn = null">
+        <form id="alternate-form" class="space-y-4" novalidate @submit.prevent="submitAlternate">
+            <p class="text-sm text-slate-600">
+                Covering for <strong>{{ callingIn?.member.name }}</strong> as
+                {{ callingIn?.role_label }}<span v-if="callingIn?.room"> in Room {{ callingIn.room }}</span>.
+            </p>
+
+            <SelectInput
+                v-if="availableAlternates.length"
+                v-model="alternateForm.alternate_assignment_id"
+                label="Alternate Examiner"
+                required
+                :options="availableAlternates.map((a) => ({ value: a.id, label: `${a.member.name} (${a.member.proctad_id})` }))"
+                :error="alternateForm.errors.alternate_assignment_id"
+            />
+            <p v-else class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                No Alternate Examiner is on standby at this venue. Assign one in Step 2 first.
+            </p>
+
+            <p class="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+                They take over the designation and room above, and are recorded as present — so their
+                certificate and evaluation reflect the role they actually served, not &ldquo;Alternate
+                Examiner&rdquo;. This can be undone.
+            </p>
+        </form>
+        <template #footer>
+            <BaseButton variant="outline" size="sm" @click="callingIn = null">Cancel</BaseButton>
+            <BaseButton
+                type="submit"
+                form="alternate-form"
+                size="sm"
+                :disabled="!availableAlternates.length"
+                :loading="alternateForm.processing"
+            >
+                Call in
             </BaseButton>
         </template>
     </BaseModal>

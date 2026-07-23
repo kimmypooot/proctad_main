@@ -111,6 +111,62 @@ class ScannerTest extends TestCase
                 ->where('attendanceSummary.recent.0.designation', 'Professional'));
     }
 
+    /**
+     * A Proctor staffs one venue. Scanning them at a different one used to
+     * confirm anyway — recording attendance and queueing a certificate from a
+     * gate they were never deployed to.
+     */
+    public function test_scan_at_a_venue_other_than_the_assigned_one_records_nothing(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $member = Member::factory()->create(['field_office_id' => $office->id]);
+        $exam = \App\Models\Examination::factory()->create();
+        $school = \App\Models\School::factory()->create(['name' => 'Leyte National High School']);
+        $assignedVenue = \App\Models\ExaminationSchool::factory()->create([
+            'examination_id' => $exam->id,
+            'school_id' => $school->id,
+        ]);
+        $otherVenue = \App\Models\ExaminationSchool::factory()->create(['examination_id' => $exam->id]);
+        $assignment = \App\Models\ExamAssignment::factory()->create([
+            'examination_id' => $exam->id,
+            'member_id' => $member->id,
+            'field_office_id' => $office->id,
+            'examination_school_id' => $assignedVenue->id,
+            'role' => 'proctor',
+        ]);
+        $admin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $office->id]);
+
+        $this->actingAs($admin)
+            ->get("/scanner?code={$member->proctad_id}&examination_id={$exam->id}&examination_school_id={$otherVenue->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('attendance.outcome', 'wrong_venue')
+                // Names where they SHOULD be, so the operator can redirect them.
+                ->where('attendance.venue', 'Leyte National High School'));
+
+        $this->assertNull($assignment->fresh()->attendance_confirmed_at);
+    }
+
+    /** An assignment with no venue yet has no "right" venue to be wrong about. */
+    public function test_scan_still_confirms_when_the_assignment_has_no_venue_yet(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $member = Member::factory()->create(['field_office_id' => $office->id]);
+        $exam = \App\Models\Examination::factory()->create();
+        $venue = \App\Models\ExaminationSchool::factory()->create(['examination_id' => $exam->id]);
+        \App\Models\ExamAssignment::factory()->create([
+            'examination_id' => $exam->id,
+            'member_id' => $member->id,
+            'field_office_id' => $office->id,
+            'examination_school_id' => null,
+            'role' => 'proctor',
+        ]);
+        $admin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $office->id]);
+
+        $this->actingAs($admin)
+            ->get("/scanner?code={$member->proctad_id}&examination_id={$exam->id}&examination_school_id={$venue->id}")
+            ->assertInertia(fn (Assert $page) => $page->where('attendance.outcome', 'confirmed'));
+    }
+
     public function test_scan_reports_not_assigned_when_member_has_no_assignment(): void
     {
         $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
@@ -127,7 +183,7 @@ class ScannerTest extends TestCase
     {
         // Field Directors run their Testing Center's operations, so they scan too.
         // Management is region-wide oversight and Members are not staff at all.
-        foreach ([UserRole::Member, UserRole::Management] as $role) {
+        foreach ([UserRole::Member, UserRole::DirectorIv, UserRole::DirectorIii] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/scanner')
                 ->assertForbidden();
@@ -141,7 +197,11 @@ class ScannerTest extends TestCase
         ]))->get('/scanner')->assertOk();
     }
 
-    public function test_attendance_summary_reflects_present_and_absent_counts(): void
+    /**
+     * "Awaiting" is not-yet-scanned. Real absence is a separate, deliberate
+     * judgement (marked_absent_at) — see AlternateActivator.
+     */
+    public function test_attendance_summary_reflects_present_and_awaiting_counts(): void
     {
         $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
         $exam = \App\Models\Examination::factory()->create();
@@ -161,7 +221,7 @@ class ScannerTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('attendanceSummary.total', 2)
                 ->where('attendanceSummary.present', 1)
-                ->where('attendanceSummary.absent', 1)
+                ->where('attendanceSummary.awaiting', 1)
                 ->where('attendanceSummary.recent.0.id', "member:{$present->id}")
                 ->where('attendanceSummary.roster.0.code', $absent->member->proctad_id));
     }

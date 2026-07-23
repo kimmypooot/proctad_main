@@ -59,7 +59,7 @@ const confirmDelete = () => destroyForm.delete(`/exam-types/${deleting.value.id}
     <DashboardLayout>
         <DashboardPageHeader title="Examination Types" subtitle="e.g. Career Service Examination, Fire Officer Examination.">
             <template v-if="can.manage" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
+                <BaseButton variant="primary" size="sm" icon="plus" @click="openCreate">
                     Add Type
                 </BaseButton>
             </template>

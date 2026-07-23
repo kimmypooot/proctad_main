@@ -605,8 +605,8 @@ const errorCount = computed(() => Object.keys(form.errors).length);
                             />
                         </div>
 
-                        <BaseButton variant="outline" type="button" @click="addRoomRating">
-                            <AppIcon name="plus" class="h-4 w-4" /> Rate another Room Examiner/Proctor
+                        <BaseButton variant="outline" type="button" @click="addRoomRating" icon="plus">
+                            Rate another Room Examiner/Proctor
                         </BaseButton>
                     </div>
 

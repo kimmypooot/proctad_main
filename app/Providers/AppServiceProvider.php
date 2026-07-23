@@ -3,6 +3,9 @@
 namespace App\Providers;
 
 use App\Models\Setting;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Throwable;
@@ -23,6 +26,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Password::defaults(fn () => Password::min(8)->letters()->numbers());
+
+        // Public scanner links: budget per link, not per IP. A testing center
+        // runs several phones through one NAT, so an IP-keyed limit would lock
+        // out legitimate scanning long before it inconvenienced anyone walking
+        // the sequential PROCTAD ID range from a leaked link.
+        RateLimiter::for('scanner-link', fn (Request $request) => Limit::perMinute(240)
+            ->by((string) $request->route('token')));
 
         $this->applyEmailKillSwitch();
     }

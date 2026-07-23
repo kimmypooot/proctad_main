@@ -7,7 +7,9 @@ use App\Models\ExamAssignment;
 use App\Models\ExamAssignmentAttendance;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
+use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\School;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -23,6 +25,15 @@ use Tests\TestCase;
 class ExamAssignmentCoverageTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** A venue for $examinationId sitting under a given testing center (field office). */
+    private function venueIn(int $examinationId, FieldOffice $center): ExaminationSchool
+    {
+        return ExaminationSchool::factory()->create([
+            'examination_id' => $examinationId,
+            'school_id' => School::factory()->create(['field_office_id' => $center->id]),
+        ]);
+    }
 
     public function test_covered_schools_persist_for_a_coverage_role_on_store(): void
     {
@@ -103,15 +114,101 @@ class ExamAssignmentCoverageTest extends TestCase
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $assignment = ExamAssignment::factory()->create(['role' => 'lec_member']);
-        $covered = ExaminationSchool::factory()->create(['examination_id' => $assignment->examination_id]);
+        $center = FieldOffice::factory()->create();
+        $venue = $this->venueIn($assignment->examination_id, $center);
+        $covered = $this->venueIn($assignment->examination_id, $center);
 
         $this->actingAs($admin)->put("/assignments/{$assignment->id}", [
             'role' => 'lec_member',
             'attended' => false,
+            'examination_school_id' => $venue->id,
             'covered_school_ids' => [$covered->id],
         ])->assertRedirect();
 
         $this->assertEqualsCanonicalizing([$covered->id], $assignment->fresh()->coveredSchools->pluck('id')->all());
+    }
+
+    /**
+     * The REC/LEC split: REC monitors region-wide, LEC never leaves the testing
+     * center it is seated at. Both are coverage roles, so before this rule the
+     * two were indistinguishable and an LEC Chair could be handed a covered
+     * school in another center entirely.
+     */
+    public function test_lec_covered_schools_must_stay_within_its_own_testing_center(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $examination = Examination::factory()->create();
+        $center = FieldOffice::factory()->create();
+        $otherCenter = FieldOffice::factory()->create();
+        $venue = $this->venueIn($examination->id, $center);
+        $outside = $this->venueIn($examination->id, $otherCenter);
+        $member = Member::factory()->create();
+
+        $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
+            'member_id' => $member->id,
+            'role' => 'lec_chair',
+            'examination_school_id' => $venue->id,
+            'covered_school_ids' => [$outside->id],
+        ])->assertSessionHasErrors('covered_school_ids');
+
+        $this->assertSame(0, ExamAssignment::count());
+    }
+
+    public function test_lec_may_cover_another_school_in_the_same_testing_center(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $examination = Examination::factory()->create();
+        $center = FieldOffice::factory()->create();
+        $venue = $this->venueIn($examination->id, $center);
+        $sibling = $this->venueIn($examination->id, $center);
+        $member = Member::factory()->create();
+
+        $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
+            'member_id' => $member->id,
+            'role' => 'lec_member',
+            'examination_school_id' => $venue->id,
+            'covered_school_ids' => [$sibling->id],
+        ])->assertRedirect();
+
+        $this->assertEqualsCanonicalizing(
+            [$sibling->id],
+            ExamAssignment::firstOrFail()->coveredSchools->pluck('id')->all(),
+        );
+    }
+
+    public function test_rec_may_cover_a_school_in_another_testing_center(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $examination = Examination::factory()->create();
+        $venue = $this->venueIn($examination->id, FieldOffice::factory()->create());
+        $elsewhere = $this->venueIn($examination->id, FieldOffice::factory()->create());
+        $member = Member::factory()->create();
+
+        $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
+            'member_id' => $member->id,
+            'role' => 'rec_member',
+            'examination_school_id' => $venue->id,
+            'covered_school_ids' => [$elsewhere->id],
+        ])->assertRedirect();
+
+        $this->assertEqualsCanonicalizing(
+            [$elsewhere->id],
+            ExamAssignment::firstOrFail()->coveredSchools->pluck('id')->all(),
+        );
+    }
+
+    public function test_lec_covered_schools_cannot_be_set_before_a_venue_is_chosen(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $examination = Examination::factory()->create();
+        $covered = $this->venueIn($examination->id, FieldOffice::factory()->create());
+        $member = Member::factory()->create();
+
+        $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
+            'member_id' => $member->id,
+            'role' => 'lec_chair',
+            'covered_school_ids' => [$covered->id],
+        ])->assertSessionHasErrors('covered_school_ids');
     }
 
     public function test_scanning_at_testing_center_confirms_and_queues_certificate_as_usual(): void

@@ -60,7 +60,7 @@ const submit = () => {
             subtitle="Testing centers administered by CSC Regional Office VIII."
         >
             <template v-if="can.manage" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
+                <BaseButton variant="primary" size="sm" icon="plus" @click="openCreate">
                     Add Testing Center
                 </BaseButton>
             </template>

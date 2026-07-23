@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Closes the site to the public and to PROCTAD members when
  * Settings → Website → Maintenance mode is on.
  *
- * Commission staff (Super Admin, ESD Admin, Management, Field Director,
+ * Commission staff (Super Admin, ESD Admin, the regional directors, Field Director,
  * Testing Center Staff) are unaffected and keep working normally. A handful
  * of routes stay open to everyone regardless — see EXEMPT_ROUTES.
  */

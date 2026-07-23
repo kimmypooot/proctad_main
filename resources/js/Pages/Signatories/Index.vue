@@ -122,7 +122,7 @@ const confirmDelete = () => {
             subtitle="Authorized signatories for PROCTAD IDs and certificates. Changes never affect previously issued documents."
         >
             <template v-if="can.create" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
+                <BaseButton variant="primary" size="sm" icon="plus" @click="openCreate">
                     Add Signatory
                 </BaseButton>
             </template>

@@ -56,7 +56,9 @@ class TrainingPagesTest extends TestCase
     public function test_completing_training_issues_certificates_and_updates_modal(): void
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
-        $training = Training::factory()->create();
+        // Pinned to TEA: the factory picks a type at random, and only a TEA
+        // issues Certificates of Completion (see TrainingCertificateTest).
+        $training = Training::factory()->create(['type' => \App\Enums\TrainingType::Tea]);
         $assignment = TrainingAssignment::factory()->create([
             'training_id' => $training->id,
             'attendance_confirmed_at' => now(),

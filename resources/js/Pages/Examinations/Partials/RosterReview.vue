@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import EmptyState from '@/Components/EmptyState.vue';
@@ -112,8 +111,7 @@ const totals = computed(() => props.assignments.reduce(
             </p>
 
             <div v-if="can.assign" class="flex justify-end">
-                <BaseButton :href="`/scanner?examination_id=${examination.id}`" variant="primary" size="sm">
-                    <AppIcon name="qr-code" class="h-4 w-4" />
+                <BaseButton :href="`/scanner?examination_id=${examination.id}`" variant="primary" size="sm" icon="qr-code">
                     Scan Attendance
                 </BaseButton>
             </div>

@@ -70,7 +70,7 @@ const submit = () => {
             subtitle="Orientation, briefing, and examination-administration training for PROCTAD members."
         >
             <template v-if="can.manage" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
+                <BaseButton variant="primary" size="sm" icon="plus" @click="openCreate">
                     Add Training
                 </BaseButton>
             </template>

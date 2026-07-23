@@ -354,12 +354,10 @@ const exportSupervisingExaminers = () => exportCsv(
                 <BaseButton :href="`/examinations/${examination.id}?step=rooms`" variant="link">← Back to Assign Rooms</BaseButton>
             </template>
             <template #actions>
-                <BaseButton v-if="rooms.length" variant="outline" size="sm" @click="openAddMore">
-                    <AppIcon name="plus" class="h-4 w-4" />
+                <BaseButton v-if="rooms.length" variant="outline" size="sm" @click="openAddMore" icon="plus">
                     Add More Rooms
                 </BaseButton>
-                <BaseButton variant="primary" size="sm" @click="openGenerate">
-                    <AppIcon name="arrow-path" class="h-4 w-4" />
+                <BaseButton variant="primary" size="sm" @click="openGenerate" icon="arrow-path">
                     {{ rooms.length ? 'Regenerate Rooms' : 'Generate Rooms' }}
                 </BaseButton>
             </template>
@@ -542,16 +540,14 @@ const exportSupervisingExaminers = () => exportCsv(
             description="Click Generate Rooms above to create rooms for this venue."
         >
             <template #action>
-                <BaseButton variant="primary" size="sm" @click="openGenerate">
-                    <AppIcon name="arrow-path" class="h-4 w-4" />
+                <BaseButton variant="primary" size="sm" @click="openGenerate" icon="arrow-path">
                     Generate Rooms
                 </BaseButton>
             </template>
         </EmptyState>
 
         <div v-if="rooms.length" class="mt-4 flex justify-end">
-            <BaseButton variant="ghost" size="sm" @click="confirmingClearAll = true">
-                <AppIcon name="trash" class="h-4 w-4" />
+            <BaseButton variant="ghost" size="sm" @click="confirmingClearAll = true" icon="trash">
                 Clear All Rooms
             </BaseButton>
         </div>
@@ -776,8 +772,8 @@ const exportSupervisingExaminers = () => exportCsv(
 
                 <div v-if="manualTab === 'rooms'">
                     <div class="flex justify-end">
-                        <BaseButton variant="ghost" size="sm" @click="exportRoomAssignments">
-                            <AppIcon name="arrow-down-tray" class="h-4 w-4" /> Export CSV
+                        <BaseButton variant="ghost" size="sm" @click="exportRoomAssignments" icon="arrow-down-tray">
+                            Export CSV
                         </BaseButton>
                     </div>
                     <div class="mt-2 max-h-80 overflow-y-auto">
@@ -828,8 +824,8 @@ const exportSupervisingExaminers = () => exportCsv(
                         first room.
                     </p>
                     <div class="mt-2 flex justify-end">
-                        <BaseButton variant="ghost" size="sm" @click="exportSupervisingExaminers">
-                            <AppIcon name="arrow-down-tray" class="h-4 w-4" /> Export CSV
+                        <BaseButton variant="ghost" size="sm" @click="exportSupervisingExaminers" icon="arrow-down-tray">
+                            Export CSV
                         </BaseButton>
                     </div>
                     <div class="mt-2 max-h-80 overflow-y-auto">

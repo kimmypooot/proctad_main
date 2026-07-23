@@ -6,6 +6,7 @@ use App\Enums\AssignmentStatus;
 use App\Enums\BlacklistStatus;
 use App\Enums\ConfirmationAction;
 use App\Enums\ExamRole;
+use App\Enums\ExamRoleGroup;
 use App\Enums\MemberStatus;
 use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
@@ -17,6 +18,7 @@ use App\Models\Examination;
 use App\Models\ExaminationSchool;
 use App\Models\Member;
 use App\Models\User;
+use App\Services\AlternateActivator;
 use App\Services\AssignmentConfirmationSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,8 +29,9 @@ use Illuminate\Validation\Rule;
 class ExamAssignmentController extends Controller
 {
     // Proctor/Room Examiner/Supervising Examiner physically staff one specific
-    // school, so (unlike REC/LEC committee roles, which are region-wide by
-    // design) they must always be drawn from that venue's own field office.
+    // school, so (unlike REC, which monitors region-wide) they must always be
+    // drawn from that venue's own field office. LEC is field-office-bound too,
+    // but at the coverage level — see coveredSchoolJurisdictionRule.
     private const ROOM_ROLES = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
 
     // Exactly one Proctor and one Room Examiner per room (Supervising Examiner
@@ -63,6 +66,10 @@ class ExamAssignmentController extends Controller
             $taken = ExamAssignment::where('exam_room_id', $value)
                 ->where('role', $role)
                 ->whereIn('status', [AssignmentStatus::Pending->value, AssignmentStatus::Confirmed->value])
+                // A no-show does not hold the room. Without this, the seat they
+                // vacated stays blocked and the alternate called in to cover it
+                // cannot be given the room they are standing in.
+                ->whereNull('marked_absent_at')
                 ->when($excludeAssignmentId, fn ($q) => $q->where('id', '!=', $excludeAssignmentId))
                 ->exists();
 
@@ -95,6 +102,161 @@ class ExamAssignmentController extends Controller
         };
     }
 
+    /**
+     * Builds a validation closure for `covered_school_ids` enforcing the
+     * REC/LEC split.
+     *
+     * REC (and Chief Examiner for Investigation) monitor region-wide, so their
+     * covered schools are unrestricted. LEC is seated at one testing center —
+     * which school inside it they end up at is decided later, but it never
+     * leaves that center — so every covered school must share the field office
+     * of the assignment's own venue.
+     */
+    private function coveredSchoolJurisdictionRule(Request $request): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($request) {
+            if (! is_array($value) || $value === []) {
+                return;
+            }
+
+            if (ExamRole::tryFrom((string) $request->input('role'))?->group() !== ExamRoleGroup::TestingCenter) {
+                return;
+            }
+
+            // Without a venue there is no center to measure the coverage
+            // against, so the list cannot be validated rather than silently
+            // accepted.
+            $centerId = ExaminationSchool::find($request->input('examination_school_id'))?->school?->field_office_id;
+
+            if ($centerId === null) {
+                $fail('Set this assignment\'s venue before choosing covered schools for a Local Examination Committee role.');
+
+                return;
+            }
+
+            $outsideCenter = ExaminationSchool::whereIn('id', $value)
+                ->whereHas('school', fn ($q) => $q->where('field_office_id', '!=', $centerId))
+                ->exists();
+
+            if ($outsideCenter) {
+                $fail('Local Examination Committee assignments can only cover schools within their own testing center.');
+            }
+        };
+    }
+
+    /**
+     * Builds a validation closure for `member_id` enforcing the ex officio REC
+     * seats: the committee is chaired by the Director IV and co-chaired by the
+     * Director III, so those two designations cannot be staffed from the pool.
+     *
+     * Deliberately not a hard constraint. When the office is vacant, or its
+     * holder is not enrolled in the registry, Member::holdingOffice() returns
+     * null and the seat falls open — otherwise an acting appointment or an
+     * un-enrolled director would leave the committee unstaffable, with no way
+     * out except editing the database.
+     */
+    private function reservedSeatRule(?string $role): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($role) {
+            $office = ExamRole::tryFrom((string) $role)?->reservedForRole();
+
+            if ($office === null) {
+                return;
+            }
+
+            $incumbent = Member::holdingOffice($office);
+
+            if ($incumbent === null || (int) $value === $incumbent->id) {
+                return;
+            }
+
+            $fail(sprintf(
+                '%s is held ex officio by the %s (%s).',
+                ExamRole::from($role)->label(),
+                $office->label(),
+                $incumbent->name,
+            ));
+        };
+    }
+
+    /**
+     * Confines field-office-scoped staff to their own testing center.
+     *
+     * A Testing Center Staff or Field Director who is also an accredited member
+     * serves where they work — unlike the regional roles (Super Admin, ESD
+     * Admin, the two directors), who may be assigned anywhere in the region,
+     * and unlike ordinary members, whose only jurisdiction limit is the
+     * room-role rule in venueJurisdictionRule.
+     *
+     * Stricter than that rule in two ways, both deliberate: it covers every
+     * designation rather than just the room-level ones, and it rejects an
+     * assignment with no venue at all — a venue-less seat is a regional one,
+     * which these staff cannot hold.
+     *
+     * @param  array<int, mixed>  $memberIds
+     */
+    private function staffJurisdictionRule(Request $request, array $memberIds): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($request, $memberIds) {
+            $members = Member::with('user:id,role,field_office_id')
+                ->whereIn('id', array_filter((array) $memberIds))
+                ->get()
+                // Ordinary members, and staff with region-wide reach, are
+                // unaffected — only the field-office-scoped roles are confined.
+                ->filter(fn (Member $member) => (bool) $member->user?->role?->isFieldOfficeScoped());
+
+            if ($members->isEmpty()) {
+                return;
+            }
+
+            $venueFieldOfficeId = ExaminationSchool::find($request->input('examination_school_id'))
+                ?->school?->field_office_id;
+
+            foreach ($members as $member) {
+                if ($venueFieldOfficeId === null) {
+                    $fail(sprintf(
+                        '%s is %s and can only be assigned to a venue within their own testing center, so this assignment needs one.',
+                        $member->name,
+                        $member->user->role->label(),
+                    ));
+
+                    return;
+                }
+
+                // The employment record is the authority; the registry record's
+                // own office is the fallback for an account with none set.
+                $ownOffice = $member->user->field_office_id ?? $member->field_office_id;
+
+                if ($ownOffice !== null && $ownOffice !== $venueFieldOfficeId) {
+                    $fail(sprintf(
+                        '%s is %s and can only be assigned within their own testing center.',
+                        $member->name,
+                        $member->user->role->label(),
+                    ));
+
+                    return;
+                }
+            }
+        };
+    }
+
+    /**
+     * The batch form of reservedSeatRule. A reserved seat is held by exactly
+     * one person, so a batch aimed at one may name only them.
+     */
+    private function reservedSeatBatchRule(?string $role): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($role) {
+            if (! is_array($value)) {
+                return;
+            }
+
+            foreach ($value as $memberId) {
+                $this->reservedSeatRule($role)($attribute, $memberId, $fail);
+            }
+        };
+    }
+
     public function store(Request $request, Examination $examination, AssignmentConfirmationSender $confirmationSender): RedirectResponse
     {
         Gate::authorize('create', ExamAssignment::class);
@@ -107,6 +269,8 @@ class ExamAssignmentController extends Controller
                 Rule::exists('members', 'id'),
                 Rule::unique('exam_assignments', 'member_id')
                     ->where('examination_id', $examination->id),
+                $this->reservedSeatRule($request->input('role')),
+                $this->staffJurisdictionRule($request, [$request->input('member_id')]),
             ],
             'role' => ['required', Rule::enum(ExamRole::class)],
             'examination_school_id' => [
@@ -123,7 +287,7 @@ class ExamAssignmentController extends Controller
                 Rule::exists('exam_rooms', 'id')->where('examination_school_id', $request->input('examination_school_id')),
                 $this->roomAssignabilityRule($request->input('role'), AssignmentStatus::Pending),
             ],
-            'covered_school_ids' => ['nullable', 'array'],
+            'covered_school_ids' => ['nullable', 'array', $this->coveredSchoolJurisdictionRule($request)],
             'covered_school_ids.*' => [
                 'integer',
                 Rule::exists('examination_school', 'id')->where('examination_id', $examination->id),
@@ -179,7 +343,16 @@ class ExamAssignmentController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            'member_ids' => ['required', 'array', 'min:1'],
+            // The reserved-seat check sits on the array, not on `member_ids.*`:
+            // a per-element rule reports under `member_ids.0`, which the form
+            // does not render, so the batch would fail with no visible reason.
+            'member_ids' => [
+                'required',
+                'array',
+                'min:1',
+                $this->reservedSeatBatchRule($request->input('role')),
+                $this->staffJurisdictionRule($request, $request->input('member_ids', [])),
+            ],
             'member_ids.*' => ['integer', Rule::exists('members', 'id')],
             'role' => ['required', Rule::enum(ExamRole::class)],
             'examination_school_id' => [
@@ -187,7 +360,7 @@ class ExamAssignmentController extends Controller
                 Rule::exists('examination_school', 'id')->where('examination_id', $examination->id),
                 $this->venueJurisdictionRule($request, $request->input('member_ids', [])),
             ],
-            'covered_school_ids' => ['nullable', 'array'],
+            'covered_school_ids' => ['nullable', 'array', $this->coveredSchoolJurisdictionRule($request)],
             'covered_school_ids.*' => [
                 'integer',
                 Rule::exists('examination_school', 'id')->where('examination_id', $examination->id),
@@ -316,6 +489,66 @@ class ExamAssignmentController extends Controller
         return back()->with('success', "Confirmed {$assignments->count()} assignment(s).");
     }
 
+    /**
+     * Exam-day cover. The venue scanner reaches the same operations through
+     * ScannerController; both delegate to AlternateActivator so the rules
+     * cannot drift between the two front doors.
+     */
+    public function markAbsent(Request $request, ExamAssignment $assignment, AlternateActivator $activator): RedirectResponse
+    {
+        Gate::authorize('update', $assignment);
+
+        return $activator->markAbsent($assignment, $request->user())
+            ? back()->with('success', "{$assignment->member?->name} marked absent. You can now call in an alternate.")
+            : back()->with('error', 'This assignment is already marked absent, or the member has already reported in.');
+    }
+
+    public function clearAbsence(ExamAssignment $assignment, AlternateActivator $activator): RedirectResponse
+    {
+        Gate::authorize('update', $assignment);
+
+        return $activator->clearAbsence($assignment)
+            ? back()->with('success', 'Absence cleared.')
+            : back()->with('error', 'This absence cannot be cleared while an alternate is covering the seat.');
+    }
+
+    public function activateAlternate(Request $request, ExamAssignment $assignment, AlternateActivator $activator): RedirectResponse
+    {
+        Gate::authorize('update', $assignment);
+
+        $validated = $request->validate([
+            'alternate_assignment_id' => ['required', 'integer', Rule::exists('exam_assignments', 'id')],
+        ]);
+
+        $alternate = ExamAssignment::findOrFail($validated['alternate_assignment_id']);
+
+        if ($refusal = $activator->cannotActivate($alternate, $assignment)) {
+            return back()->with('error', $refusal);
+        }
+
+        $activator->activate($alternate, $assignment);
+
+        return back()->with('success', sprintf(
+            '%s is now serving as %s in place of %s.',
+            $alternate->member?->name,
+            $assignment->role->label(),
+            $assignment->member?->name,
+        ));
+    }
+
+    public function standDownAlternate(ExamAssignment $assignment, AlternateActivator $activator): RedirectResponse
+    {
+        Gate::authorize('update', $assignment);
+
+        if (! $assignment->isSubstitute()) {
+            return back()->with('error', 'This assignment is not covering another seat.');
+        }
+
+        $activator->standDown($assignment);
+
+        return back()->with('success', "{$assignment->member?->name} returned to the standby pool.");
+    }
+
     public function update(Request $request, ExamAssignment $assignment, AssignmentConfirmationSender $confirmationSender): RedirectResponse
     {
         Gate::authorize('update', $assignment);
@@ -323,7 +556,19 @@ class ExamAssignmentController extends Controller
         $hadVenue = $assignment->examination_school_id !== null;
 
         $validated = $request->validate([
-            'role' => ['required', Rule::enum(ExamRole::class)],
+            'role' => [
+                'required',
+                Rule::enum(ExamRole::class),
+                // Here the member is fixed and the role is what's changing, so
+                // the reserved-seat check runs against the existing member —
+                // otherwise an edit could promote anyone into the REC chair.
+                fn (string $attribute, mixed $value, \Closure $fail) => $this
+                    ->reservedSeatRule(is_string($value) ? $value : null)($attribute, $assignment->member_id, $fail),
+                // Also re-checked on edit: the venue can be moved out of a
+                // field-office-scoped member's own testing center here just as
+                // easily as it can be set wrongly at creation.
+                $this->staffJurisdictionRule($request, [$assignment->member_id]),
+            ],
             'performance_rating' => ['nullable', Rule::enum(PerformanceRating::class)],
             'remarks' => ['nullable', 'string', 'max:255'],
             'attended' => ['required', 'boolean'],
@@ -339,7 +584,7 @@ class ExamAssignmentController extends Controller
                 Rule::exists('exam_rooms', 'id')->where('examination_school_id', $request->input('examination_school_id')),
                 $this->roomAssignabilityRule($request->input('role'), $assignment->status, $assignment->id),
             ],
-            'covered_school_ids' => ['nullable', 'array'],
+            'covered_school_ids' => ['nullable', 'array', $this->coveredSchoolJurisdictionRule($request)],
             'covered_school_ids.*' => [
                 'integer',
                 Rule::exists('examination_school', 'id')->where('examination_id', $assignment->examination_id),

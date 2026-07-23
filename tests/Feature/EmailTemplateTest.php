@@ -40,7 +40,7 @@ class EmailTemplateTest extends TestCase
         $foAdmin = User::factory()->create(['role' => UserRole::FoAdmin]);
         $this->actingAs($foAdmin)->get('/email-templates')->assertForbidden();
 
-        $management = User::factory()->create(['role' => UserRole::Management]);
+        $management = User::factory()->create(['role' => UserRole::DirectorIv]);
         $this->actingAs($management)->get('/email-templates')->assertForbidden();
     }
 

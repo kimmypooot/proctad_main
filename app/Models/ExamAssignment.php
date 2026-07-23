@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'examination_id', 'examination_school_id', 'exam_room_id', 'member_id', 'role', 'field_office_id',
     'status', 'confirmation_sent_at', 'responded_at', 'decline_reason',
     'attendance_confirmed_at', 'attendance_confirmed_by', 'performance_rating', 'remarks',
+    'marked_absent_at', 'marked_absent_by', 'covering_for_assignment_id', 'original_role',
 ])]
 class ExamAssignment extends Model
 {
@@ -38,7 +39,80 @@ class ExamAssignment extends Model
             'confirmation_sent_at' => 'datetime',
             'responded_at' => 'datetime',
             'attendance_confirmed_at' => 'datetime',
+            'marked_absent_at' => 'datetime',
+            'original_role' => ExamRole::class,
         ];
+    }
+
+    /** The seat this alternate was called in to cover, if any. */
+    public function coveringFor(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'covering_for_assignment_id');
+    }
+
+    /** The alternate who took over this seat, if one was activated. */
+    public function coveredBy(): HasOne
+    {
+        return $this->hasOne(self::class, 'covering_for_assignment_id');
+    }
+
+    public function markedAbsentBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'marked_absent_by');
+    }
+
+    /** Did not report on exam day — distinct from simply not yet scanned. */
+    public function isAbsent(): bool
+    {
+        return $this->marked_absent_at !== null;
+    }
+
+    /** Called in from the standby pool to fill a seat left vacant. */
+    public function isSubstitute(): bool
+    {
+        return $this->covering_for_assignment_id !== null;
+    }
+
+    /**
+     * How this service ended, in three states rather than the two the record
+     * used to carry. "Not recorded" and "Absent" were previously the same
+     * empty timestamp, which read on a member's own history as though the
+     * office had simply forgotten to scan them.
+     */
+    public function attendanceOutcome(): string
+    {
+        return match (true) {
+            $this->attendance_confirmed_at !== null => 'Present',
+            $this->isAbsent() => 'Absent',
+            default => 'Not recorded',
+        };
+    }
+
+    /**
+     * The exam-day story behind this row, when there is one — so a substitution
+     * reads as service rendered rather than as a role someone was mysteriously
+     * assigned, and a no-show is not mistaken for a clerical gap. Null for an
+     * ordinary assignment served ordinarily.
+     */
+    public function serviceNote(): ?string
+    {
+        if ($this->isSubstitute()) {
+            $covered = $this->coveringFor?->member?->name;
+
+            return $covered === null
+                ? 'Served as Alternate Examiner, covering a vacant seat.'
+                : "Served as Alternate Examiner, covering for {$covered}.";
+        }
+
+        if ($this->isAbsent()) {
+            $substitute = $this->coveredBy?->member?->name;
+
+            return $substitute === null
+                ? 'Did not report on exam day.'
+                : "Did not report on exam day; covered by {$substitute}.";
+        }
+
+        return null;
     }
 
     public function examination(): BelongsTo

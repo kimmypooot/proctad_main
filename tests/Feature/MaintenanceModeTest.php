@@ -61,7 +61,8 @@ class MaintenanceModeTest extends TestCase
         $roles = [
             UserRole::SuperAdmin,
             UserRole::EsdAdmin,
-            UserRole::Management,
+            UserRole::DirectorIv,
+            UserRole::DirectorIii,
             UserRole::FieldDirector,
             UserRole::FoAdmin,
         ];

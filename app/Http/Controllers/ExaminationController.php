@@ -17,6 +17,7 @@ use App\Models\Member;
 use App\Models\OepAssignment;
 use App\Models\OepAttendance;
 use App\Models\OtherExaminationPersonnel;
+use App\Models\ScannerSession;
 use App\Models\School;
 use App\Services\PerformanceRatingCalculator;
 use App\Services\RoomStaffingCalculator;
@@ -56,7 +57,7 @@ class ExaminationController extends Controller
         $now = now()->startOfDay();
 
         return Inertia::render('Examinations/Index', [
-            'examinations' => $examinations->map(function (Examination $exam) use ($now) {
+            'examinations' => $examinations->map(function (Examination $exam) {
                 $roomsCount = $exam->venues->sum(fn ($venue) => $venue->rooms->count());
 
                 $status = match (true) {
@@ -122,6 +123,11 @@ class ExaminationController extends Controller
                 'room:id,room_number',
                 'coveredSchools.school:id,name',
                 'attendances',
+                // Exam-day cover, eager-loaded: without these the substitution
+                // columns below would fire three queries per assignment row.
+                'markedAbsentBy:id,name',
+                'coveringFor.member:id,first_name,middle_name,last_name,suffix',
+                'coveredBy.member:id,first_name,middle_name,last_name,suffix',
             )
             ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
             ->get();
@@ -163,6 +169,23 @@ class ExaminationController extends Controller
                     'rating_computed_average' => $computed['average'] ?? null,
                     'rating_computed_count' => $computed['ratings_count'] ?? null,
                     'remarks' => $assignment->remarks,
+                    // Exam-day cover. `absent` is deliberately distinct from
+                    // `!attended`: the latter is also true of everyone not yet
+                    // scanned, and the difference is the judgement that calls
+                    // an alternate in. See AlternateActivator.
+                    'absent' => $assignment->isAbsent(),
+                    'marked_absent_at' => $assignment->marked_absent_at?->format('M d, Y H:i'),
+                    'marked_absent_by' => $assignment->markedAbsentBy?->name,
+                    'is_alternate' => $assignment->role === ExamRole::AlternateExaminer,
+                    'covering_for' => $assignment->coveringFor === null ? null : [
+                        'id' => $assignment->coveringFor->id,
+                        'member_name' => $assignment->coveringFor->member?->name,
+                        'role_label' => $assignment->coveringFor->role->label(),
+                    ],
+                    'covered_by' => $assignment->coveredBy === null ? null : [
+                        'id' => $assignment->coveredBy->id,
+                        'member_name' => $assignment->coveredBy->member?->name,
+                    ],
                     'can_manage' => $user->can('update', $assignment),
                     'is_coverage_role' => $assignment->isCoverageRole(),
                     'covered_schools' => $assignment->coveredSchools->map(fn ($school) => [
@@ -180,11 +203,22 @@ class ExaminationController extends Controller
                 ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->whereDoesntHave('assignments', fn ($q) => $q->where('examination_id', $examination->id))
                 ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
+                // For confined_to_office_id below — one query, not one per row.
+                ->with('user:id,role,field_office_id')
                 ->orderBy('last_name')
-                ->get(['id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'field_office_id'])
+                ->get(['id', 'user_id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'field_office_id'])
                 ->map(fn (Member $member) => [
                     'id' => $member->id,
                     'label' => "{$member->name} ({$member->proctad_id})",
+                    // Non-null for members who also hold a field-office-scoped
+                    // staff post: they serve only where they work, so the
+                    // picker hides them unless the chosen venue is in that
+                    // office. Mirrors staffJurisdictionRule, which is the
+                    // actual guarantee — this only spares an admin from
+                    // picking someone the server is going to refuse.
+                    'confined_to_office_id' => $member->user?->role?->isFieldOfficeScoped()
+                        ? ($member->user->field_office_id ?? $member->field_office_id)
+                        : null,
                 ])
             : [];
 
@@ -237,6 +271,10 @@ class ExaminationController extends Controller
                     'id' => $venue->id,
                     'school_name' => $venue->school?->name,
                     'municipality' => $venue->school?->municipality,
+                    // The testing center this venue sits under — lets the LEC
+                    // covered-schools picker offer only same-center venues,
+                    // matching coveredSchoolJurisdictionRule.
+                    'field_office_id' => $venue->school?->field_office_id,
                     'rooms' => $venue->rooms->map(fn ($room) => [
                         'id' => $room->id,
                         'room_number' => $room->room_number,
@@ -296,12 +334,19 @@ class ExaminationController extends Controller
                 ->where('auditable_id', $examination->id)
                 ->where('action', 'report_generated')
                 ->exists(),
+            'scannerSessions' => ScannerSessionController::panelData('examination_id', $examination->id),
             'can' => [
                 'assign' => $user->can('create', ExamAssignment::class),
                 'manageOep' => $user->can('create', OepAssignment::class),
                 'manageVenues' => $user->can('create', ExaminationSchool::class),
+                'manageScannerLinks' => $user->can('create', ScannerSession::class),
                 'bulkRevoke' => $user->role === UserRole::SuperAdmin,
             ],
+            // `reserved_member_id` lets the staffing form pre-select the holder
+            // of an ex officio seat (REC Chair → Director IV, Co-Chair →
+            // Director III) instead of leaving an admin to pick the right
+            // person from the pool and be rejected. Null when the post is
+            // vacant or its holder is not enrolled — see Member::holdingOffice.
             'roles' => collect(ExamRole::cases())
                 ->map(fn ($role) => [
                     'value' => $role->value,
@@ -309,6 +354,9 @@ class ExaminationController extends Controller
                     'group' => $role->group()->value,
                     'group_label' => $role->group()->label(),
                     'is_coverage' => $role->isCoverageRole(),
+                    'reserved_member_id' => ($office = $role->reservedForRole()) !== null
+                        ? Member::holdingOffice($office)?->id
+                        : null,
                 ])->all(),
             'ratings' => collect(PerformanceRating::cases())
                 ->map(fn ($rating) => ['value' => $rating->value, 'label' => $rating->label()])->all(),

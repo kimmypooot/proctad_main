@@ -7,6 +7,7 @@ use App\Enums\CertificateType;
 use App\Enums\TrainingType;
 use App\Models\Examination;
 use App\Models\Member;
+use App\Models\ScannerSession;
 use App\Models\Training;
 use App\Models\TrainingAssignment;
 use App\Services\CertificateService;
@@ -117,6 +118,9 @@ class TrainingController extends Controller
                 'id' => $training->id,
                 'title' => $training->title,
                 'type_label' => $training->type->label(),
+                // Drives the "Mark completed" confirmation copy — only a TEA
+                // carries a Certificate of Completion.
+                'issues_completion' => $training->type->issuesCompletionCertificate(),
                 'training_date' => $training->training_date->toDateString(),
                 'end_date' => $training->end_date?->toDateString(),
                 'venue' => $training->venue,
@@ -130,10 +134,12 @@ class TrainingController extends Controller
             ],
             'assignments' => $assignments,
             'assignableMembers' => $assignable,
+            'scannerSessions' => ScannerSessionController::panelData('training_id', $training->id),
             'can' => [
                 'assign' => $user->can('create', TrainingAssignment::class),
                 'manage' => $user->can('update', $training),
                 'complete' => $user->can('complete', $training) && $training->completed_at === null,
+                'manageScannerLinks' => $user->can('create', ScannerSession::class),
             ],
         ]);
     }
@@ -164,9 +170,15 @@ class TrainingController extends Controller
     }
 
     /**
-     * Conclude the training: Certificates of Completion are auto-issued and
-     * released to every attendance-confirmed participant (spec 3.2 — no
-     * approval step applies to Completion certificates).
+     * Conclude the training.
+     *
+     * Only a TEA carries a Certificate of Completion — a Briefing is an
+     * information session with nothing to complete, and issues Appearance
+     * certificates alone (see TrainingType::issuesCompletionCertificate).
+     *
+     * Attendance scans already issue Completion as they happen, so this is
+     * normally a no-op backstop that catches anyone whose attendance was
+     * recorded before the training was concluded.
      */
     public function complete(Request $request, Training $training, CertificateService $certificates): RedirectResponse
     {
@@ -175,6 +187,10 @@ class TrainingController extends Controller
         abort_if($training->completed_at !== null, 400, 'Training is already completed.');
 
         $training->update(['completed_at' => now()]);
+
+        if (! $training->type->issuesCompletionCertificate()) {
+            return back()->with('success', 'Training marked as completed.');
+        }
 
         $issued = 0;
         $attended = $training->assignments()->whereNotNull('attendance_confirmed_at')->get();
@@ -188,7 +204,9 @@ class TrainingController extends Controller
             }
         }
 
-        return back()->with('success', "Training marked as completed. {$issued} Certificate(s) of Completion issued and emailed.");
+        return back()->with('success', $issued > 0
+            ? "Training marked as completed. {$issued} Certificate(s) of Completion issued and emailed."
+            : 'Training marked as completed. Every attendee already holds their Certificate of Completion.');
     }
 
     private function validated(Request $request): array

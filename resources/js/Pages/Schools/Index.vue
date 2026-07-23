@@ -100,7 +100,7 @@ const confirmDelete = () => destroyForm.delete(`/schools/${deleting.value.id}`, 
             subtitle="Venue registry maintained per Testing Center. Schools become examination venues once attached to an examination."
         >
             <template v-if="can.create" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
+                <BaseButton variant="primary" size="sm" icon="plus" @click="openCreate">
                     Add School
                 </BaseButton>
             </template>

@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
@@ -139,8 +138,7 @@ const submitLift = () => liftForm.post(`/blacklists/${lifting.value.id}/lift`, {
             subtitle="PROCTAD members barred from examination assignments, with the reason and who acted on it."
         >
             <template v-if="can.create" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
-                    <AppIcon name="exclamation-triangle" class="h-4 w-4" />
+                <BaseButton variant="primary" size="sm" @click="openCreate" icon="exclamation-triangle">
                     Blacklist a Member
                 </BaseButton>
             </template>

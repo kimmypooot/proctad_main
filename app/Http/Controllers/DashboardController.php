@@ -20,6 +20,7 @@ use App\Models\Member;
 use App\Models\Training;
 use App\Models\TrainingAssignment;
 use App\Models\User;
+use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -30,8 +31,19 @@ class DashboardController extends Controller
     public function __invoke(Request $request): Response
     {
         $user = $request->user();
-        $role = $user->role ?? UserRole::Member;
         $fieldOffice = $user->fieldOffice;
+
+        // Staff who are also accredited members get the member dashboard while
+        // switched into their PROCTAD workspace. Resolving that to an effective
+        // role — rather than threading a workspace flag through every helper —
+        // keeps the panels below with a single notion of "who is this for", so
+        // stats, analytics and approvals can't disagree about which hat is on.
+        // Safe because nothing here authorizes: the panels a staff role would
+        // see are simply not built, and the pages themselves stay policy-gated.
+        $role = Workspace::current($request) === Workspace::MEMBER
+            ? UserRole::Member
+            : ($user->role ?? UserRole::Member);
+
         $member = $role === UserRole::Member
             ? Member::with('requirements', 'user:id,google_avatar')->where('user_id', $user->id)->first()
             : null;
@@ -56,11 +68,11 @@ class DashboardController extends Controller
      */
     private function pendingApprovals(UserRole $role, User $user): ?array
     {
-        if (! in_array($role, [UserRole::Management, UserRole::FieldDirector], true)) {
+        if (! $role->isManagement() && $role !== UserRole::FieldDirector) {
             return null;
         }
 
-        $types = $role === UserRole::Management
+        $types = $role->isManagement()
             ? [CertificateType::Appreciation]
             : [CertificateType::Appearance, CertificateType::DesignationOrder, CertificateType::Appreciation];
 
@@ -387,7 +399,7 @@ class DashboardController extends Controller
                 $this->stat('Testing Centers', FieldOffice::count(), 'building-office', 'RO VIII', '/field-offices'),
                 $this->stat('System Users', User::where('role', '!=', UserRole::Member)->count(), 'user-circle', 'Staff accounts', '/users'),
             ],
-            UserRole::Management => [
+            UserRole::DirectorIv, UserRole::DirectorIii => [
                 $this->stat(
                     'Pending Appreciation Approvals',
                     Certificate::where('status', CertificateStatus::Pending)

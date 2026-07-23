@@ -90,6 +90,24 @@ enum ExamRole: string
     }
 
     /**
+     * Seats held ex officio: the Regional Examination Committee is always
+     * chaired by the Director IV and co-chaired by the Director III, so those
+     * two designations belong to whoever holds the post rather than being
+     * staffed from the pool.
+     *
+     * Returns the staff role entitled to the seat, or null for the sixteen
+     * roles that are open to any accredited member.
+     */
+    public function reservedForRole(): ?UserRole
+    {
+        return match ($this) {
+            self::RecChair => UserRole::DirectorIv,
+            self::RecCoChair => UserRole::DirectorIii,
+            default => null,
+        };
+    }
+
+    /**
      * Designations the post-examination evaluation form covers.
      *
      * Lives here rather than on EvaluationController because three places now

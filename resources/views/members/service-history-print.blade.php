@@ -50,8 +50,15 @@
                 <tr>
                     <td>{{ $assignment->examination?->title }}</td>
                     <td>{{ $assignment->examination?->exam_date?->format('M d, Y') }}</td>
-                    <td>{{ $assignment->role->label() }}</td>
-                    <td>{{ $assignment->attendance_confirmed_at ? 'Confirmed' : 'Not confirmed' }}</td>
+                    <td>
+                        {{ $assignment->role->label() }}
+                        {{-- A substitution is service rendered; the designation
+                             alone no longer shows it was covered as a reserve. --}}
+                        @if ($assignment->serviceNote())
+                            <br><small>{{ $assignment->serviceNote() }}</small>
+                        @endif
+                    </td>
+                    <td>{{ $assignment->attendanceOutcome() }}</td>
                     <td>{{ $assignment->performance_rating?->label() ?? '—' }}</td>
                 </tr>
             @empty

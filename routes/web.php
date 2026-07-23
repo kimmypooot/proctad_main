@@ -1,28 +1,28 @@
 <?php
 
 use App\Http\Controllers\AssignmentConfirmationController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
-use App\Http\Controllers\ExamRoomController;
-use App\Http\Controllers\ExamVenueController;
-use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
-use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BlacklistController;
 use App\Http\Controllers\CertificateApprovalController;
 use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DuplicateMembersController;
+use App\Http\Controllers\EmailLogController;
 use App\Http\Controllers\EmailTemplateController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\EvaluationMonitoringController;
 use App\Http\Controllers\ExamAssignmentController;
 use App\Http\Controllers\ExaminationController;
 use App\Http\Controllers\ExaminationReportController;
+use App\Http\Controllers\ExamRoomController;
 use App\Http\Controllers\ExamTypeController;
+use App\Http\Controllers\ExamVenueController;
 use App\Http\Controllers\FeeScheduleController;
 use App\Http\Controllers\FieldOfficeController;
 use App\Http\Controllers\HomeController;
@@ -35,6 +35,8 @@ use App\Http\Controllers\OepAssignmentController;
 use App\Http\Controllers\OtherExaminationPersonnelController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ScannerController;
+use App\Http\Controllers\ScannerSessionController;
+use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\ServiceHistoryController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SignatoryController;
@@ -44,6 +46,7 @@ use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VerifyCertificateController;
 use App\Http\Controllers\VerifyController;
+use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -73,6 +76,26 @@ Route::get('/verify/{proctadId}', VerifyController::class)
 Route::get('/verify-certificate/{certificateNo}', VerifyCertificateController::class)
     ->middleware('throttle:10,1')
     ->name('verify-certificate');
+
+// Public QR scanner. Unauthenticated to *use*, but only reachable through a
+// token an admin issued for one examination/training (and venue), which
+// expires and can be revoked — see ResolveScannerSession. The token carries the
+// issuing user, so attendance writes stay attributable and field-office
+// scoping survives; the page itself shows identity only, no service history.
+// Throttled per token (see AppServiceProvider's 'scanner-link' limiter), which
+// caps a leaked link's ability to walk the sequential PROCTAD ID range without
+// penalising a venue running several phones through one NAT.
+Route::middleware(['scanner.session', 'throttle:scanner-link'])->group(function () {
+    Route::get('/scan/{token}', ScannerController::class)->name('scan');
+    Route::post('/scan/{token}/mark-attendance', [ScannerController::class, 'bulkMarkAttendance'])
+        ->name('scan.mark-attendance');
+    // Exam-day cover. Pinned to the session's own examination and venue in
+    // ScannerController::coverableAssignment, exactly as scanning is.
+    Route::post('/scan/{token}/mark-absent', [ScannerController::class, 'markAbsent'])
+        ->name('scan.mark-absent');
+    Route::post('/scan/{token}/activate-alternate', [ScannerController::class, 'activateAlternate'])
+        ->name('scan.activate-alternate');
+});
 
 // Assignment confirmation: opened from an emailed signed link, no login required.
 Route::get('/assignments/{assignment}/confirm', [AssignmentConfirmationController::class, 'show'])
@@ -128,6 +151,10 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
 Route::middleware(['auth', 'password.changed'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
+    // Staff who are also accredited members switch between the staff console
+    // and their own PROCTAD pages. Presentation only — see App\Support\Workspace.
+    Route::post('/workspace', [WorkspaceController::class, 'update'])->name('workspace.update');
+
     Route::get('/change-password', [PasswordController::class, 'edit'])->name('password.edit');
     Route::put('/change-password', [PasswordController::class, 'update'])->name('password.update');
 
@@ -173,15 +200,25 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::get('/scanner', ScannerController::class)->name('scanner');
         Route::post('/scanner/mark-attendance', [ScannerController::class, 'bulkMarkAttendance'])
             ->name('scanner.mark-attendance');
+        Route::post('/scanner/mark-absent', [ScannerController::class, 'markAbsent'])
+            ->name('scanner.mark-absent');
+        Route::post('/scanner/activate-alternate', [ScannerController::class, 'activateAlternate'])
+            ->name('scanner.activate-alternate');
+
+        // Issue / revoke the public scanner links above.
+        Route::post('/scanner-sessions', [ScannerSessionController::class, 'store'])
+            ->name('scanner-sessions.store');
+        Route::post('/scanner-sessions/{scannerSession}/revoke', [ScannerSessionController::class, 'revoke'])
+            ->name('scanner-sessions.revoke');
     });
 
-    Route::middleware('role:super_admin,management,field_director')->group(function () {
+    Route::middleware('role:super_admin,director_iv,director_iii,field_director')->group(function () {
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
     });
 
     // ESD Admin is included as a fallback approver alongside Super Admin, in
     // case the primary approver (Field Director/Management) is unavailable.
-    Route::middleware('role:super_admin,esd_admin,management,field_director')->group(function () {
+    Route::middleware('role:super_admin,esd_admin,director_iv,director_iii,field_director')->group(function () {
         Route::get('/approvals', [CertificateApprovalController::class, 'index'])->name('approvals.index');
         Route::post('/certificates/{certificate}/approve', [CertificateApprovalController::class, 'approve'])
             ->name('certificates.approve');
@@ -200,7 +237,7 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::post('/blacklists/{blacklist}/lift', [BlacklistController::class, 'lift'])->name('blacklists.lift');
     });
 
-    Route::middleware('role:super_admin,esd_admin,management,field_director,fo_admin')->group(function () {
+    Route::middleware('role:super_admin,esd_admin,director_iv,director_iii,field_director,fo_admin')->group(function () {
         Route::resource('members', MemberController::class);
         Route::get('/members/{member}/details', [MemberController::class, 'details'])
             ->name('members.details');
@@ -297,6 +334,18 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('assignments.send-confirmation');
         Route::post('/assignments/{assignment}/force-reassign', [ExamAssignmentController::class, 'forceReassign'])
             ->name('assignments.force-reassign');
+
+        // Exam-day cover: record a no-show, then call an Alternate Examiner in
+        // from the venue's standby pool. The venue scanner reaches the same
+        // operations through ScannerController.
+        Route::post('/assignments/{assignment}/absent', [ExamAssignmentController::class, 'markAbsent'])
+            ->name('assignments.absent');
+        Route::delete('/assignments/{assignment}/absent', [ExamAssignmentController::class, 'clearAbsence'])
+            ->name('assignments.absent.clear');
+        Route::post('/assignments/{assignment}/alternate', [ExamAssignmentController::class, 'activateAlternate'])
+            ->name('assignments.alternate.activate');
+        Route::delete('/assignments/{assignment}/alternate', [ExamAssignmentController::class, 'standDownAlternate'])
+            ->name('assignments.alternate.stand-down');
         Route::post('/venues/{venue}/staffing/randomize', [StaffingController::class, 'randomize'])
             ->name('venues.staffing.randomize');
         Route::post('/venues/{venue}/staffing/clear', [StaffingController::class, 'clear'])
@@ -365,6 +414,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
 
         Route::get('/email-templates', [EmailTemplateController::class, 'index'])->name('email-templates.index');
         Route::put('/email-templates/{emailTemplate}', [EmailTemplateController::class, 'update'])->name('email-templates.update');
+        // The rendered body of one sent email, fetched when an admin opens it.
+        Route::get('/email-logs/{emailLog}', [EmailLogController::class, 'show'])->name('email-logs.show');
 
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
         Route::post('/settings', [SettingController::class, 'store'])->name('settings.store');

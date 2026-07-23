@@ -29,7 +29,12 @@ class TestAdministratorServiceHistory
         $history = $member->assignments()
             ->whereIn('role', $roleValues)
             ->whereNotNull('attendance_confirmed_at')
-            ->with(['examination:id,title,type,exam_date', 'examinationSchool.school:id,name', 'room:id,room_number,designation'])
+            ->with([
+                'examination:id,title,type,exam_date',
+                'examinationSchool.school:id,name',
+                'room:id,room_number,designation',
+                'coveringFor.member:id,first_name,middle_name,last_name,suffix',
+            ])
             ->get()
             ->sortByDesc(fn (ExamAssignment $assignment) => $assignment->examination?->exam_date)
             ->values();
@@ -58,6 +63,10 @@ class TestAdministratorServiceHistory
                     ? trim("{$assignment->room->designation} {$assignment->room->room_number}")
                     : null,
                 'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y g:i A'),
+                // Service rendered as a called-in reserve still counts toward
+                // the totals above — it was the same day's work — but the row
+                // says so, since the designation alone no longer reveals it.
+                'service_note' => $assignment->serviceNote(),
             ])->values(),
         ];
     }

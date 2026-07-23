@@ -27,7 +27,7 @@ class ReportTest extends TestCase
 
     public function test_staff_roles_can_view_reports(): void
     {
-        foreach ([UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::Management, UserRole::FieldDirector, UserRole::FoAdmin] as $role) {
+        foreach ([UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::DirectorIv, UserRole::DirectorIii, UserRole::FieldDirector, UserRole::FoAdmin] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/reports')
                 ->assertOk();

@@ -39,7 +39,7 @@ class ExaminationTest extends TestCase
 
         $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
 
-        foreach ([UserRole::FoAdmin, UserRole::FieldDirector, UserRole::Management] as $role) {
+        foreach ([UserRole::FoAdmin, UserRole::FieldDirector, UserRole::DirectorIv, UserRole::DirectorIii] as $role) {
             $user = $this->staff($role, $role->isFieldOfficeScoped() ? $office : null);
             $this->actingAs($user)->get('/examinations')->assertOk();
             $this->actingAs($user)->post('/examinations', $payload)->assertForbidden();

@@ -103,8 +103,7 @@ const clearRoom = (room, fieldKey) => {
                         auto-assign staffing in bulk.
                     </p>
                 </div>
-                <BaseButton v-if="venuesWithRooms.length" :href="exportUrl" external variant="secondary" size="sm">
-                    <AppIcon name="arrow-down-tray" class="h-4 w-4" />
+                <BaseButton v-if="venuesWithRooms.length" :href="exportUrl" external variant="secondary" size="sm" icon="arrow-down-tray">
                     Export to Excel
                 </BaseButton>
             </div>

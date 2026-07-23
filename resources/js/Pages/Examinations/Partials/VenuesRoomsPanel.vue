@@ -113,8 +113,7 @@ const groupOepAssignments = (assignments) => {
                         school's rooms and staffing from its own workspace.
                     </p>
                 </div>
-                <BaseButton v-if="can.manageVenues" variant="primary" size="sm" @click="openAddVenue">
-                    <AppIcon name="plus" class="h-4 w-4" />
+                <BaseButton v-if="can.manageVenues" variant="primary" size="sm" @click="openAddVenue" icon="plus">
                     Add School
                 </BaseButton>
             </div>
@@ -194,8 +193,7 @@ const groupOepAssignments = (assignments) => {
                 </div>
 
                 <div class="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                    <BaseButton :href="`/venues/${venue.id}/rooms`" variant="outline" size="sm">
-                        <AppIcon name="building-library" class="h-4 w-4" />
+                    <BaseButton :href="`/venues/${venue.id}/rooms`" variant="outline" size="sm" icon="building-library">
                         Manage Rooms
                     </BaseButton>
                     <BaseButton variant="primary" size="sm" @click="emit('assign-venue', venue.id)">
@@ -224,8 +222,7 @@ const groupOepAssignments = (assignments) => {
             description="Add schools or testing venues for this examination to begin assigning PROCTAD members."
         >
             <template v-if="can.manageVenues" #action>
-                <BaseButton variant="primary" size="sm" @click="openAddVenue">
-                    <AppIcon name="plus" class="h-4 w-4" />
+                <BaseButton variant="primary" size="sm" @click="openAddVenue" icon="plus">
                     Add First School
                 </BaseButton>
             </template>

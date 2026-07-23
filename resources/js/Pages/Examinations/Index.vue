@@ -101,7 +101,7 @@ const submit = () => {
     <DashboardLayout>
         <DashboardPageHeader title="Examinations" subtitle="Examination events and PROCTAD deployment.">
             <template v-if="can.manage" #actions>
-                <BaseButton variant="primary" size="sm" @click="openCreate">
+                <BaseButton variant="primary" size="sm" icon="plus" @click="openCreate">
                     Add Examination
                 </BaseButton>
             </template>

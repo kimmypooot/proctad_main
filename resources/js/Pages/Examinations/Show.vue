@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
@@ -10,6 +9,7 @@ import StepTabs from '@/Components/StepTabs.vue';
 import AssignMemberForm from './Partials/AssignMemberForm.vue';
 import AssignmentsTable from './Partials/AssignmentsTable.vue';
 import ReportGenerationPanel from './Partials/ReportGenerationPanel.vue';
+import ScannerLinksPanel from './Partials/ScannerLinksPanel.vue';
 import RoomAssignmentPanel from './Partials/RoomAssignmentPanel.vue';
 import RosterReview from './Partials/RosterReview.vue';
 import VenuesRoomsPanel from './Partials/VenuesRoomsPanel.vue';
@@ -22,6 +22,7 @@ const props = defineProps({
     availableSchools: { type: Array, required: true },
     availableOep: { type: Array, required: true },
     reportsGenerated: { type: Boolean, default: false },
+    scannerSessions: { type: Array, default: () => [] },
     roles: { type: Array, required: true },
     ratings: { type: Array, required: true },
     can: { type: Object, required: true },
@@ -121,8 +122,7 @@ const jumpTo = (key) => (currentStep.value = key);
                 </span>
             </template>
             <template v-if="can.assign" #actions>
-                <BaseButton :href="`/scanner?examination_id=${examination.id}`" variant="primary" size="sm">
-                    <AppIcon name="qr-code" class="h-4 w-4" />
+                <BaseButton :href="`/scanner?examination_id=${examination.id}`" variant="primary" size="sm" icon="qr-code">
                     Scan Attendance
                 </BaseButton>
             </template>
@@ -173,13 +173,22 @@ const jumpTo = (key) => (currentStep.value = key);
             :can="can"
         />
 
-        <RosterReview
-            v-else-if="currentStep === 'review'"
-            class="mt-6"
-            :examination="examination"
-            :assignments="assignments"
-            :can="can"
-        />
+        <!-- Roster review is the step immediately before examination day, which
+             is when the venue's scanner links get issued. -->
+        <div v-else-if="currentStep === 'review'" class="mt-6 space-y-6">
+            <RosterReview
+                :examination="examination"
+                :assignments="assignments"
+                :can="can"
+            />
+
+            <ScannerLinksPanel
+                :sessions="scannerSessions"
+                :examination-id="examination.id"
+                :venues="venues.map((venue) => ({ value: venue.id, label: venue.school_name }))"
+                :can="can.manageScannerLinks"
+            />
+        </div>
 
         <ReportGenerationPanel
             v-else-if="currentStep === 'report'"

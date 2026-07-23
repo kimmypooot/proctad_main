@@ -73,12 +73,10 @@ const closeViewer = () => (viewing.value = null);
             subtitle="Your examination assignments, attendance, and performance ratings."
         >
             <template v-if="hasRecord && records.length" #actions>
-                <BaseButton href="/my/service-history/print" external target="_blank" variant="outline" size="sm">
-                    <AppIcon name="newspaper" class="h-4 w-4" />
+                <BaseButton href="/my/service-history/print" external target="_blank" variant="outline" size="sm" icon="newspaper">
                     Print
                 </BaseButton>
-                <BaseButton href="/my/service-history/export" external variant="outline" size="sm">
-                    <AppIcon name="arrow-down-tray" class="h-4 w-4" />
+                <BaseButton href="/my/service-history/export" external variant="outline" size="sm" icon="arrow-down-tray">
                     Export
                 </BaseButton>
             </template>
@@ -168,11 +166,22 @@ const closeViewer = () => (viewing.value = null);
                                 <p class="text-xs text-slate-400 sm:hidden">{{ record.role_label }}</p>
                             </td>
                             <td class="whitespace-nowrap px-3 py-2 text-slate-600">{{ record.exam_date }}</td>
-                            <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 sm:table-cell">{{ record.role_label }}</td>
+                            <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 sm:table-cell">
+                                {{ record.role_label }}
+                                <span v-if="record.service_note" class="mt-0.5 block text-xs text-slate-400">
+                                    {{ record.service_note }}
+                                </span>
+                            </td>
                             <td class="hidden px-3 py-2 md:table-cell">
                                 <span v-if="record.attended" class="inline-flex items-center gap-1 text-emerald-700">
                                     <AppIcon name="check-circle" class="h-4 w-4" /> Confirmed
                                 </span>
+                                <!--
+                                    A recorded absence is stated, not left as a
+                                    blank that reads like a missing scan — this
+                                    is the member's own record of their service.
+                                -->
+                                <span v-else-if="record.attendance_outcome === 'Absent'" class="text-accent-700">Absent</span>
                                 <span v-else class="text-slate-400">Not confirmed</span>
                             </td>
                             <td class="px-3 py-2">
@@ -256,9 +265,11 @@ const closeViewer = () => (viewing.value = null);
                             <span v-if="viewing.attended" class="inline-flex items-center gap-1 text-emerald-700">
                                 <AppIcon name="check-circle" class="h-4 w-4" /> Confirmed
                             </span>
+                            <span v-else-if="viewing.attendance_outcome === 'Absent'" class="text-accent-700">Absent</span>
                             <span v-else class="text-slate-400">Not confirmed</span>
                         </p>
                         <p v-if="viewing.attendance_confirmed_at" class="text-xs text-slate-400">{{ viewing.attendance_confirmed_at }}</p>
+                        <p v-if="viewing.service_note" class="mt-1 text-xs text-slate-500">{{ viewing.service_note }}</p>
                         <p v-if="viewing.confirmed_by" class="text-xs text-slate-400">by {{ viewing.confirmed_by }}</p>
                     </div>
                     <div>

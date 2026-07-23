@@ -43,6 +43,17 @@ class NotificationMailer
 
         $rendered = $template->render($data);
 
+        // Captured once and reused by every outcome below, so a skipped or
+        // failed attempt records the same content a delivered one would have —
+        // an admin asking "what would they have received?" gets an answer
+        // whether or not it left the building.
+        $content = [
+            'subject' => $rendered['subject'],
+            'body_html' => $rendered['html'],
+            'body_plain' => $rendered['plain'],
+            'email_template_id' => $template->id,
+        ];
+
         // Email is globally paused (Settings → General). AppServiceProvider has
         // already redirected the mailer to 'log', so sending would "succeed" and
         // record a misleading 'sent' row — log it as skipped instead, so the
@@ -51,7 +62,7 @@ class NotificationMailer
             return EmailLog::create([
                 'recipient_email' => $toEmail,
                 'recipient_name' => $toName,
-                'subject' => $rendered['subject'],
+                ...$content,
                 'email_type' => $emailType,
                 'status' => 'skipped',
                 'error_message' => 'Email sending is switched off in Settings.',
@@ -65,7 +76,7 @@ class NotificationMailer
             return EmailLog::create([
                 'recipient_email' => $toEmail,
                 'recipient_name' => $toName,
-                'subject' => $rendered['subject'],
+                ...$content,
                 'email_type' => $emailType,
                 'status' => 'sent',
                 'sent_by' => $sentBy?->id,
@@ -75,7 +86,7 @@ class NotificationMailer
             return EmailLog::create([
                 'recipient_email' => $toEmail,
                 'recipient_name' => $toName,
-                'subject' => $rendered['subject'],
+                ...$content,
                 'email_type' => $emailType,
                 'status' => 'failed',
                 'error_message' => $e->getMessage(),

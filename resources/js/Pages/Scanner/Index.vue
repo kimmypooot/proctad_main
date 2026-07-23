@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
+import ScannerShell from '@/Layouts/ScannerShell.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
@@ -12,6 +13,7 @@ import StatCard from '@/Components/StatCard.vue';
 import TextInput from '@/Components/TextInput.vue';
 import ViewMemberModal from '@/Pages/Members/Partials/ViewMemberModal.vue';
 import ViewOepModal from '@/Pages/Scanner/Partials/ViewOepModal.vue';
+import ScanResultHero from '@/Pages/Scanner/Partials/ScanResultHero.vue';
 import { useToasts } from '@/Composables/useToasts';
 import { useScanQueue } from '@/Composables/useScanQueue';
 import Tooltip from '@/Components/Tooltip.vue';
@@ -28,9 +30,71 @@ const props = defineProps({
     venues: { type: Array, default: () => [] },
     events: { type: Object, required: true },
     attendanceSummary: { type: Object, default: null },
+    // Set only when the page was opened through a public /scan/{token} link.
+    // The event and venue are then fixed by the token, so the pickers and the
+    // staff-only member drill-down come off.
+    publicSession: { type: Object, default: null },
 });
 
+const isPublic = computed(() => props.publicSession !== null);
+const scanUrl = computed(() => props.publicSession?.scan_url ?? '/scanner');
+const markAttendanceUrl = computed(
+    () => props.publicSession?.mark_attendance_url ?? '/scanner/mark-attendance',
+);
+
+/*
+ * --- Exam-day cover ---
+ *
+ * Declare a seat vacant when its holder has not reported, then call an
+ * Alternate Examiner from this venue's standby pool into it. The two endpoints
+ * hang off the same base as the scanner itself, so the public link stays pinned
+ * to its own examination and venue server-side.
+ *
+ * Deliberately outside the offline scan queue: a scan is an observation and
+ * replays safely late, but declaring someone absent is a judgement about a
+ * moment, and one syncing an hour later could strip a seat from somebody who
+ * has since arrived. These need connectivity, and say so.
+ */
+const coverUrl = (action) => `${scanUrl.value}/${action}`;
+
+const cover = computed(() => props.attendanceSummary?.cover ?? null);
+const coveringSeat = ref(null);
+const chosenAlternate = ref('');
+const coverBusy = ref(false);
+
+const markAbsent = (seat) => {
+    if (!window.confirm(`Record that ${seat.name} did not report as ${seat.role_label}? An alternate can then be called in.`)) return;
+
+    coverBusy.value = true;
+    router.post(coverUrl('mark-absent'), { assignment_id: seat.id }, {
+        preserveScroll: true,
+        onFinish: () => (coverBusy.value = false),
+    });
+};
+
+const openCover = (seat) => {
+    coveringSeat.value = seat;
+    chosenAlternate.value = '';
+};
+
+const confirmCover = () => {
+    if (!chosenAlternate.value) return;
+
+    coverBusy.value = true;
+    router.post(coverUrl('activate-alternate'), {
+        assignment_id: coveringSeat.value.id,
+        alternate_assignment_id: chosenAlternate.value,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => (coveringSeat.value = null),
+        onFinish: () => (coverBusy.value = false),
+    });
+};
+
 const manualCode = ref(props.code);
+// The field keeps the last scanned code, so without a focus gate the
+// suggestion list re-opens on every render and covers the controls beneath it.
+const manualFocused = ref(false);
 const mode = ref(props.trainingId ? 'training' : 'examination');
 const selectedExam = ref(props.examinationId ?? '');
 const selectedTraining = ref(props.trainingId ?? '');
@@ -52,7 +116,11 @@ const memberModalId = ref(null);
 const oepModalId = ref(null);
 
 const { push: pushToast } = useToasts();
-const { queue: pendingScans, enqueue: enqueuePendingScan, remove: removePendingScan, retryAll } = useScanQueue();
+// Scoped to this scanner's destination — a queue shared with the staff scanner
+// would replay its scans against whichever page happened to be open.
+const { queue: pendingScans, enqueue: enqueuePendingScan, remove: removePendingScan, retryAll } = useScanQueue(
+    props.publicSession?.token ?? 'staff',
+);
 
 const muted = ref(typeof window !== 'undefined' && window.localStorage.getItem('scanner:muted') === '1');
 watch(muted, (value) => {
@@ -87,7 +155,9 @@ watch(mode, () => {
 });
 watch(selectedExam, () => (selectedVenue.value = ''));
 
-const contextParams = () => ({
+// A public session's context lives in the token — the server ignores these
+// anyway, so don't put an editable-looking event id in the URL bar.
+const contextParams = () => (isPublic.value ? {} : {
     examination_id: mode.value === 'examination' ? (selectedExam.value || undefined) : undefined,
     training_id: mode.value === 'training' ? (selectedTraining.value || undefined) : undefined,
     examination_school_id: mode.value === 'examination' ? (selectedVenue.value || undefined) : undefined,
@@ -97,7 +167,7 @@ const contextParams = () => ({
 // without requiring a scan first.
 const rosterLoading = ref(false);
 watch([selectedExam, selectedTraining, selectedVenue], () => {
-    router.get('/scanner', contextParams(), {
+    router.get(scanUrl.value, contextParams(), {
         preserveState: true,
         preserveScroll: true,
         only: ['attendanceSummary', 'venues', 'examinationId', 'trainingId', 'examinationSchoolId'],
@@ -124,6 +194,9 @@ const handleScanOutcome = (resultProps) => {
     } else if (outcome === 'venue_required') {
         pushToast('warning', 'Select a venue to record attendance.');
         beep(440, 200);
+    } else if (outcome === 'wrong_venue') {
+        pushToast('warning', 'Deployed to a different venue — nothing recorded.');
+        beep(440, 200);
     } else if (outcome === 'not_assigned') {
         pushToast('warning', 'Not assigned to this examination or venue.');
         beep(440, 200);
@@ -135,21 +208,98 @@ const handleScanOutcome = (resultProps) => {
 
 /** Replays a scan (fresh or queued) against the same idempotent endpoint. */
 const replayScan = (code, context) => new Promise((resolve, reject) => {
-    router.get('/scanner', { code, ...context }, {
+    let succeeded = false;
+
+    router.get(scanUrl.value, { code, ...context }, {
         preserveState: true,
         preserveScroll: true,
         onSuccess: (page) => {
+            succeeded = true;
             handleScanOutcome(page.props);
-            resolve();
         },
-        onError: () => reject(),
+        // A failed replay is expected while offline and is retried on the next
+        // tick — handled, so don't let it escape as an unhandled error.
+        onNetworkError: () => false,
+        // Settle from onFinish, which runs for every completed visit. Rejecting
+        // only from onError would leave this promise pending forever on a
+        // network failure — and retryAll awaits it, so the 5s retry loop would
+        // pile up hung replays instead of retrying.
+        onFinish: () => (succeeded ? resolve() : reject(new Error(`Scan replay failed for ${code}`))),
     });
 });
 
-const retryPendingScans = () => {
-    if (pendingScans.length && (typeof navigator === 'undefined' || navigator.onLine)) {
-        retryAll(replayScan);
+const isOnline = ref(typeof navigator === 'undefined' || navigator.onLine !== false);
+const syncing = ref(false);
+
+/**
+ * `syncing` also guards against overlap: this runs on a 5s interval, and a slow
+ * replay could otherwise have the next tick start a second pass over the same
+ * entries.
+ */
+const retryPendingScans = async () => {
+    if (! pendingScans.length || syncing.value || ! isOnline.value) return;
+
+    const before = pendingScans.length;
+    syncing.value = true;
+
+    try {
+        await retryAll(replayScan);
+    } finally {
+        syncing.value = false;
     }
+
+    // Only announced here, not from a watcher on the queue length — dismissing
+    // entries by hand empties the queue too, and that is not a successful sync.
+    if (! pendingScans.length) {
+        pushToast('success', `All ${before} queued scan${before === 1 ? '' : 's'} synced.`);
+    }
+};
+
+/** The explicit "Sync now" action — always answers, even when it can't sync. */
+const syncNow = () => {
+    if (! isOnline.value) {
+        pushToast('info', 'Still offline — queued scans will sync by themselves once the connection returns.');
+        return;
+    }
+
+    if (! pendingScans.length) {
+        pushToast('success', 'Nothing waiting — every scan is already saved.');
+        return;
+    }
+
+    retryPendingScans();
+};
+
+const syncStatus = computed(() => {
+    if (! isOnline.value) {
+        return {
+            tone: 'wrap-amber',
+            dot: 'bg-amber-500',
+            label: pendingScans.length
+                ? `Offline — ${pendingScans.length} scan${pendingScans.length === 1 ? '' : 's'} saved on this phone`
+                : 'Offline — scans will be saved on this phone',
+        };
+    }
+
+    if (syncing.value) {
+        return { tone: 'wrap-brand', dot: 'bg-brand-500 animate-pulse', label: 'Syncing…' };
+    }
+
+    if (pendingScans.length) {
+        return {
+            tone: 'wrap-amber',
+            dot: 'bg-amber-500',
+            label: `${pendingScans.length} scan${pendingScans.length === 1 ? '' : 's'} waiting to sync`,
+        };
+    }
+
+    return { tone: 'wrap-emerald', dot: 'bg-emerald-500', label: 'All scans saved' };
+});
+
+const syncTones = {
+    'wrap-emerald': 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    'wrap-amber': 'border-amber-200 bg-amber-50 text-amber-900',
+    'wrap-brand': 'border-brand-200 bg-brand-50 text-brand-800',
 };
 
 const manualRetryPendingScan = (entry) => {
@@ -167,14 +317,22 @@ const lookup = (code) => {
     const context = contextParams();
     scanLocked.value = true;
 
-    router.get('/scanner', { code, ...context }, {
+    router.get(scanUrl.value, { code, ...context }, {
         preserveState: true,
         preserveScroll: true,
         only: ['result', 'oepResult', 'notFound', 'attendance', 'attendanceSummary'],
         onSuccess: (page) => handleScanOutcome(page.props),
-        onError: () => {
+        // onNetworkError, not onError: onError carries server-side validation
+        // errors, and never fires when the request fails to reach the server at
+        // all — which is precisely the case the offline queue exists for.
+        // Returning false stops Inertia rethrowing: the failure is handled — the
+        // scan is queued and the operator has been told — so letting it escape
+        // only produces an unhandled error on every scan taken offline.
+        onNetworkError: () => {
             enqueuePendingScan(code, context);
-            pushToast('warning', 'No connection — scan queued and will retry automatically.');
+            pushToast('warning', 'No connection — scan saved on this phone and will sync automatically.');
+
+            return false;
         },
         onFinish: () => (scanLocked.value = false),
     });
@@ -209,16 +367,24 @@ const stopCamera = () => {
 
 let retryInterval = null;
 
+const handleOnline = () => {
+    isOnline.value = true;
+    retryPendingScans();
+};
+const handleOffline = () => (isOnline.value = false);
+
 onMounted(() => {
     retryPendingScans();
     retryInterval = setInterval(retryPendingScans, 5000);
-    window.addEventListener('online', retryPendingScans);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 });
 
 onBeforeUnmount(() => {
     stopCamera();
     clearInterval(retryInterval);
-    window.removeEventListener('online', retryPendingScans);
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
 });
 
 /* --- Manual bulk attendance fallback --- */
@@ -296,7 +462,7 @@ const submitManualFallback = () => {
             oep_assignment_ids: oepAssignmentIds,
             covered_attendance_ids: coveredAttendanceIds,
         }))
-        .post('/scanner/mark-attendance', {
+        .post(markAttendanceUrl.value, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
@@ -311,16 +477,55 @@ const submitManualFallback = () => {
 <template>
     <Head title="QR Scanner" />
 
-    <DashboardLayout>
+    <component :is="isPublic ? ScannerShell : DashboardLayout" :session="publicSession">
         <DashboardPageHeader
+            v-if="!isPublic"
             title="QR Scanner"
             subtitle="Scan a PROCTAD member or other examination personnel QR code to verify identity and record attendance."
         />
 
-        <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <!-- Public: sync state is always on screen and sticks to the top while
+             scrolling. An operator has no other way to tell "everything went
+             through" apart from "the queue panel isn't rendering". -->
+        <div
+            v-if="isPublic"
+            class="sticky top-0 z-20 -mx-4 mb-4 border-y px-4 py-2.5 sm:-mx-6 sm:px-6"
+            :class="syncTones[syncStatus.tone]"
+            role="status"
+            aria-live="polite"
+        >
+            <div class="flex items-center gap-2.5">
+                <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="syncStatus.dot" />
+                <p class="min-w-0 flex-1 truncate text-sm font-semibold">{{ syncStatus.label }}</p>
+                <button
+                    v-if="pendingScans.length"
+                    type="button"
+                    class="shrink-0 rounded-lg bg-white/70 px-3 py-1.5 text-xs font-bold ring-1 ring-black/5 disabled:opacity-50"
+                    :disabled="syncing"
+                    @click="syncNow"
+                >
+                    {{ syncing ? 'Syncing…' : 'Sync now' }}
+                </button>
+            </div>
+        </div>
+
+        <!-- Public: the verdict leads. On a phone the staff layout buries it
+             below the camera, the roster and the manual-entry form. -->
+        <ScanResultHero
+            v-if="isPublic"
+            :result="result"
+            :oep-result="oepResult"
+            :attendance="attendance"
+            :not-found="notFound"
+            :code="code"
+        />
+
+        <div class="grid gap-6" :class="isPublic ? 'mt-6' : 'mt-6 lg:grid-cols-2'">
             <!-- Scanner panel -->
             <div class="rounded-xl border border-slate-200 bg-white p-6">
-                <div class="flex items-center gap-2">
+                <!-- Public link: the event and venue are fixed by the token and
+                     shown in the shell header, so no pickers here. -->
+                <div v-if="!isPublic" class="flex items-center gap-2">
                     <button
                         type="button"
                         class="rounded-lg px-3 py-1.5 text-xs font-semibold"
@@ -345,7 +550,8 @@ const submitManualFallback = () => {
                     </Tooltip>
                 </div>
 
-                <template v-if="mode === 'examination'">
+                <template v-if="isPublic" />
+                <template v-else-if="mode === 'examination'">
                     <SelectInput
                         v-model="selectedExam"
                         label="Examination"
@@ -385,7 +591,7 @@ const submitManualFallback = () => {
                     </p>
                 </template>
 
-                <div class="mt-6 flex items-center justify-between">
+                <div class="flex items-center justify-between" :class="isPublic ? '' : 'mt-6'">
                     <div>
                         <h2 class="text-base font-semibold text-slate-900">Camera Scan</h2>
                         <p class="mt-1 text-xs text-slate-400">The camera keeps scanning continuously — no need to restart it between people.</p>
@@ -400,13 +606,33 @@ const submitManualFallback = () => {
                         {{ muted ? 'Sound off' : 'Sound on' }}
                     </button>
                 </div>
-                <div id="qr-reader" class="mt-4 overflow-hidden rounded-lg bg-slate-900/5" :class="scanning ? 'min-h-64' : ''" />
+                <div
+                    id="qr-reader"
+                    class="mt-4 overflow-hidden rounded-xl bg-slate-900/5"
+                    :class="[scanning ? 'min-h-64' : '', isPublic && scanning ? 'ring-2 ring-brand-500/40' : '']"
+                />
+                <!-- Public: one full-width primary action. It is tapped by
+                     someone holding the phone one-handed at a gate. -->
                 <div class="mt-4 flex gap-3">
-                    <BaseButton v-if="!scanning" variant="primary" size="sm" @click="startCamera">
-                        <AppIcon name="qr-code" class="h-4 w-4" />
+                    <BaseButton
+                        v-if="!scanning"
+                        variant="primary"
+                        :size="isPublic ? 'lg' : 'sm'"
+                        :block="isPublic"
+                        @click="startCamera"
+                    >
+                        <AppIcon name="qr-code" class="h-5 w-5" />
                         Start Camera
                     </BaseButton>
-                    <BaseButton v-else variant="outline" size="sm" @click="stopCamera">Stop Camera</BaseButton>
+                    <BaseButton
+                        v-else
+                        variant="outline"
+                        :size="isPublic ? 'lg' : 'sm'"
+                        :block="isPublic"
+                        @click="stopCamera"
+                    >
+                        Stop Camera
+                    </BaseButton>
                 </div>
                 <p v-if="cameraError" class="mt-3 text-sm text-accent-600" role="alert">{{ cameraError }}</p>
 
@@ -416,7 +642,9 @@ const submitManualFallback = () => {
                             <BaseBadge variant="warning" size="xs">{{ pendingScans.length }}</BaseBadge>
                             scan{{ pendingScans.length === 1 ? '' : 's' }} waiting to sync
                         </p>
-                        <BaseButton variant="link" @click="retryPendingScans">Retry all</BaseButton>
+                        <BaseButton variant="link" :disabled="syncing" @click="syncNow">
+                            {{ isPublic ? 'Sync now' : 'Retry all' }}
+                        </BaseButton>
                     </div>
                     <ul class="mt-2 space-y-1">
                         <li v-for="entry in pendingScans" :key="entry.id" class="flex items-center justify-between gap-2 text-xs text-amber-700">
@@ -434,7 +662,14 @@ const submitManualFallback = () => {
                 <div class="mt-6 border-t border-slate-100 pt-5">
                     <h3 class="text-sm font-semibold text-slate-700">Manual Entry</h3>
                     <form class="relative mt-3 flex items-end gap-3" @submit.prevent="lookup(manualCode)">
-                        <div class="relative flex-1">
+                        <!-- focusin/focusout (which bubble, unlike focus/blur) on
+                             the whole group, so tapping a suggestion doesn't
+                             close the list before the tap registers. -->
+                        <div
+                            class="relative flex-1"
+                            @focusin="manualFocused = true"
+                            @focusout="manualFocused = false"
+                        >
                             <TextInput
                                 v-model="manualCode"
                                 label="Search by name or enter an ID"
@@ -442,7 +677,7 @@ const submitManualFallback = () => {
                                 autocomplete="off"
                             />
                             <div
-                                v-if="manualCode.trim().length >= 2 && (rosterLoading || nameMatches.length || attendanceSummary)"
+                                v-if="manualFocused && manualCode.trim().length >= 2 && (rosterLoading || nameMatches.length || attendanceSummary)"
                                 class="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
                             >
                                 <p v-if="rosterLoading" class="flex items-center gap-2 px-3 py-2 text-sm text-slate-400">
@@ -454,7 +689,8 @@ const submitManualFallback = () => {
                                         v-for="entry in nameMatches"
                                         :key="entry.key"
                                         type="button"
-                                        class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-brand-50"
+                                        class="flex w-full items-center justify-between gap-2 px-3 text-left text-sm text-slate-700 hover:bg-brand-50"
+                                        :class="isPublic ? 'py-3' : 'py-2'"
                                         @click="selectNameMatch(entry)"
                                     >
                                         <span class="truncate">{{ entry.label }}</span>
@@ -466,24 +702,31 @@ const submitManualFallback = () => {
                                 </p>
                             </div>
                         </div>
-                        <BaseButton type="submit" variant="secondary" size="sm">Look up</BaseButton>
+                        <BaseButton type="submit" variant="secondary" :size="isPublic ? 'md' : 'sm'">Look up</BaseButton>
                     </form>
-                    <p v-if="!attendanceSummary && !rosterLoading" class="mt-1.5 text-xs text-slate-400">
+                    <p v-if="!attendanceSummary && !rosterLoading && !isPublic" class="mt-1.5 text-xs text-slate-400">
                         Select an examination or training above to search by name — or paste an exact ID here anytime.
                     </p>
 
                     <button
                         v-if="attendanceSummary"
                         type="button"
-                        class="mt-3 text-xs font-semibold text-brand-700 hover:underline"
+                        class="font-semibold text-brand-700 hover:underline"
+                        :class="isPublic ? 'mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm hover:bg-brand-100 hover:no-underline' : 'mt-3 text-xs'"
                         @click="showManualFallback = !showManualFallback"
                     >
-                        {{ showManualFallback ? 'Hide' : 'Show' }} bulk manual attendance (QR won't scan for someone?)
+                        <AppIcon v-if="isPublic" name="user-group" class="h-4 w-4" />
+                        <template v-if="isPublic">
+                            {{ showManualFallback ? 'Hide manual check-in' : "Someone's QR won't scan?" }}
+                        </template>
+                        <template v-else>
+                            {{ showManualFallback ? 'Hide' : 'Show' }} bulk manual attendance (QR won't scan for someone?)
+                        </template>
                     </button>
 
                     <div v-if="showManualFallback && attendanceSummary" class="mt-3 rounded-lg border border-slate-200 p-3">
                         <TextInput v-model="manualSearch" label="Search remaining roster" placeholder="Name, PROCTAD ID, or OEP ID" />
-                        <p v-if="mode === 'examination' && !selectedVenue" class="mt-1.5 text-xs text-slate-400">
+                        <p v-if="mode === 'examination' && !selectedVenue && !isPublic" class="mt-1.5 text-xs text-slate-400">
                             Select a venue above to include other examination personnel and REC/LEC covered-school
                             attendance in this roster.
                         </p>
@@ -491,12 +734,14 @@ const submitManualFallback = () => {
                             <label
                                 v-for="person in manualRoster"
                                 :key="person.value"
-                                class="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 hover:bg-slate-50"
+                                class="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 text-sm last:border-b-0 hover:bg-slate-50"
+                                :class="isPublic ? 'py-3.5' : 'py-2'"
                             >
                                 <input
                                     type="checkbox"
                                     :checked="manualSelected.includes(person.value)"
-                                    class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
+                                    class="rounded border-slate-300 text-brand-600 accent-brand-600"
+                                    :class="isPublic ? 'h-5 w-5' : 'h-4 w-4'"
                                     @change="toggleManual(person.value)"
                                 >
                                 <span class="text-slate-700">{{ person.label }}</span>
@@ -509,7 +754,7 @@ const submitManualFallback = () => {
                             <p class="text-sm text-slate-500">{{ manualSelected.length }} selected</p>
                             <BaseButton
                                 variant="secondary"
-                                size="sm"
+                                :size="isPublic ? 'md' : 'sm'"
                                 :loading="manualForm.processing"
                                 :disabled="manualForm.processing || !manualSelected.length"
                                 @click="submitManualFallback"
@@ -524,11 +769,49 @@ const submitManualFallback = () => {
             <!-- Result + live attendance panel -->
             <div class="space-y-6">
                 <div v-if="attendanceSummary" class="rounded-xl border border-slate-200 bg-white p-6">
-                    <h2 class="text-base font-semibold text-slate-900">Live Attendance</h2>
-                    <div class="mt-4 grid grid-cols-3 gap-3">
+                    <div class="flex items-baseline justify-between">
+                        <h2 class="text-base font-semibold text-slate-900">Live Attendance</h2>
+                        <p v-if="isPublic" class="text-xs font-semibold text-slate-400">
+                            {{ Math.round((attendanceSummary.present / Math.max(attendanceSummary.total, 1)) * 100) }}% checked in
+                        </p>
+                    </div>
+
+                    <!-- Public: a progress bar plus three numbers reads faster on
+                         a phone than three stat cards stacked down the screen. -->
+                    <template v-if="isPublic">
+                        <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                                class="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                                :style="{ width: `${Math.round((attendanceSummary.present / Math.max(attendanceSummary.total, 1)) * 100)}%` }"
+                            />
+                        </div>
+                        <div class="mt-3 flex divide-x divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/60 text-center">
+                            <div class="flex-1 py-2.5">
+                                <p class="text-xl font-bold text-emerald-600">{{ attendanceSummary.present }}</p>
+                                <p class="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">Present</p>
+                            </div>
+                            <div class="flex-1 py-2.5">
+                                <!--
+                                    "Awaiting", not "Absent": these people have
+                                    simply not been scanned yet. Real absence is
+                                    the deliberate call made in the cover panel
+                                    below, and labelling doors-open as "absent"
+                                    would make every venue look abandoned.
+                                -->
+                                <p class="text-xl font-bold text-slate-400">{{ attendanceSummary.awaiting }}</p>
+                                <p class="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">Awaiting</p>
+                            </div>
+                            <div class="flex-1 py-2.5">
+                                <p class="text-xl font-bold text-slate-700">{{ attendanceSummary.total }}</p>
+                                <p class="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">Total</p>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div v-else class="mt-4 grid grid-cols-3 gap-3">
                         <StatCard compact label="Total" :value="attendanceSummary.total" icon="users" />
                         <StatCard compact label="Present" :value="attendanceSummary.present" icon="check-circle" />
-                        <StatCard compact label="Absent" :value="attendanceSummary.absent" icon="clock" />
+                        <StatCard compact label="Awaiting" :value="attendanceSummary.awaiting" icon="clock" />
                     </div>
 
                     <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Recent Scans</h3>
@@ -547,9 +830,95 @@ const submitManualFallback = () => {
                             No one marked present yet.
                         </li>
                     </ul>
+
+                    <!--
+                        Exam-day cover. Venue-scoped, because the standby pool
+                        is: an alternate covers the venue they are standing in.
+                    -->
+                    <template v-if="cover">
+                        <h3 class="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Exam-Day Cover</h3>
+
+                        <p v-if="!cover.seats.length && !cover.deployed.length" class="mt-2 text-sm text-slate-400">
+                            Everyone assigned to this venue has reported in.
+                        </p>
+
+                        <ul class="mt-2 divide-y divide-slate-100">
+                            <li v-for="seat in cover.seats" :key="seat.id" class="py-2.5 text-sm">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="font-medium text-slate-800">{{ seat.name }}</p>
+                                        <p class="text-xs text-slate-500">
+                                            {{ seat.role_label }}<template v-if="seat.room"> · {{ seat.room }}</template>
+                                        </p>
+                                        <p v-if="seat.covered_by" class="mt-0.5 text-xs text-brand-700">
+                                            covered by {{ seat.covered_by }}
+                                        </p>
+                                    </div>
+
+                                    <div class="flex shrink-0 gap-1.5">
+                                        <BaseButton
+                                            v-if="!seat.absent"
+                                            variant="outline"
+                                            size="sm"
+                                            :disabled="coverBusy || !isOnline"
+                                            @click="markAbsent(seat)"
+                                        >
+                                            Absent
+                                        </BaseButton>
+                                        <BaseButton
+                                            v-else-if="!seat.covered_by"
+                                            variant="secondary"
+                                            size="sm"
+                                            :disabled="coverBusy || !isOnline || !cover.alternates.length"
+                                            @click="openCover(seat)"
+                                        >
+                                            Call alternate
+                                        </BaseButton>
+                                        <BaseBadge v-else variant="success">Covered</BaseBadge>
+                                    </div>
+                                </div>
+
+                                <!-- Inline picker, so the operator never leaves the scanner. -->
+                                <div v-if="coveringSeat && coveringSeat.id === seat.id" class="mt-2 rounded-lg border border-brand-200 bg-brand-50/60 p-3">
+                                    <SelectInput
+                                        v-model="chosenAlternate"
+                                        label="Alternate Examiner on standby"
+                                        :options="cover.alternates.map((a) => ({ value: a.id, label: `${a.name} (${a.code})` }))"
+                                    />
+                                    <p class="mt-2 text-xs text-slate-500">
+                                        They take over {{ seat.role_label }}<template v-if="seat.room"> in {{ seat.room }}</template>
+                                        and are recorded present, so their certificate and evaluation show the role
+                                        they actually served.
+                                    </p>
+                                    <div class="mt-2 flex justify-end gap-2">
+                                        <BaseButton variant="outline" size="sm" @click="coveringSeat = null">Cancel</BaseButton>
+                                        <BaseButton size="sm" :disabled="!chosenAlternate || coverBusy" @click="confirmCover">
+                                            Confirm
+                                        </BaseButton>
+                                    </div>
+                                </div>
+                            </li>
+
+                            <li v-for="entry in cover.deployed" :key="`deployed-${entry.id}`" class="py-2.5 text-sm">
+                                <p class="font-medium text-slate-800">{{ entry.name }}</p>
+                                <p class="text-xs text-brand-700">
+                                    serving as {{ entry.role_label }} in place of {{ entry.covering_for }}
+                                </p>
+                            </li>
+                        </ul>
+
+                        <p v-if="cover.seats.length && !isOnline" class="mt-2 text-xs text-amber-700">
+                            Cover needs a connection — unlike scans, it is not queued offline.
+                        </p>
+                        <p v-else-if="cover.seats.length && !cover.alternates.length" class="mt-2 text-xs text-slate-400">
+                            No Alternate Examiner is on standby at this venue.
+                        </p>
+                    </template>
                 </div>
 
-                <div class="rounded-xl border border-slate-200 bg-white p-6">
+                <!-- Public mode reads its verdict from ScanResultHero at the top
+                     of the page instead of this panel. -->
+                <div v-if="!isPublic" class="rounded-xl border border-slate-200 bg-white p-6">
                     <h2 class="text-base font-semibold text-slate-900">Result</h2>
 
                     <div v-if="result" class="mt-4 space-y-4">
@@ -560,7 +929,7 @@ const submitManualFallback = () => {
                             :class="{
                                 'border-emerald-200 bg-emerald-50 text-emerald-800': attendance.outcome === 'confirmed',
                                 'border-sky-200 bg-sky-50 text-sky-800': attendance.outcome === 'already_confirmed',
-                                'border-amber-200 bg-amber-50 text-amber-800': attendance.outcome === 'not_assigned' || attendance.outcome === 'venue_required',
+                                'border-amber-200 bg-amber-50 text-amber-800': attendance.outcome === 'not_assigned' || attendance.outcome === 'venue_required' || attendance.outcome === 'wrong_venue',
                             }"
                             role="status"
                         >
@@ -569,6 +938,10 @@ const submitManualFallback = () => {
                             </template>
                             <template v-else-if="attendance.outcome === 'already_confirmed'">
                                 Attendance was already confirmed ({{ attendance.role_label }}, {{ attendance.confirmed_at }})
+                            </template>
+                            <template v-else-if="attendance.outcome === 'wrong_venue'">
+                                Deployed to {{ attendance.venue }} as {{ attendance.role_label }}, not the selected venue —
+                                nothing was recorded.
                             </template>
                             <template v-else>
                                 This member is not assigned to the selected examination.
@@ -601,9 +974,11 @@ const submitManualFallback = () => {
                                         Venue/room not yet assigned.
                                     </p>
                                 </div>
-                                <BaseBadge :variant="result.status_variant">{{ result.status_label }}</BaseBadge>
+                                <BaseBadge v-if="result.status_label" :variant="result.status_variant">
+                                    {{ result.status_label }}
+                                </BaseBadge>
                             </div>
-                            <div class="mt-4">
+                            <div v-if="!isPublic" class="mt-4">
                                 <button
                                     class="text-sm font-semibold text-brand-700 hover:underline"
                                     @click="memberModalId = result.id"
@@ -688,7 +1063,7 @@ const submitManualFallback = () => {
                                     {{ oepResult.is_active ? 'Active' : 'Inactive' }}
                                 </BaseBadge>
                             </div>
-                            <div class="mt-4">
+                            <div v-if="!isPublic" class="mt-4">
                                 <button
                                     class="text-sm font-semibold text-brand-700 hover:underline"
                                     @click="oepModalId = oepResult.id"
@@ -712,15 +1087,19 @@ const submitManualFallback = () => {
                 </div>
             </div>
         </div>
-    </DashboardLayout>
+    </component>
 
+    <!-- Staff-only: both modals load the full record, well beyond what a
+         shared scanner link should expose. -->
     <ViewMemberModal
+        v-if="!isPublic"
         :show="memberModalId !== null"
         :member-id="memberModalId"
         @close="memberModalId = null"
     />
 
     <ViewOepModal
+        v-if="!isPublic"
         :show="oepModalId !== null"
         :oep-id="oepModalId"
         @close="oepModalId = null"

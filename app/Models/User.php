@@ -56,4 +56,19 @@ class User extends Authenticatable
     {
         return in_array($this->role, $roles, true);
     }
+
+    /**
+     * Whether this account holds a PROCTAD accreditation. True for ordinary
+     * members and for staff who have also been enrolled in the registry —
+     * being staff and being accredited are independent facts.
+     *
+     * Prefers an already-loaded relation: HandleInertiaRequests eager-loads
+     * `member` on every request, so the common path must not add a query.
+     */
+    public function isProctadMember(): bool
+    {
+        return $this->relationLoaded('member')
+            ? $this->member !== null
+            : $this->member()->exists();
+    }
 }

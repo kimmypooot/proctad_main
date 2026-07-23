@@ -20,7 +20,7 @@ class DuplicateMembersReportTest extends TestCase
             ->get('/reports/duplicate-members')
             ->assertOk();
 
-        foreach ([UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector, UserRole::Management] as $role) {
+        foreach ([UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector, UserRole::DirectorIv, UserRole::DirectorIii] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/reports/duplicate-members')
                 ->assertForbidden();

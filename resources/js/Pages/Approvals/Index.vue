@@ -208,8 +208,7 @@ const confirmBulkDisapprove = () => {
                     <BaseButton variant="outline" size="sm" @click="openBulkDisapprove">
                         Disapprove Selected
                     </BaseButton>
-                    <BaseButton variant="primary" size="sm" @click="showBulkApprove = true">
-                        <AppIcon name="check-circle" class="h-4 w-4" />
+                    <BaseButton variant="primary" size="sm" @click="showBulkApprove = true" icon="check-circle">
                         Approve & Release Selected
                     </BaseButton>
                 </div>
@@ -326,9 +325,8 @@ const confirmBulkDisapprove = () => {
                     v-if="previewing"
                     variant="primary"
                     size="sm"
-                    @click="openApprove(previewing); previewing = null"
+                    @click="openApprove(previewing); previewing = null" icon="check-circle"
                 >
-                    <AppIcon name="check-circle" class="h-4 w-4" />
                     Approve & Release
                 </BaseButton>
             </template>
@@ -348,9 +346,8 @@ const confirmBulkDisapprove = () => {
                     size="sm"
                     :loading="approveForm.processing"
                     :disabled="approveForm.processing"
-                    @click="confirmApprove"
+                    @click="confirmApprove" icon="check-circle"
                 >
-                    <AppIcon name="check-circle" class="h-4 w-4" />
                     Approve & Release
                 </BaseButton>
             </template>
@@ -369,9 +366,8 @@ const confirmBulkDisapprove = () => {
                     size="sm"
                     :loading="bulkApproveForm.processing"
                     :disabled="bulkApproveForm.processing"
-                    @click="confirmBulkApprove"
+                    @click="confirmBulkApprove" icon="check-circle"
                 >
-                    <AppIcon name="check-circle" class="h-4 w-4" />
                     Approve & Release {{ selected.length }}
                 </BaseButton>
             </template>

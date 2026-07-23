@@ -91,8 +91,7 @@ const submit = () => form
     <DashboardLayout>
         <DashboardPageHeader title="My PROCTAD Profile">
             <template v-if="member && !editing" #actions>
-                <BaseButton variant="outline" size="sm" @click="startEditing">
-                    <AppIcon name="pencil" class="h-4 w-4" />
+                <BaseButton variant="outline" size="sm" @click="startEditing" icon="pencil">
                     Edit Profile
                 </BaseButton>
             </template>

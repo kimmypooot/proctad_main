@@ -4,6 +4,7 @@ use App\Http\Middleware\CheckMaintenanceMode;
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ResolveScannerSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
             'password.changed' => EnsurePasswordIsChanged::class,
+            'scanner.session' => ResolveScannerSession::class,
         ]);
 
         $middleware->redirectGuestsTo('/login');
@@ -58,7 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
         //
         // Skipped when debug is on, so developers keep the stack trace, and for
         // JSON callers, who want the status and not a page.
-        $exceptions->respond(function (SymfonyResponse $response, \Throwable $e, Request $request) {
+        $exceptions->respond(function (SymfonyResponse $response, Throwable $e, Request $request) {
             if (config('app.debug') || $request->expectsJson()) {
                 return $response;
             }

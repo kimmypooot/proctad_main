@@ -32,12 +32,15 @@ const props = defineProps({
 const page = usePage();
 const firstName = computed(() => page.props.auth.user?.first_name ?? 'there');
 
-const isApprover = computed(() => ['management', 'field_director'].includes(props.role));
+// The two regional directors share every dashboard rule; they differ only in
+// which REC seat they hold (see UserRole::isManagement on the server).
+const isManagement = computed(() => ['director_iv', 'director_iii'].includes(props.role));
+const isApprover = computed(() => isManagement.value || props.role === 'field_director');
 const isAdmin = computed(() => ['super_admin', 'esd_admin', 'fo_admin'].includes(props.role));
 const isMember = computed(() => props.role === 'member');
 
 const approvalCopy = computed(() =>
-    props.role === 'management'
+    isManagement.value
         ? {
               title: 'No pending Certificate of Appreciation approvals',
               description: 'Approval requests initiated by Testing Center Admins will appear here for your action.',

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MemberStatus;
+use App\Enums\UserRole;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -111,6 +112,21 @@ class Member extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * The accredited member who holds a given office — used for the ex officio
+     * REC seats (see ExamRole::reservedForRole).
+     *
+     * Null when the post is vacant *or* when its holder has not been enrolled
+     * in the registry yet. Both are the same thing here: an official who is not
+     * an accredited member cannot be assigned to an examination at all, so the
+     * seat has no rightful claimant and falls open to the pool.
+     */
+    public static function holdingOffice(UserRole $role): ?self
+    {
+        return static::whereHas('user', fn ($q) => $q->where('role', $role)->where('is_active', true))
+            ->first();
     }
 
     public function fieldOffice(): BelongsTo

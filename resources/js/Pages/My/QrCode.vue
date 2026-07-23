@@ -83,12 +83,10 @@ onBeforeUnmount(() => {
             subtitle="Present this QR code for attendance at trainings, briefings, and examinations."
         >
             <template v-if="idCard" #actions>
-                <BaseButton variant="outline" size="sm" @click="printCard">
-                    <AppIcon name="newspaper" class="h-4 w-4" />
+                <BaseButton variant="outline" size="sm" @click="printCard" icon="newspaper">
                     Print
                 </BaseButton>
-                <BaseButton variant="primary" size="sm" href="/my/id-card/download" external>
-                    <AppIcon name="arrow-down-tray" class="h-4 w-4" />
+                <BaseButton variant="primary" size="sm" href="/my/id-card/download" external icon="arrow-down-tray">
                     Download ID (PDF)
                 </BaseButton>
             </template>
@@ -121,8 +119,7 @@ onBeforeUnmount(() => {
                     </p>
                     <p class="text-xs text-slate-400">Read this out if the scanner can't pick up the code.</p>
 
-                    <BaseButton class="mt-4" variant="primary" size="sm" @click="openScanMode">
-                        <AppIcon name="qr-code" class="h-4 w-4" />
+                    <BaseButton class="mt-4" variant="primary" size="sm" @click="openScanMode" icon="qr-code">
                         Show full screen
                     </BaseButton>
                 </div>

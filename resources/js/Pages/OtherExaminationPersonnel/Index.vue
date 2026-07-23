@@ -3,7 +3,6 @@ import { ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import ViewOepModal from './Partials/ViewOepModal.vue';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BasePagination from '@/Components/BasePagination.vue';
@@ -66,8 +65,7 @@ watch([personnelType, fieldOfficeId], applyFilters);
             subtitle="Coordinators, inspectors, PNP officers, and other support staff for examination venues."
         >
             <template v-if="can.create" #actions>
-                <BaseButton href="/other-examination-personnel/create" variant="primary" size="sm">
-                    <AppIcon name="user-plus" class="h-4 w-4" />
+                <BaseButton href="/other-examination-personnel/create" variant="primary" size="sm" icon="user-plus">
                     Add Personnel
                 </BaseButton>
             </template>

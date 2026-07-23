@@ -22,4 +22,15 @@ enum TrainingType: string
             self::Briefing => 'Briefing',
         };
     }
+
+    /**
+     * TEA is a course a participant completes, so confirmed attendance earns a
+     * Certificate of Completion on top of the Appearance certificate every
+     * training issues. A Briefing is an information session, not a course —
+     * there is nothing to complete, so it earns Appearance only.
+     */
+    public function issuesCompletionCertificate(): bool
+    {
+        return $this === self::Tea;
+    }
 }

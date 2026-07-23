@@ -100,7 +100,10 @@ class CertificatePagesTest extends TestCase
         $cases = [
             // [user, expected count]
             [User::factory()->create(['role' => UserRole::FieldDirector, 'field_office_id' => $fo->id]), 2],
-            [User::factory()->create(['role' => UserRole::Management]), 1],
+            // Either regional director approves Appreciation — the split into
+            // Director IV / III is about the REC seat, not approval authority.
+            [User::factory()->create(['role' => UserRole::DirectorIv]), 1],
+            [User::factory()->create(['role' => UserRole::DirectorIii]), 1],
             [User::factory()->create(['role' => UserRole::SuperAdmin]), 3],
             // No approval rights — badge must stay hidden.
             [User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]), 0],
@@ -144,13 +147,14 @@ class CertificatePagesTest extends TestCase
 
     public function test_management_sees_only_appreciation_approvals(): void
     {
-        $management = User::factory()->create(['role' => UserRole::Management]);
         $this->certificate(CertificateType::Appearance, CertificateStatus::Pending);
         $this->certificate(CertificateType::Appreciation, CertificateStatus::Pending);
 
-        $this->actingAs($management)
-            ->get('/approvals')
-            ->assertInertia(fn (Assert $page) => $page->has('pending', 1));
+        foreach ([UserRole::DirectorIv, UserRole::DirectorIii] as $role) {
+            $this->actingAs(User::factory()->create(['role' => $role]))
+                ->get('/approvals')
+                ->assertInertia(fn (Assert $page) => $page->has('pending', 1));
+        }
     }
 
     public function test_field_director_can_approve_from_the_page_flow(): void

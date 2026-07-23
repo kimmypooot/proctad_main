@@ -28,13 +28,13 @@ class CertificatePolicy
             return false;
         }
 
-        $approverRole = $certificate->type->approverRole();
+        $approverRoles = $certificate->type->approverRoles();
 
-        if ($approverRole === null) {
+        if ($approverRoles === []) {
             return false;
         }
 
-        if ($user->role === $approverRole) {
+        if (in_array($user->role, $approverRoles, true)) {
             return $user->role !== UserRole::FieldDirector
                 || $user->field_office_id === $certificate->field_office_id;
         }

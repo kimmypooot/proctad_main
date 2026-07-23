@@ -130,6 +130,10 @@ class MyProctadController extends Controller
                     // Not column-constrained: evaluation() uses latestOfMany(),
                     // whose self-join makes an unqualified column list ambiguous.
                     'evaluation',
+                    // For the exam-day cover note below — a substitution names
+                    // the person covered, so the relation is needed per row.
+                    'coveringFor.member:id,first_name,middle_name,last_name,suffix',
+                    'coveredBy.member:id,first_name,middle_name,last_name,suffix',
                 ])
                 ->get()
                 ->sortByDesc(fn ($assignment) => $assignment->examination?->exam_date)
@@ -167,6 +171,12 @@ class MyProctadController extends Controller
                         'room_withheld' => ! $roomVisible && $assignment->room !== null,
                         'attended' => (bool) $assignment->attendance_confirmed_at,
                         'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y g:i A'),
+                        // Absence is stated plainly on the member's own record.
+                        // Left implicit it reads as an administrative gap, and
+                        // a member has a real interest in seeing what their
+                        // service record says about them.
+                        'attendance_outcome' => $assignment->attendanceOutcome(),
+                        'service_note' => $assignment->serviceNote(),
                         'confirmed_by' => $assignment->confirmedBy?->name,
                         'decline_reason' => $assignment->decline_reason,
                         'remarks' => $assignment->remarks,

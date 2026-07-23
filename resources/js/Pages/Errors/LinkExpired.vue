@@ -3,11 +3,27 @@ import { Head } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+
+// Defaults describe the assignment-confirmation link this page was written
+// for; the scanner-link middleware passes its own wording.
+defineProps({
+    title: { type: String, default: 'This link has expired' },
+    message: {
+        type: String,
+        default:
+            'Confirmation links stay valid for a limited time and can only be opened from the original email. This one is no longer active, or it was changed somewhere along the way.',
+    },
+    followUp: {
+        type: String,
+        default:
+            'Please contact your Testing Center and ask them to send a new confirmation request. Your assignment itself has not been cancelled.',
+    },
+});
 </script>
 
 <template>
     <PublicLayout>
-        <Head title="Link Expired" />
+        <Head :title="title" />
 
         <section class="relative isolate flex min-h-[60vh] flex-col justify-center overflow-hidden px-4 py-16">
             <!-- CSC facade background — matches Assignments/Confirm. -->
@@ -26,17 +42,11 @@ import BaseButton from '@/Components/BaseButton.vue';
                     <AppIcon name="exclamation-triangle" class="h-6 w-6 text-amber-600" />
                 </div>
 
-                <h1 class="mt-4 text-xl font-bold tracking-tight text-slate-900">This link has expired</h1>
+                <h1 class="mt-4 text-xl font-bold tracking-tight text-slate-900">{{ title }}</h1>
 
-                <p class="mt-3 text-sm leading-relaxed text-slate-600">
-                    Confirmation links stay valid for a limited time and can only be opened from the original email.
-                    This one is no longer active, or it was changed somewhere along the way.
-                </p>
+                <p class="mt-3 text-sm leading-relaxed text-slate-600">{{ message }}</p>
 
-                <p class="mt-3 text-sm leading-relaxed text-slate-600">
-                    Please contact your Testing Center and ask them to send a new confirmation request. Your assignment
-                    itself has not been cancelled.
-                </p>
+                <p class="mt-3 text-sm leading-relaxed text-slate-600">{{ followUp }}</p>
 
                 <div class="mt-8">
                     <BaseButton href="/" variant="primary" size="lg" block>Return to Homepage</BaseButton>

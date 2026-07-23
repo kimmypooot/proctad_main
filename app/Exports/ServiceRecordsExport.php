@@ -30,7 +30,15 @@ class ServiceRecordsExport implements FromCollection, WithHeadings, WithMapping
     public function collection(): Collection
     {
         $assignments = ExamAssignment::query()
-            ->with(['member:id,proctad_id,first_name,middle_name,last_name,suffix', 'examination:id,title,exam_type_id,exam_date', 'fieldOffice:id,name,code'])
+            ->with([
+                'member:id,proctad_id,first_name,middle_name,last_name,suffix',
+                'examination:id,title,exam_type_id,exam_date',
+                'fieldOffice:id,name,code',
+                // For the Service Note column — without these the note would
+                // lazy-load two relations per row across a whole region's records.
+                'coveringFor.member:id,first_name,middle_name,last_name,suffix',
+                'coveredBy.member:id,first_name,middle_name,last_name,suffix',
+            ])
             ->when($this->fieldOfficeId, fn ($q) => $q->where('field_office_id', $this->fieldOfficeId))
             ->when($this->memberId, fn ($q) => $q->where('member_id', $this->memberId))
             ->when($this->year || $this->examTypeId, fn ($q) => $q->whereHas('examination', function ($qq) {
@@ -49,7 +57,10 @@ class ServiceRecordsExport implements FromCollection, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['PROCTAD ID', 'Member', 'Testing Center', 'Examination', 'Exam Date', 'Role', 'Attendance Confirmed', 'Rating'];
+        // "Attendance" replaces the old Yes/No "Attendance Confirmed": a blank
+        // no longer means only "unrecorded", so a boolean would now hide a
+        // recorded absence behind the same "No" as a missing scan.
+        return ['PROCTAD ID', 'Member', 'Testing Center', 'Examination', 'Exam Date', 'Role', 'Attendance', 'Service Note', 'Rating'];
     }
 
     public function map($assignment): array
@@ -63,7 +74,8 @@ class ServiceRecordsExport implements FromCollection, WithHeadings, WithMapping
             $assignment->examination?->title,
             $assignment->examination?->exam_date?->format('Y-m-d'),
             $assignment->role->label(),
-            $assignment->attendance_confirmed_at ? 'Yes' : 'No',
+            $assignment->attendanceOutcome(),
+            $assignment->serviceNote(),
             $rating?->label(),
         ];
     }

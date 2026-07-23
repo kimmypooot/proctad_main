@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import AppIcon from './AppIcon.vue';
 import LoadingSpinner from './LoadingSpinner.vue';
 
 const props = defineProps({
@@ -20,6 +21,16 @@ const props = defineProps({
     loading: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false },
     block: { type: Boolean, default: false },
+    /**
+     * Optional leading AppIcon name. Purely decorative: the label still carries
+     * the meaning, so it is `aria-hidden` and a button must never rely on the
+     * icon alone to say what it does (that is IconButton's job, and it takes a
+     * required label for exactly this reason).
+     *
+     * Suppressed while loading — the spinner occupies the same slot, and
+     * showing both makes the button jump a few pixels wider mid-submit.
+     */
+    icon: { type: String, default: null },
 });
 
 const variants = {
@@ -82,6 +93,12 @@ const tag = computed(() => {
         :class="classes"
     >
         <LoadingSpinner v-if="loading" class="h-4 w-4" />
+        <AppIcon
+            v-else-if="icon"
+            :name="icon"
+            class="h-4 w-4 shrink-0"
+            aria-hidden="true"
+        />
         <slot />
     </component>
 </template>
