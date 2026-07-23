@@ -119,7 +119,8 @@ class ReportTest extends TestCase
     public function test_venue_readiness_reflects_room_staffing(): void
     {
         $fo = FieldOffice::factory()->create();
-        $school = \App\Models\School::create(['field_office_id' => $fo->id, 'name' => 'Test School', 'municipality' => 'Tacloban City', 'is_active' => true]);
+        $center = \App\Models\TestingCenter::factory()->forFieldOffice($fo)->create(['name' => 'Tacloban City']);
+        $school = \App\Models\School::create(['testing_center_id' => $center->id, 'name' => 'Test School', 'is_active' => true]);
         $exam = Examination::factory()->create();
         $venue = \App\Models\ExaminationSchool::create(['examination_id' => $exam->id, 'school_id' => $school->id, 'is_active' => true]);
         $room1 = \App\Models\ExamRoom::create(['examination_school_id' => $venue->id, 'room_number' => '1', 'capacity' => 30]);

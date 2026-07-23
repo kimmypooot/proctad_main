@@ -81,7 +81,7 @@ const editForm = useForm({
 const editIsCoverageRole = computed(() => props.roles.find((r) => r.value === editForm.role)?.is_coverage ?? false);
 const overrideComputedRating = ref(false);
 
-// REC monitors region-wide; LEC is seated at one testing center and only ever
+// REC monitors region-wide; LEC is seated at one field office and only ever
 // covers schools inside it. Mirrors coveredSchoolJurisdictionRule server-side —
 // offering the full region here would just produce a validation error later.
 const editIsCenterBoundCoverage = computed(
@@ -93,10 +93,10 @@ const editCoveredSchoolOptions = computed(() => {
         return venueOptions.value;
     }
 
-    const center = props.venues.find((v) => v.id === Number(editForm.examination_school_id))?.field_office_id;
+    const center = props.venues.find((v) => v.id === Number(editForm.examination_school_id))?.testing_center_id;
     if (!center) return [];
 
-    const inCenter = props.venues.filter((v) => v.field_office_id === center).map((v) => v.id);
+    const inCenter = props.venues.filter((v) => v.testing_center_id === center).map((v) => v.id);
 
     return venueOptions.value.filter((option) => inCenter.includes(option.value));
 });
@@ -310,13 +310,130 @@ const submitBulkConfirm = () => {
         </div>
     </div>
 
-    <div v-if="filteredAssignments.length" class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+    <!--
+        Mobile (below md): a card per assignment. The table below drops most
+        columns and pushes its action icons off the right edge on a phone,
+        forcing a horizontal scroll just to reach them — the cards keep every
+        field and action on screen instead.
+    -->
+    <div v-if="filteredAssignments.length" class="mt-3 space-y-4 md:hidden">
+        <template v-for="group in groupedAssignments" :key="`m-${group.key}`">
+            <p v-if="group.label" class="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {{ group.label }} <span class="font-normal normal-case text-slate-400">({{ group.rows.length }})</span>
+            </p>
+            <div
+                v-for="assignment in group.rows"
+                :key="`m-${assignment.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+            >
+                <div class="flex items-start gap-3">
+                    <input
+                        v-if="can.assign || can.bulkRevoke"
+                        v-model="selectedForRevoke"
+                        type="checkbox"
+                        :value="assignment.id"
+                        class="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-accent-600 accent-accent-600"
+                    >
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <Link href="/members" class="font-medium text-slate-900 hover:underline">
+                                    {{ assignment.member.name }}
+                                </Link>
+                                <p class="font-mono text-xs text-brand-700">{{ assignment.member.proctad_id }}</p>
+                            </div>
+                            <BaseBadge :variant="assignment.status_variant" class="shrink-0">{{ assignment.status_label }}</BaseBadge>
+                        </div>
+
+                        <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                            <div class="col-span-2">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Role</dt>
+                                <dd class="text-slate-700">
+                                    {{ assignment.role_label }}
+                                    <span v-if="assignment.covering_for" class="mt-0.5 block text-xs text-brand-700">
+                                        covering for {{ assignment.covering_for.member_name }}
+                                    </span>
+                                    <span v-else-if="assignment.covered_by" class="mt-0.5 block text-xs text-slate-400">
+                                        covered by {{ assignment.covered_by.member_name }}
+                                    </span>
+                                </dd>
+                            </div>
+                            <div v-if="assignment.field_office?.name">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</dt>
+                                <dd class="text-slate-700">{{ assignment.field_office.name }}</dd>
+                            </div>
+                            <div v-if="assignment.venue">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Venue / Room</dt>
+                                <dd class="text-slate-700">{{ assignment.venue }}<span v-if="assignment.room"> — {{ assignment.room }}</span></dd>
+                            </div>
+                            <div>
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Attendance</dt>
+                                <dd>
+                                    <span v-if="assignment.attended" class="inline-flex items-center gap-1 text-xs text-emerald-700">
+                                        <AppIcon name="check-circle" class="h-4 w-4" />{{ assignment.attendance_confirmed_at }}
+                                    </span>
+                                    <span v-else-if="assignment.absent" class="inline-flex items-center gap-1 text-xs text-accent-700">
+                                        <AppIcon name="x-mark" class="h-4 w-4" />Absent · {{ assignment.marked_absent_at }}
+                                    </span>
+                                    <span v-else class="text-slate-400">—</span>
+                                </dd>
+                            </div>
+                            <div v-if="assignment.rating_label">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Rating</dt>
+                                <dd>
+                                    <BaseBadge :variant="assignment.rating_variant">
+                                        {{ assignment.rating_label }}
+                                        <AppIcon v-if="assignment.rating_is_computed" name="sparkles" class="ml-1 inline h-3 w-3" title="Computed from evaluations" />
+                                    </BaseBadge>
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <div v-if="assignment.covered_schools.length" class="mt-2 flex flex-wrap gap-1">
+                            <span
+                                v-for="school in assignment.covered_schools"
+                                :key="school.id"
+                                class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.65rem] font-medium text-slate-600"
+                                :title="school.attended ? 'Attendance recorded' : 'Not yet scanned'"
+                            >
+                                <span class="h-1.5 w-1.5 rounded-full" :class="school.attended ? 'bg-emerald-500' : 'bg-slate-300'" />
+                                {{ school.name }}
+                            </span>
+                        </div>
+
+                        <div v-if="assignment.can_manage" class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
+                            <IconButton
+                                v-if="assignment.status === 'pending' || assignment.status === 'declined' || assignment.status === 'expired'"
+                                icon="paper-airplane"
+                                :label="`${assignment.confirmation_sent_at ? 'Resend' : 'Send'} Confirmation`"
+                                @click="sendConfirmation(assignment)"
+                            />
+                            <IconButton
+                                v-if="assignment.is_coverable && !assignment.attended && !assignment.absent && !assignment.is_alternate && !assignment.covering_for"
+                                icon="x-mark"
+                                label="Mark absent"
+                                @click="markingAbsent = assignment"
+                            />
+                            <IconButton v-if="assignment.absent && !assignment.covered_by" icon="user-plus" label="Call in an alternate" @click="openAlternates(assignment)" />
+                            <IconButton v-if="assignment.absent && !assignment.covered_by" icon="arrow-path" label="Clear absence" @click="clearAbsence(assignment)" />
+                            <IconButton v-if="assignment.covering_for" icon="arrow-path" label="Stand down (return to standby pool)" @click="standDown(assignment)" />
+                            <IconButton icon="pencil" label="Edit" @click="openEdit(assignment)" />
+                            <IconButton v-if="venues.length" icon="arrow-path" label="Force Reassign" @click="openReassign(assignment)" />
+                            <IconButton icon="trash" label="Remove" variant="danger" @click="removing = assignment" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <div v-if="filteredAssignments.length" class="mt-3 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
         <table class="min-w-full divide-y divide-slate-200 text-sm">
             <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
                     <th v-if="can.assign || can.bulkRevoke" class="w-8 px-3 py-2"><span class="sr-only">Select</span></th>
                     <th class="px-3 py-2">Member</th>
-                    <th class="hidden px-3 py-2 xl:table-cell">Testing Center</th>
+                    <th class="hidden px-3 py-2 xl:table-cell">Field Office</th>
                     <th class="px-3 py-2">Role</th>
                     <th class="hidden px-3 py-2 md:table-cell">Venue / Room</th>
                     <th class="px-3 py-2">Confirmation</th>
@@ -422,12 +539,15 @@ const submitBulkConfirm = () => {
                                 @click="sendConfirmation(assignment)"
                             />
                             <!--
-                                Exam-day cover. Only offered where it can
-                                actually apply: a seat that is not an alternate
-                                and whose holder has not reported in.
+                                Exam-day cover. Only offered for a room-floor
+                                seat (Supervising Examiner, Room Examiner,
+                                Proctor) whose holder has not reported in —
+                                REC/LEC committee seats are staffed from a
+                                different pool and cannot be covered by an
+                                alternate (see AlternateActivator).
                             -->
                             <IconButton
-                                v-if="!assignment.attended && !assignment.absent && !assignment.is_alternate && !assignment.covering_for"
+                                v-if="assignment.is_coverable && !assignment.attended && !assignment.absent && !assignment.is_alternate && !assignment.covering_for"
                                 icon="x-mark"
                                 label="Mark absent"
                                 @click="markingAbsent = assignment"
@@ -541,7 +661,7 @@ const submitBulkConfirm = () => {
                 <p class="text-sm font-medium text-slate-700">Covered schools</p>
                 <p class="mt-0.5 text-xs text-slate-500">Reference-only — no confirmation sent; scanned/entered per school on exam day.</p>
                 <p v-if="editIsCenterBoundCoverage" class="mt-0.5 text-xs text-slate-500">
-                    Local Examination Committee roles cover only schools within their own testing center.
+                    Local Examination Committee roles cover only schools within their own field office.
                 </p>
                 <div v-if="editCoveredSchoolOptions.length" class="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
                     <label
@@ -559,7 +679,7 @@ const submitBulkConfirm = () => {
                     </label>
                 </div>
                 <p v-else-if="editIsCenterBoundCoverage && !editForm.examination_school_id" class="mt-2 text-xs text-slate-400">
-                    Set this assignment's venue first — it decides which testing center's schools can be covered.
+                    Set this assignment's venue first — it decides which field office's schools can be covered.
                 </p>
                 <p v-else class="mt-2 text-xs text-slate-400">No venues attached yet.</p>
             </div>

@@ -188,7 +188,7 @@ const confirmBulkDisapprove = () => {
                 <SelectInput
                     v-if="fieldOffices"
                     v-model="fieldOfficeFilter"
-                    label="Testing Center"
+                    label="Field Office"
                     placeholder="All field offices"
                     :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: String(fo.id), label: fo.name }))]"
                 />
@@ -229,7 +229,7 @@ const confirmBulkDisapprove = () => {
                             </th>
                             <th class="px-3 py-2">Member</th>
                             <th class="hidden px-3 py-2 sm:table-cell">Type</th>
-                            <th class="hidden px-3 py-2 lg:table-cell">Testing Center</th>
+                            <th class="hidden px-3 py-2 lg:table-cell">Field Office</th>
                             <th class="hidden px-3 py-2 xl:table-cell">Source</th>
                             <th class="px-3 py-2">Waiting</th>
                             <th class="px-3 py-2 text-center">Actions</th>

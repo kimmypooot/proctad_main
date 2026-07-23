@@ -15,7 +15,7 @@ class SettingController extends Controller
     /**
      * Plain-language presentation for the settings staff actually touch. The
      * table underneath is a raw key/value store, which is fine for storage but
-     * unusable for a Testing Center administrator who shouldn't have to know
+     * unusable for a Field Office administrator who shouldn't have to know
      * that `1` means "on" — so each known key gets a label, an explanation of
      * what changes in the real world, and a control suited to its type.
      *

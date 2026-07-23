@@ -60,18 +60,18 @@ watch(() => props.prefillVenueId, (venueId) => {
 }, { immediate: true });
 
 /*
- * The testing center of the venue currently chosen, or null when none is.
- * Members who also hold a field-office-scoped staff post (Testing Center Staff,
+ * The field office of the venue currently chosen, or null when none is.
+ * Members who also hold a field-office-scoped staff post (Field Office Staff,
  * Field Director) serve only where they work, so they drop out of the list
  * until a venue in their own office is picked — the server enforces this in
  * staffJurisdictionRule; hiding them here just avoids offering a choice that
  * would be rejected.
  */
-const selectedVenueOfficeId = computed(() => props.venues
-    .find((v) => v.id === Number(assignForm.examination_school_id))?.field_office_id ?? null);
+const selectedVenueOfficeIds = computed(() => props.venues
+    .find((v) => v.id === Number(assignForm.examination_school_id))?.field_office_ids ?? []);
 
 const isEligible = (member) => member.confined_to_office_id === null
-    || member.confined_to_office_id === selectedVenueOfficeId.value;
+    || selectedVenueOfficeIds.value.includes(member.confined_to_office_id);
 
 const eligibleMembers = computed(() => props.assignableMembers.filter(isEligible));
 
@@ -83,7 +83,7 @@ const confinedOutCount = computed(
 
 // Changing the venue can strip eligibility from someone already ticked; without
 // this their id would ride along in the payload and fail validation.
-watch(selectedVenueOfficeId, () => {
+watch(selectedVenueOfficeIds, () => {
     const stillEligible = new Set(eligibleMembers.value.map((m) => m.id));
     selected.value = selected.value.filter((id) => stillEligible.has(id));
 });
@@ -217,7 +217,7 @@ const assign = () => assignForm
                     <p class="text-xs font-medium uppercase tracking-wide text-slate-400">
                         {{ filteredMembers.length }} eligible member{{ filteredMembers.length === 1 ? '' : 's' }}
                         <span v-if="confinedOutCount" class="normal-case tracking-normal text-slate-400">
-                            · {{ confinedOutCount }} hidden — Testing Center Staff serve only at their own center
+                            · {{ confinedOutCount }} hidden — Field Office Staff serve only at their own center
                         </span>
                     </p>
                     <button type="button" class="text-xs font-semibold text-brand-700 hover:underline" @click="selectAllFiltered">

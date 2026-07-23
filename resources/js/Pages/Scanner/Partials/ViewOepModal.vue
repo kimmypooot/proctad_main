@@ -56,7 +56,7 @@ watch(() => props.show, (open) => {
                                 <dd class="mt-0.5 text-slate-700">{{ oep().personnel_type_label }}</dd>
                             </div>
                             <div>
-                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</dt>
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</dt>
                                 <dd class="mt-0.5 text-slate-700">{{ oep().field_office?.name ?? 'Region-wide' }}</dd>
                             </div>
                             <div>

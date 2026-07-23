@@ -136,7 +136,7 @@ class SignatoryController extends Controller
                 'exists:field_offices,id',
                 function (string $attribute, mixed $value, \Closure $fail) use ($user) {
                     if ($user->role->isFieldOfficeScoped() && (int) $value !== $user->field_office_id) {
-                        $fail('You can only manage signatories of your own Testing Center.');
+                        $fail('You can only manage signatories of your own Field Office.');
                     }
                 },
             ],

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -69,6 +70,24 @@ class RegistrationTest extends TestCase
         $this->assertSame('male', $member->sex->value ?? $member->sex);
         $this->assertSame('1990-05-15', $member->date_of_birth);
         $this->assertTrue($member->requirements()->exists());
+    }
+
+    /** Self-registration (Google sign-up) links the new user to their field office's centers. */
+    public function test_registration_links_the_new_user_to_their_testing_centers(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+        $centerA = TestingCenter::factory()->forFieldOffice($fieldOffice)->create();
+        $centerB = TestingCenter::factory()->forFieldOffice($fieldOffice)->create();
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice))
+            ->assertRedirect(route('dashboard'));
+
+        $user = User::where('email', 'juan@example.test')->firstOrFail();
+        $this->assertEqualsCanonicalizing(
+            [$centerA->id, $centerB->id],
+            $user->testingCenters()->pluck('testing_centers.id')->all(),
+        );
     }
 
     public function test_registration_requires_connecting_google_first(): void

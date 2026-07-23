@@ -34,15 +34,15 @@ class StoreOtherExaminationPersonnelRequest extends FormRequest
     }
 
     /**
-     * Testing Center Admins can only register other examination personnel in their own
-     * Testing Center (or region-wide/unassigned, matching legacy behavior).
+     * Field Office Admins can only register other examination personnel in their own
+     * Field Office (or region-wide/unassigned, matching legacy behavior).
      */
     protected function fieldOfficeScopeRule(): \Closure
     {
         return function (string $attribute, mixed $value, \Closure $fail) {
             $user = $this->user();
             if ($user->role->isFieldOfficeScoped() && $value !== null && (int) $value !== $user->field_office_id) {
-                $fail('You can only manage other examination personnel of your own Testing Center.');
+                $fail('You can only manage other examination personnel of your own Field Office.');
             }
         };
     }

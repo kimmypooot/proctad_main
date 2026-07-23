@@ -34,7 +34,7 @@ class ExamAssignmentOverrideTest extends TestCase
         ]);
         $room = ExamRoom::factory()->create();
         $assignment->update(['exam_room_id' => $room->id]);
-        $newSchool = \App\Models\School::factory()->create(['field_office_id' => $office->id]);
+        $newSchool = \App\Models\School::factory()->forFieldOffice($office->id)->create();
         $newVenue = ExaminationSchool::factory()->create(['examination_id' => $exam->id, 'school_id' => $newSchool->id]);
 
         $this->actingAs($admin)->post("/assignments/{$assignment->id}/force-reassign", [

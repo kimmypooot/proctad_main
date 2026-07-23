@@ -43,11 +43,11 @@ const approvalCopy = computed(() =>
     isManagement.value
         ? {
               title: 'No pending Certificate of Appreciation approvals',
-              description: 'Approval requests initiated by Testing Center Admins will appear here for your action.',
+              description: 'Approval requests initiated by Field Office Admins will appear here for your action.',
           }
         : {
               title: 'No pending approvals',
-              description: 'Requests for Certificates of Appearance and Designation Orders from your Testing Center will appear here.',
+              description: 'Requests for Certificates of Appearance and Designation Orders from your Field Office will appear here.',
           },
 );
 
@@ -197,7 +197,7 @@ const applyFeedFilter = () => {
             </div>
 
             <div v-if="analytics.registrationsByFieldOffice" class="mt-4">
-                <BarChart title="Registrations by Testing Center (All-Time)" :items="analytics.registrationsByFieldOffice" />
+                <BarChart title="Registrations by Field Office (All-Time)" :items="analytics.registrationsByFieldOffice" />
             </div>
 
             <!-- Recent registrations -->
@@ -207,9 +207,9 @@ const applyFeedFilter = () => {
                     <div v-if="analytics.fieldOffices" class="w-56">
                         <SelectInput
                             v-model="feedFieldOfficeId"
-                            label="Testing Center"
-                            placeholder="All Testing Centers"
-                            :options="[{ value: '', label: 'All Testing Centers (Overall)' }, ...analytics.fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
+                            label="Field Office"
+                            placeholder="All Field Offices"
+                            :options="[{ value: '', label: 'All Field Offices (Overall)' }, ...analytics.fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
                             @update:model-value="applyFeedFilter"
                         />
                     </div>
@@ -226,7 +226,7 @@ const applyFeedFilter = () => {
                         <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>
                                 <th class="py-2 pr-3 font-semibold">Member</th>
-                                <th class="hidden py-2 pr-3 font-semibold sm:table-cell">Testing Center</th>
+                                <th class="hidden py-2 pr-3 font-semibold sm:table-cell">Field Office</th>
                                 <th class="py-2 pr-3 font-semibold">Status</th>
                                 <th class="py-2 pl-3 text-right font-semibold">Registered</th>
                             </tr>
@@ -331,7 +331,7 @@ const applyFeedFilter = () => {
                         v-if="!memberSummary"
                         icon="identification"
                         title="No PROCTAD record linked to your account"
-                        description="Your Testing Center has not yet registered you in the PROCTAD registry, or your registry record uses a different email address. Please contact your Testing Center."
+                        description="Your Field Office has not yet registered you in the PROCTAD registry, or your registry record uses a different email address. Please contact your Field Office."
                     />
                     <div v-else class="grid gap-4 lg:grid-cols-3">
                         <!-- Identity -->

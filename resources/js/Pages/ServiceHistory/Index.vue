@@ -88,7 +88,7 @@ const viewMember = (id) => {
             <SelectInput
                 v-if="fieldOffices"
                 v-model="fieldOfficeId"
-                label="Testing Center"
+                label="Field Office"
                 placeholder="All field offices"
                 :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
             />
@@ -107,7 +107,7 @@ const viewMember = (id) => {
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
                         <th class="px-3 py-2">Test Administrator</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
                         <th class="px-3 py-2">Designations Served</th>
                         <th class="hidden px-3 py-2 md:table-cell">Most Recent Assignment</th>
                         <th class="px-3 py-2 text-center">Total Served</th>

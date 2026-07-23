@@ -25,6 +25,8 @@ use App\Http\Controllers\ExamTypeController;
 use App\Http\Controllers\ExamVenueController;
 use App\Http\Controllers\FeeScheduleController;
 use App\Http\Controllers\FieldOfficeController;
+use App\Http\Controllers\LocationController;
+use App\Http\Controllers\TestingCenterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LetterheadController;
 use App\Http\Controllers\MemberController;
@@ -68,7 +70,7 @@ Route::get('/terms-and-conditions', fn () => Inertia::render('Terms'))->name('te
 Route::get('/maintenance', fn () => Inertia::render('Maintenance'))->name('maintenance');
 // Public QR verification. Throttled because certificate numbers are sequential
 // (RO8-CAP-2026-00001, -00002, …), so an unthrottled endpoint lets anyone walk
-// the range and harvest every releasee's name, PROCTAD ID and testing center.
+// the range and harvest every releasee's name, PROCTAD ID and field office.
 // 10/min is far above scanning one QR code and far below a useful sweep.
 Route::get('/verify/{proctadId}', VerifyController::class)
     ->middleware('throttle:10,1')
@@ -212,7 +214,7 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('scanner-sessions.revoke');
     });
 
-    Route::middleware('role:super_admin,director_iv,director_iii,field_director')->group(function () {
+    Route::middleware('role:super_admin,director_iv,director_iii,field_director,fo_admin')->group(function () {
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
     });
 
@@ -272,7 +274,11 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::resource('signatories', SignatoryController::class)->only('index', 'store', 'update', 'destroy');
         Route::get('/signatories/{signatory}/signature', [SignatoryController::class, 'signature'])
             ->name('signatories.signature');
-        Route::resource('schools', SchoolController::class)->only('index', 'store', 'update', 'destroy');
+        // Unified Field Office → Testing Center → School browser. The per-entity
+        // resources keep only their write actions; browsing happens here.
+        Route::get('/locations', [LocationController::class, 'index'])->name('locations.index');
+        Route::resource('schools', SchoolController::class)->only('store', 'update', 'destroy');
+        Route::resource('testing-centers', TestingCenterController::class)->only('store', 'update', 'destroy');
 
         Route::resource('other-examination-personnel', OtherExaminationPersonnelController::class);
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/details', [OtherExaminationPersonnelController::class, 'details'])
@@ -405,9 +411,9 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::put('/exam-types/{examType}', [ExamTypeController::class, 'update'])->name('exam-types.update');
         Route::delete('/exam-types/{examType}', [ExamTypeController::class, 'destroy'])->name('exam-types.destroy');
 
-        Route::get('/field-offices', [FieldOfficeController::class, 'index'])->name('field-offices.index');
         Route::post('/field-offices', [FieldOfficeController::class, 'store'])->name('field-offices.store');
         Route::put('/field-offices/{fieldOffice}', [FieldOfficeController::class, 'update'])->name('field-offices.update');
+        Route::delete('/field-offices/{fieldOffice}', [FieldOfficeController::class, 'destroy'])->name('field-offices.destroy');
 
         Route::get('/fee-schedules', [FeeScheduleController::class, 'index'])->name('fee-schedules.index');
         Route::put('/fee-schedules', [FeeScheduleController::class, 'update'])->name('fee-schedules.update');

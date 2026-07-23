@@ -6,31 +6,9 @@ use App\Models\FieldOffice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Inertia\Inertia;
-use Inertia\Response;
 
 class FieldOfficeController extends Controller
 {
-    public function index(Request $request): Response
-    {
-        Gate::authorize('viewAny', FieldOffice::class);
-
-        $fieldOffices = FieldOffice::withCount('users')->orderBy('name')->get();
-
-        return Inertia::render('Settings/FieldOffices/Index', [
-            'fieldOffices' => $fieldOffices->map(fn (FieldOffice $office) => [
-                ...$office->only('id', 'name', 'code', 'address', 'is_active'),
-                'users_count' => $office->users_count,
-            ]),
-            'stats' => [
-                'total' => $fieldOffices->count(),
-                'active' => $fieldOffices->where('is_active', true)->count(),
-                'hidden' => $fieldOffices->where('is_active', false)->count(),
-            ],
-            'can' => ['manage' => $request->user()->can('manage', FieldOffice::class)],
-        ]);
-    }
-
     public function store(Request $request): RedirectResponse
     {
         Gate::authorize('manage', FieldOffice::class);
@@ -61,5 +39,21 @@ class FieldOfficeController extends Controller
         $fieldOffice->update($validated);
 
         return back()->with('success', 'Field office updated.');
+    }
+
+    public function destroy(FieldOffice $fieldOffice): RedirectResponse
+    {
+        Gate::authorize('manage', FieldOffice::class);
+
+        // A field office anchors users and members. Refuse to delete while any
+        // remain so records are never silently orphaned. Its testing-center
+        // links are shared, so they simply detach (the centers live on).
+        if ($fieldOffice->users()->exists() || $fieldOffice->members()->exists()) {
+            return back()->with('error', 'Reassign or remove this field office\'s users and members before deleting it.');
+        }
+
+        $fieldOffice->delete();
+
+        return back()->with('success', 'Field office removed.');
     }
 }

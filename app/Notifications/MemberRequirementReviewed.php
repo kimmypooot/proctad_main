@@ -7,7 +7,7 @@ use Illuminate\Notifications\Notification;
 
 /**
  * In-app bell notification to a member's linked self-service account when a
- * Testing Center reviews one of their eligibility requirements.
+ * Field Office reviews one of their eligibility requirements.
  *
  * Members can submit their own supporting documents but cannot mark themselves
  * compliant, so without this the outcome of a submission was invisible: the
@@ -37,7 +37,7 @@ class MemberRequirementReviewed extends Notification
                 ? "{$label} verified"
                 : "{$label} needs attention",
             'body' => $this->complied
-                ? "Your Testing Center has verified your {$label}."
+                ? "Your Field Office has verified your {$label}."
                 : trim("Your {$label} has not been marked as complied. ".($this->remarks ?? '')),
             'url' => route('my.profile'),
         ];

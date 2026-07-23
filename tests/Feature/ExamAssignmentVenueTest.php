@@ -23,7 +23,7 @@ class ExamAssignmentVenueTest extends TestCase
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $office = FieldOffice::factory()->create();
         $examination = Examination::factory()->create();
-        $school = School::factory()->create(['field_office_id' => $office->id]);
+        $school = School::factory()->forFieldOffice($office->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
         $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
         $member = Member::factory()->create(['field_office_id' => $office->id]);
@@ -54,7 +54,7 @@ class ExamAssignmentVenueTest extends TestCase
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $office = FieldOffice::factory()->create();
         $examination = Examination::factory()->create();
-        $school = School::factory()->create(['field_office_id' => $office->id]);
+        $school = School::factory()->forFieldOffice($office->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
         $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
         $member = Member::factory()->create(['field_office_id' => $office->id]);
@@ -111,7 +111,7 @@ class ExamAssignmentVenueTest extends TestCase
         $member = Member::factory()->create(['field_office_id' => $office->id]);
         // Confirmed: the room can only be set once the member has confirmed.
         $assignment = ExamAssignment::factory()->create(['member_id' => $member->id, 'role' => 'proctor', 'status' => 'confirmed']);
-        $school = School::factory()->create(['field_office_id' => $office->id]);
+        $school = School::factory()->forFieldOffice($office->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $assignment->examination_id, 'school_id' => $school->id]);
         $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id]);
 
@@ -133,7 +133,7 @@ class ExamAssignmentVenueTest extends TestCase
         $memberOffice = FieldOffice::factory()->create();
         $venueOffice = FieldOffice::factory()->create();
         $examination = Examination::factory()->create();
-        $school = School::factory()->create(['field_office_id' => $venueOffice->id]);
+        $school = School::factory()->forFieldOffice($venueOffice->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
         $member = Member::factory()->create(['field_office_id' => $memberOffice->id]);
 
@@ -152,7 +152,7 @@ class ExamAssignmentVenueTest extends TestCase
         $memberOffice = FieldOffice::factory()->create();
         $venueOffice = FieldOffice::factory()->create();
         $examination = Examination::factory()->create();
-        $school = School::factory()->create(['field_office_id' => $venueOffice->id]);
+        $school = School::factory()->forFieldOffice($venueOffice->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
         $member = Member::factory()->create(['field_office_id' => $memberOffice->id]);
 
@@ -172,7 +172,7 @@ class ExamAssignmentVenueTest extends TestCase
         $venueOffice = FieldOffice::factory()->create();
         $otherOffice = FieldOffice::factory()->create();
         $examination = Examination::factory()->create();
-        $school = School::factory()->create(['field_office_id' => $venueOffice->id]);
+        $school = School::factory()->forFieldOffice($venueOffice->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
         $inJurisdiction = Member::factory()->create(['field_office_id' => $venueOffice->id]);
         $outOfJurisdiction = Member::factory()->create(['field_office_id' => $otherOffice->id]);
@@ -193,7 +193,7 @@ class ExamAssignmentVenueTest extends TestCase
         $otherOffice = FieldOffice::factory()->create();
         $member = Member::factory()->create(['field_office_id' => $memberOffice->id]);
         $assignment = ExamAssignment::factory()->create(['member_id' => $member->id, 'role' => 'supervising_examiner']);
-        $otherSchool = School::factory()->create(['field_office_id' => $otherOffice->id]);
+        $otherSchool = School::factory()->forFieldOffice($otherOffice->id)->create();
         $otherVenue = ExaminationSchool::factory()->create(['examination_id' => $assignment->examination_id, 'school_id' => $otherSchool->id]);
 
         $this->actingAs($admin)->put("/assignments/{$assignment->id}", [
@@ -217,7 +217,7 @@ class ExamAssignmentVenueTest extends TestCase
             'member_id' => $member->id,
             'role' => 'proctor',
         ]);
-        $otherSchool = School::factory()->create(['field_office_id' => $otherOffice->id]);
+        $otherSchool = School::factory()->forFieldOffice($otherOffice->id)->create();
         $otherVenue = ExaminationSchool::factory()->create(['examination_id' => $exam->id, 'school_id' => $otherSchool->id]);
 
         $this->actingAs($admin)->post("/assignments/{$assignment->id}/force-reassign", [

@@ -48,11 +48,11 @@ class StaffingController extends Controller
 
     private function authorizeForVenue(User $user, ExaminationSchool $venue): void
     {
-        $venue->loadMissing('school');
+        $venue->loadMissing('school.testingCenter');
 
         abort_unless(
             $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
-                || ($user->role->isFieldOfficeScoped() && $user->field_office_id === $venue->school?->field_office_id),
+                || ($user->role->isFieldOfficeScoped() && $venue->school?->handledByOffice($user->field_office_id)),
             403,
         );
     }

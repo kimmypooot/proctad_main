@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
             <EmptyState
                 icon="qr-code"
                 title="No PROCTAD record linked to your account"
-                description="Your QR code and digital ID become available once your Testing Center registers you in the PROCTAD registry."
+                description="Your QR code and digital ID become available once your Field Office registers you in the PROCTAD registry."
             />
         </div>
 
@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
                         <div class="flex items-start gap-2.5">
                             <AppIcon name="map-pin" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                             <div class="min-w-0">
-                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</dt>
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</dt>
                                 <dd class="mt-0.5 truncate text-sm text-slate-700">{{ idCard.field_office }}</dd>
                             </div>
                         </div>

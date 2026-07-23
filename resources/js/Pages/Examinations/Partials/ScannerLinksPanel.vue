@@ -93,7 +93,7 @@ const copy = async (url) => {
                 <h2 class="text-base font-semibold text-slate-900">Scanner Links</h2>
                 <p class="mt-1 text-sm text-slate-500">
                     Temporary links that open the QR scanner on any phone without signing in. Anyone with the link can
-                    confirm attendance for this event, so keep it inside the testing center and revoke it when the day
+                    confirm attendance for this event, so keep it inside the venue and revoke it when the day
                     ends.
                 </p>
             </div>

@@ -133,11 +133,11 @@ const generate = () => {
             <div v-if="activeReport" class="space-y-4">
                 <SelectInput
                     v-model="selectedVenueId"
-                    label="Testing Center"
+                    label="Venue"
                     :options="venueOptions"
                     :required="activeReport.venueRequired"
                     :optional="!activeReport.venueRequired"
-                    placeholder="All Testing Centers"
+                    placeholder="All Venues"
                     @update:model-value="onVenueChange"
                 />
 

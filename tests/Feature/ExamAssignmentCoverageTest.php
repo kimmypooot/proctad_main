@@ -10,6 +10,7 @@ use App\Models\ExaminationSchool;
 use App\Models\FieldOffice;
 use App\Models\Member;
 use App\Models\School;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -17,21 +18,21 @@ use Tests\TestCase;
 
 /**
  * REC/LEC/CE-for-Investigation assignments are stationed at exactly one
- * testing center but reference multiple "covered schools" they monitor —
+ * field office but reference multiple "covered schools" they monitor —
  * pre-determined (no confirmation workflow) but each still needs its own
- * attendance scan/manual entry, tracked separately from the testing-center
+ * attendance scan/manual entry, tracked separately from the field-office
  * attendance that drives certificate issuance.
  */
 class ExamAssignmentCoverageTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** A venue for $examinationId sitting under a given testing center (field office). */
-    private function venueIn(int $examinationId, FieldOffice $center): ExaminationSchool
+    /** A venue for $examinationId sitting under a given testing center. */
+    private function venueIn(int $examinationId, TestingCenter $center): ExaminationSchool
     {
         return ExaminationSchool::factory()->create([
             'examination_id' => $examinationId,
-            'school_id' => School::factory()->create(['field_office_id' => $center->id]),
+            'school_id' => School::factory()->create(['testing_center_id' => $center->id]),
         ]);
     }
 
@@ -80,7 +81,7 @@ class ExamAssignmentCoverageTest extends TestCase
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $office = \App\Models\FieldOffice::factory()->create();
         $examination = Examination::factory()->create();
-        $school = \App\Models\School::factory()->create(['field_office_id' => $office->id]);
+        $school = \App\Models\School::factory()->forFieldOffice($office->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $examination->id, 'school_id' => $school->id]);
         $member = Member::factory()->create(['field_office_id' => $office->id]);
 
@@ -114,7 +115,7 @@ class ExamAssignmentCoverageTest extends TestCase
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $assignment = ExamAssignment::factory()->create(['role' => 'lec_member']);
-        $center = FieldOffice::factory()->create();
+        $center = TestingCenter::factory()->create();
         $venue = $this->venueIn($assignment->examination_id, $center);
         $covered = $this->venueIn($assignment->examination_id, $center);
 
@@ -138,8 +139,8 @@ class ExamAssignmentCoverageTest extends TestCase
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $examination = Examination::factory()->create();
-        $center = FieldOffice::factory()->create();
-        $otherCenter = FieldOffice::factory()->create();
+        $center = TestingCenter::factory()->create();
+        $otherCenter = TestingCenter::factory()->create();
         $venue = $this->venueIn($examination->id, $center);
         $outside = $this->venueIn($examination->id, $otherCenter);
         $member = Member::factory()->create();
@@ -158,7 +159,7 @@ class ExamAssignmentCoverageTest extends TestCase
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $examination = Examination::factory()->create();
-        $center = FieldOffice::factory()->create();
+        $center = TestingCenter::factory()->create();
         $venue = $this->venueIn($examination->id, $center);
         $sibling = $this->venueIn($examination->id, $center);
         $member = Member::factory()->create();
@@ -180,8 +181,8 @@ class ExamAssignmentCoverageTest extends TestCase
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $examination = Examination::factory()->create();
-        $venue = $this->venueIn($examination->id, FieldOffice::factory()->create());
-        $elsewhere = $this->venueIn($examination->id, FieldOffice::factory()->create());
+        $venue = $this->venueIn($examination->id, TestingCenter::factory()->create());
+        $elsewhere = $this->venueIn($examination->id, TestingCenter::factory()->create());
         $member = Member::factory()->create();
 
         $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [
@@ -201,7 +202,7 @@ class ExamAssignmentCoverageTest extends TestCase
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
         $examination = Examination::factory()->create();
-        $covered = $this->venueIn($examination->id, FieldOffice::factory()->create());
+        $covered = $this->venueIn($examination->id, TestingCenter::factory()->create());
         $member = Member::factory()->create();
 
         $this->actingAs($admin)->post("/examinations/{$examination->id}/assignments", [

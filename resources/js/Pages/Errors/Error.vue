@@ -24,20 +24,20 @@ const content = computed(() => ({
     403: {
         icon: 'shield-check',
         title: "You don't have access to this page",
-        body: 'Your account doesn\'t have permission to view this. If you think it should, your Testing Center can check your role.',
+        body: 'Your account doesn\'t have permission to view this. If you think it should, your Field Office can check your role.',
         hint: null,
     },
     500: {
         icon: 'exclamation-triangle',
         title: 'Something went wrong on our end',
         body: 'This is a problem with the system, not with anything you did. Nothing you submitted has been lost.',
-        hint: 'Please try again in a few minutes. If it keeps happening, contact your Testing Center.',
+        hint: 'Please try again in a few minutes. If it keeps happening, contact your Field Office.',
     },
 }[props.status] ?? {
     icon: 'exclamation-triangle',
     title: 'Something went wrong',
     body: "We couldn't complete that request.",
-    hint: 'Please try again, or contact your Testing Center if it keeps happening.',
+    hint: 'Please try again, or contact your Field Office if it keeps happening.',
 }));
 </script>
 

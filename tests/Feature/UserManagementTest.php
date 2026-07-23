@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\FieldOffice;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -94,6 +95,81 @@ class UserManagementTest extends TestCase
         $this->assertSame(UserRole::FoAdmin, $target->role);
         $this->assertSame($fo->id, $target->field_office_id);
         $this->assertFalse($target->is_active);
+    }
+
+    public function test_creating_a_user_links_them_to_their_field_offices_testing_centers(): void
+    {
+        Notification::fake();
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $fo = FieldOffice::factory()->create();
+        $centerA = TestingCenter::factory()->forFieldOffice($fo)->create();
+        $centerB = TestingCenter::factory()->forFieldOffice($fo)->create();
+
+        $this->actingAs($admin)->post('/users', [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'email' => 'juan@csc.gov.ph',
+            'role' => 'fo_admin',
+            'field_office_id' => $fo->id,
+        ])->assertRedirect();
+
+        $user = User::where('email', 'juan@csc.gov.ph')->firstOrFail();
+        $this->assertEqualsCanonicalizing(
+            [$centerA->id, $centerB->id],
+            $user->testingCenters()->pluck('testing_centers.id')->all(),
+        );
+    }
+
+    public function test_updating_a_users_field_office_resyncs_their_testing_centers(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $leyte = FieldOffice::factory()->create();
+        $samar = FieldOffice::factory()->create();
+        $leyteCenter = TestingCenter::factory()->forFieldOffice($leyte)->create();
+        $samarCenter = TestingCenter::factory()->forFieldOffice($samar)->create();
+
+        $target = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $leyte->id]);
+        $target->testingCenters()->sync([$leyteCenter->id]);
+
+        // Moving the user to Samar drags their center links along with the office.
+        $this->actingAs($admin)->put("/users/{$target->id}", [
+            'role' => 'fo_admin',
+            'field_office_id' => $samar->id,
+            'is_active' => true,
+        ])->assertRedirect();
+
+        $this->assertSame([$samarCenter->id], $target->testingCenters()->pluck('testing_centers.id')->all());
+
+        // Promoting to a regional role with no field office clears the links.
+        $this->actingAs($admin)->put("/users/{$target->id}", [
+            'role' => 'esd_admin',
+            'field_office_id' => null,
+            'is_active' => true,
+        ])->assertRedirect();
+
+        $this->assertCount(0, $target->testingCenters()->get());
+    }
+
+    public function test_resync_command_catches_users_up_to_a_newly_added_center(): void
+    {
+        $fo = FieldOffice::factory()->create();
+        $centerA = TestingCenter::factory()->forFieldOffice($fo)->create();
+        $user = User::factory()->create(['field_office_id' => $fo->id]);
+
+        // On save the observer linked only the center that existed then.
+        $this->assertSame([$centerA->id], $user->testingCenters()->pluck('testing_centers.id')->all());
+
+        // A new center is later added to the office — existing users don't gain
+        // it automatically, since nothing re-saved them.
+        $centerB = TestingCenter::factory()->forFieldOffice($fo)->create();
+        $this->assertSame([$centerA->id], $user->fresh()->testingCenters()->pluck('testing_centers.id')->all());
+
+        $this->artisan('proctad:resync-user-testing-centers')->assertSuccessful();
+
+        $this->assertEqualsCanonicalizing(
+            [$centerA->id, $centerB->id],
+            $user->fresh()->testingCenters()->pluck('testing_centers.id')->all(),
+        );
     }
 
     public function test_admin_cannot_deactivate_their_own_account(): void

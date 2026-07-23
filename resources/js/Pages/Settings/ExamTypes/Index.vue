@@ -65,7 +65,30 @@ const confirmDelete = () => destroyForm.delete(`/exam-types/${deleting.value.id}
             </template>
         </DashboardPageHeader>
 
-        <div v-if="examTypes.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <!-- Mobile (below md): a card per type so the edit/remove actions stay on screen. -->
+        <div v-if="examTypes.length" class="mt-6 space-y-3 md:hidden">
+            <div
+                v-for="type in examTypes"
+                :key="`m-${type.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="font-medium text-slate-900">{{ type.name }}</p>
+                        <p class="mt-0.5 text-xs text-slate-500">{{ type.examinations_count }} examination(s)</p>
+                    </div>
+                    <BaseBadge :variant="type.is_active ? 'success' : 'neutral'" class="shrink-0">
+                        {{ type.is_active ? 'Active' : 'Inactive' }}
+                    </BaseBadge>
+                </div>
+                <div v-if="can.manage" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                    <IconButton icon="pencil" label="Edit" @click="openEdit(type)" />
+                    <IconButton v-if="type.examinations_count === 0" icon="trash" label="Remove" variant="danger" @click="deleting = type" />
+                </div>
+            </div>
+        </div>
+
+        <div v-if="examTypes.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>

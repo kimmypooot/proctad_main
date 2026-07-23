@@ -31,7 +31,7 @@ import AuthLayout from '@/Layouts/AuthLayout.vue';
             <p class="font-semibold text-slate-700">First time here?</p>
             <p class="mt-1">
                 Your Google email must match the email registered to your PROCTAD membership.
-                If sign-in fails, contact your Testing Center to verify your registered email.
+                If sign-in fails, contact your Field Office to verify your registered email.
             </p>
         </div>
 

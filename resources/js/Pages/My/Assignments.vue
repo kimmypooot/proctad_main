@@ -57,7 +57,7 @@ const submitDecline = () => {
             <EmptyState
                 icon="clipboard-check"
                 title="No PROCTAD record linked to your account"
-                description="Your assignments appear here once your Testing Center registers you in the PROCTAD registry."
+                description="Your assignments appear here once your Field Office registers you in the PROCTAD registry."
             />
         </div>
 
@@ -130,7 +130,7 @@ const submitDecline = () => {
                             <span class="font-medium text-slate-600">Reason given:</span> {{ record.decline_reason }}
                         </p>
                         <p class="mt-1">
-                            To change your response, please contact your Testing Center.
+                            To change your response, please contact your Field Office.
                         </p>
                     </div>
                 </li>
@@ -141,7 +141,7 @@ const submitDecline = () => {
             <EmptyState
                 icon="calendar"
                 title="No upcoming assignments"
-                description="When your Testing Center deploys you to an examination, it will appear here and you'll be emailed a confirmation request."
+                description="When your Field Office deploys you to an examination, it will appear here and you'll be emailed a confirmation request."
             />
         </div>
     </DashboardLayout>
@@ -150,11 +150,11 @@ const submitDecline = () => {
     <BaseModal :show="declining !== null" title="Decline this assignment" @close="declining = null">
         <p class="text-sm leading-relaxed text-slate-600">
             You are declining <strong>{{ declining?.exam_title }}</strong> on {{ declining?.exam_date }}.
-            Your Testing Center will be notified so the slot can be re-staffed.
+            Your Field Office will be notified so the slot can be re-staffed.
         </p>
 
         <BaseAlert variant="warning" class="mt-4">
-            This cannot be undone here — changing your response afterwards means contacting your Testing Center.
+            This cannot be undone here — changing your response afterwards means contacting your Field Office.
         </BaseAlert>
 
         <div class="mt-4">
@@ -164,7 +164,7 @@ const submitDecline = () => {
                 required
                 :rows="3"
                 :maxlength="500"
-                placeholder="Let your Testing Center know why you can't serve."
+                placeholder="Let your Field Office know why you can't serve."
                 :error="form.errors.decline_reason"
             />
         </div>

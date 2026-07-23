@@ -210,7 +210,50 @@ const submit = () => {
             </button>
         </div>
 
-        <div v-if="filteredExaminations.length" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <!-- Mobile (below md): a card per examination so the manage/edit/hide actions stay on screen. -->
+        <div v-if="filteredExaminations.length" class="mt-4 space-y-3 md:hidden">
+            <div
+                v-for="exam in filteredExaminations"
+                :key="`m-${exam.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+                :class="{ 'opacity-60': !exam.is_active }"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <Link :href="`/examinations/${exam.id}`" class="font-medium text-slate-900 hover:underline">{{ exam.title }}</Link>
+                            <span v-if="!exam.is_active" class="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hidden</span>
+                        </div>
+                        <p class="text-xs text-slate-500">{{ exam.type }}</p>
+                    </div>
+                    <BaseBadge :variant="statusBadge(exam.status).variant" class="shrink-0">{{ statusBadge(exam.status).label }}</BaseBadge>
+                </div>
+                <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <div><dt class="font-medium text-slate-400">Date</dt><dd class="text-slate-600">{{ exam.exam_date }}</dd></div>
+                    <div>
+                        <dt class="font-medium text-slate-400">Venues / Rooms</dt>
+                        <dd class="text-slate-600">
+                            <template v-if="exam.venues_count">{{ exam.venues_count }} venue{{ exam.venues_count === 1 ? '' : 's' }} · {{ exam.rooms_count }} room{{ exam.rooms_count === 1 ? '' : 's' }}</template>
+                            <span v-else class="text-slate-400">No venues yet</span>
+                        </dd>
+                    </div>
+                    <div class="col-span-2">
+                        <dt class="font-medium text-slate-400">Staffing</dt>
+                        <dd class="text-slate-600">
+                            <span v-if="exam.assignments_count">{{ exam.confirmed_count }}/{{ exam.assignments_count }} confirmed</span>
+                            <span v-else class="text-slate-400">No assignments</span>
+                        </dd>
+                    </div>
+                </dl>
+                <div class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                    <IconButton :href="`/examinations/${exam.id}`" icon="eye" label="Manage" />
+                    <IconButton v-if="can.manage" icon="pencil" label="Edit" @click="openEdit(exam)" />
+                    <IconButton v-if="can.manage" :icon="exam.is_active ? 'eye-slash' : 'eye'" :label="exam.is_active ? 'Hide from dropdowns' : 'Show in dropdowns'" @click="router.patch(`/examinations/${exam.id}/toggle-visibility`)" />
+                </div>
+            </div>
+        </div>
+
+        <div v-if="filteredExaminations.length" class="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>

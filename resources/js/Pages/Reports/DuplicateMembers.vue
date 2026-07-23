@@ -34,7 +34,7 @@ defineProps({
                             <tr>
                                 <th class="px-3 py-2">PROCTAD ID</th>
                                 <th class="px-3 py-2">Name</th>
-                                <th class="hidden px-3 py-2 sm:table-cell">Testing Center</th>
+                                <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
                                 <th class="px-3 py-2">Status</th>
                                 <th class="hidden px-3 py-2 md:table-cell">Registered</th>
                             </tr>
@@ -73,7 +73,7 @@ defineProps({
                             <tr>
                                 <th class="px-3 py-2">PROCTAD ID</th>
                                 <th class="px-3 py-2">Email</th>
-                                <th class="hidden px-3 py-2 sm:table-cell">Testing Center</th>
+                                <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
                                 <th class="px-3 py-2">Status</th>
                                 <th class="hidden px-3 py-2 md:table-cell">Registered</th>
                             </tr>

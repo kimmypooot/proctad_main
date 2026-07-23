@@ -178,12 +178,12 @@ const submit = () => {
 
             <SelectInput
                 v-model="form.field_office_id"
-                label="Testing Center"
+                label="Field Office"
                 required
-                placeholder="Select your Testing Center"
+                placeholder="Select your Field Office"
                 :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
                 :error="form.errors.field_office_id"
-                hint="The CSC Testing Center you serve as a test administrator under."
+                hint="The CSC Field Office you serve as a test administrator under."
             />
 
             <div class="grid gap-5 sm:grid-cols-2">

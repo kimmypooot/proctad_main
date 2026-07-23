@@ -119,7 +119,7 @@ const maxDateOfBirth = (() => {
 
         <SelectInput
             v-model="form.field_office_id"
-            label="Testing Center"
+            label="Field Office"
             required
             :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
             :error="form.errors.field_office_id"

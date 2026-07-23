@@ -63,7 +63,7 @@ class MyProctadController extends Controller
                         'label' => $requirement->label(),
                         'complied' => (bool) $record?->complied,
                         // Submitted but not yet verified — the member has done
-                        // their part and is waiting on the Testing Center.
+                        // their part and is waiting on the Field Office.
                         'submitted' => (bool) $record?->file_path,
                         'remarks' => $record?->remarks,
                     ];
@@ -75,9 +75,9 @@ class MyProctadController extends Controller
 
     /**
      * Self-service edit — intentionally limited to contact details and photo.
-     * Identity fields (name, sex), agency, and Testing Center stay
+     * Identity fields (name, sex), agency, and Field Office stay
      * staff-controlled so the accreditation record can't drift from what a
-     * Testing Center verified.
+     * Field Office verified.
      */
     public function updateProfile(UpdateOwnProfileRequest $request): RedirectResponse
     {
@@ -256,7 +256,7 @@ class MyProctadController extends Controller
      * A member's own supporting document for one eligibility requirement.
      *
      * Submission only — `complied` stays staff-controlled. A member uploading a
-     * file must not be able to mark themselves eligible; a Testing Center still
+     * file must not be able to mark themselves eligible; a Field Office still
      * verifies the document and flips the flag. The member sees "submitted,
      * awaiting verification" in the meantime.
      */
@@ -276,7 +276,7 @@ class MyProctadController extends Controller
         // Already verified: re-submitting would replace the evidence a Testing
         // Center accepted, with no trace that it changed.
         if ($record->complied) {
-            return back()->with('error', 'This requirement has already been verified. Contact your Testing Center if it needs to be updated.');
+            return back()->with('error', 'This requirement has already been verified. Contact your Field Office if it needs to be updated.');
         }
 
         if ($record->file_path) {
@@ -287,7 +287,7 @@ class MyProctadController extends Controller
             'file_path' => $request->file('file')->store("member-requirements/{$member->id}", 'local'),
         ]);
 
-        return back()->with('success', 'Document submitted. Your Testing Center will verify it.');
+        return back()->with('success', 'Document submitted. Your Field Office will verify it.');
     }
 
     /**
@@ -296,7 +296,7 @@ class MyProctadController extends Controller
      * The emailed signed link stays the primary route, but it expires after
      * seven days and a member cannot resend it to themselves — so a missed
      * email previously left them unable to see or answer an assignment at all,
-     * short of telephoning their Testing Center.
+     * short of telephoning their Field Office.
      *
      * Deliberately no room in the payload: it is disclosed in person on exam
      * day, and every assignment listed here is by definition still upcoming
@@ -365,7 +365,7 @@ class MyProctadController extends Controller
         );
 
         if (! $recorded) {
-            return back()->with('error', 'You have already responded to this assignment. To change your response, please contact your Testing Center.');
+            return back()->with('error', 'You have already responded to this assignment. To change your response, please contact your Field Office.');
         }
 
         return back()->with('success', $confirmed

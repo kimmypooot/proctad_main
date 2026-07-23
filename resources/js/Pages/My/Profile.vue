@@ -22,7 +22,7 @@ const compliancePercent = props.requirementsTotal
     : 0;
 
 const detailFields = (member) => [
-    ['building-office', 'Testing Center', member.field_office],
+    ['building-office', 'Field Office', member.field_office],
     ['briefcase', 'Agency', member.agency],
     ['identification', 'Position', member.position ?? '—'],
     ['envelope', 'Email', member.email],
@@ -30,7 +30,7 @@ const detailFields = (member) => [
 ];
 
 // Self-service edit covers identity + contact info; sex, agency, and Testing
-// Center stay staff-controlled — those are what the Testing Center verified
+// Center stay staff-controlled — those are what the Field Office verified
 // when registering the member (see MyProctadController).
 /* --- Requirement document submission ---
    Uses a bare router.post rather than useForm: each row uploads independently,
@@ -101,7 +101,7 @@ const submit = () => form
             <EmptyState
                 icon="identification"
                 title="No PROCTAD record linked to your account"
-                description="Your Testing Center has not yet registered you in the PROCTAD registry, or your registry record uses a different email address. Please contact your Testing Center."
+                description="Your Field Office has not yet registered you in the PROCTAD registry, or your registry record uses a different email address. Please contact your Field Office."
             />
         </div>
 
@@ -214,7 +214,7 @@ const submit = () => form
                         :error="form.errors.position"
                     />
                     <p class="text-xs text-slate-400">
-                        Sex, agency, and Testing Center are managed by your Testing Center — contact them to update these.
+                        Sex, agency, and Field Office are managed by your Field Office — contact them to update these.
                     </p>
                     <div class="flex justify-end gap-2 pt-2">
                         <BaseButton type="button" variant="outline" size="sm" :disabled="form.processing" @click="editing = false">
@@ -262,7 +262,7 @@ const submit = () => form
                                 <span class="text-sm text-slate-700">{{ req.label }}</span>
                                 <p v-if="req.remarks" class="mt-0.5 text-xs text-slate-500">{{ req.remarks }}</p>
                                 <p v-if="!req.complied && req.submitted" class="mt-0.5 text-xs text-amber-700">
-                                    Document submitted — awaiting verification by your Testing Center.
+                                    Document submitted — awaiting verification by your Field Office.
                                 </p>
                             </div>
 
@@ -291,7 +291,7 @@ const submit = () => form
                 </ul>
                 <p class="mt-4 text-xs text-slate-400">
                     You can submit supporting documents here (PDF, JPG or PNG, up to 5&nbsp;MB). Your
-                    Testing Center verifies each one — contact them about anything already verified.
+                    Field Office verifies each one — contact them about anything already verified.
                 </p>
             </div>
         </div>

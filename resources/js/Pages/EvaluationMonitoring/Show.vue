@@ -46,7 +46,7 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
                 <p class="mt-0.5 text-sm text-slate-900">{{ evaluation.examination?.title }}</p>
             </div>
             <div>
-                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</p>
                 <p class="mt-0.5 text-sm text-slate-900">{{ evaluation.field_office?.name ?? '—' }}</p>
             </div>
             <div>

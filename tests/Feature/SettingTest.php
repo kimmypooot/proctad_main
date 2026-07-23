@@ -135,7 +135,7 @@ class SettingTest extends TestCase
     }
 
     /**
-     * The page is used by Testing Center staff, not developers — every setting
+     * The page is used by Field Office staff, not developers — every setting
      * has to arrive with a plain-language label and an explanation, including
      * custom keys nobody has written copy for.
      */

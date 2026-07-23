@@ -72,7 +72,7 @@ class ExamRoomController extends Controller
             'venue' => fn () => [
                 'id' => $venue->id,
                 'school_name' => $venue->school?->name,
-                'municipality' => $venue->school?->municipality,
+                'municipality' => $venue->school?->testingCenter?->name,
                 'contact_person' => $venue->school?->contact_person,
                 'contact_number' => $venue->school?->contact_number,
             ],
@@ -223,7 +223,7 @@ class ExamRoomController extends Controller
 
         abort_unless(
             $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
-                || ($user->role->isFieldOfficeScoped() && $user->field_office_id === $venue->school?->field_office_id),
+                || ($user->role->isFieldOfficeScoped() && $venue->school?->handledByOffice($user->field_office_id)),
             403,
         );
     }

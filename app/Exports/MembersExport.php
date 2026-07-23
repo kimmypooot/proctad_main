@@ -24,7 +24,7 @@ class MembersExport implements FromCollection, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['PROCTAD ID', 'Name', 'Sex', 'Email', 'Mobile Number', 'Agency', 'Position', 'Testing Center', 'Status', 'Registered'];
+        return ['PROCTAD ID', 'Name', 'Sex', 'Email', 'Mobile Number', 'Agency', 'Position', 'Field Office', 'Status', 'Registered'];
     }
 
     public function map($member): array

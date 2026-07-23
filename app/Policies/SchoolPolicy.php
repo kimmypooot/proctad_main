@@ -35,6 +35,6 @@ class SchoolPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $school->field_office_id;
+            && $school->handledByOffice($user->field_office_id);
     }
 }

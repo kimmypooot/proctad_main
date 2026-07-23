@@ -30,7 +30,7 @@ class TrainingAttendanceExport implements FromCollection, WithHeadings, WithMapp
 
     public function headings(): array
     {
-        return ['PROCTAD ID', 'Member', 'Testing Center', 'Training', 'Training Date', 'Attendance Confirmed'];
+        return ['PROCTAD ID', 'Member', 'Field Office', 'Training', 'Training Date', 'Attendance Confirmed'];
     }
 
     public function map($assignment): array

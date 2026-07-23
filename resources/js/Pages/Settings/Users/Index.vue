@@ -149,7 +149,7 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
             />
             <SelectInput
                 v-model="fieldOfficeId"
-                label="Testing Center"
+                label="Field Office"
                 placeholder="All field offices"
                 :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
             />
@@ -164,14 +164,52 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
             />
         </div>
 
+        <!-- Mobile (below md): a card per user so the edit/reset/register actions stay on screen. -->
+        <div v-if="users.data.length" class="mt-6 space-y-3 md:hidden" :class="{ 'opacity-50': loading }">
+            <div
+                v-for="user in users.data"
+                :key="`m-${user.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="truncate font-medium text-slate-900" :title="user.name">{{ user.name }}</p>
+                        <p class="truncate text-xs text-slate-500" :title="user.email">{{ user.email }}</p>
+                    </div>
+                    <div class="flex shrink-0 flex-col items-end gap-1">
+                        <BaseBadge :variant="user.is_active ? 'success' : 'neutral'">
+                            {{ user.is_active ? 'Active' : 'Deactivated' }}
+                        </BaseBadge>
+                        <BaseBadge v-if="user.must_change_password" variant="warning">Password pending</BaseBadge>
+                        <BaseBadge v-if="user.has_member_record === false" variant="warning">No PROCTAD record</BaseBadge>
+                    </div>
+                </div>
+                <dl class="mt-2 space-y-1 text-xs text-slate-500">
+                    <div class="flex gap-1"><dt class="font-medium text-slate-400">Role:</dt><dd class="text-slate-600">{{ user.role_label }}</dd></div>
+                    <div v-if="user.field_office?.name" class="flex gap-1"><dt class="font-medium text-slate-400">Field Office:</dt><dd class="text-slate-600">{{ user.field_office.name }}</dd></div>
+                    <div class="flex gap-1"><dt class="font-medium text-slate-400">Last login:</dt><dd class="text-slate-600">{{ user.last_login_at ?? 'Never' }}</dd></div>
+                </dl>
+                <div class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
+                    <IconButton
+                        v-if="user.has_member_record === false"
+                        icon="user-plus"
+                        label="Register as PROCTAD Member"
+                        :href="`/members`"
+                    />
+                    <IconButton icon="pencil" label="Edit" @click="openEdit(user)" />
+                    <IconButton icon="key" label="Reset Password" :disabled="resetForm.processing" @click="resettingUser = user" />
+                </div>
+            </div>
+        </div>
+
         <!-- Results -->
-        <div v-if="loading || users.data.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div v-if="loading || users.data.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
                         <th class="px-3 py-2">Name</th>
                         <th class="px-3 py-2">Role</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 xl:table-cell">Field Office</th>
                         <th class="hidden px-3 py-2 md:table-cell">Last Login</th>
                         <th class="px-3 py-2">Status</th>
                         <th class="px-3 py-2 text-center">Actions</th>
@@ -260,7 +298,7 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
                 <SelectInput v-model="createForm.role" label="Role" required :options="roles" :error="createForm.errors.role" />
                 <SelectInput
                     v-model="createForm.field_office_id"
-                    label="Testing Center"
+                    label="Field Office"
                     optional
                     placeholder="Region-wide / none"
                     :options="assignableFieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
@@ -292,7 +330,7 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
                 <SelectInput v-model="editForm.role" label="Role" required :options="roles" :error="editForm.errors.role" />
                 <SelectInput
                     v-model="editForm.field_office_id"
-                    label="Testing Center"
+                    label="Field Office"
                     optional
                     placeholder="Region-wide / none"
                     :options="assignableFieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"

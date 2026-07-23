@@ -75,13 +75,15 @@ class AuditLogTest extends TestCase
 
     public function test_access_is_limited_to_authorized_roles(): void
     {
-        foreach ([UserRole::SuperAdmin, UserRole::DirectorIv, UserRole::DirectorIii] as $role) {
+        // Field-office staff (Field Director and FO Admin) share the same access;
+        // both may open the Audit Trail, scoped to their own office.
+        foreach ([UserRole::SuperAdmin, UserRole::DirectorIv, UserRole::DirectorIii, UserRole::FieldDirector, UserRole::FoAdmin] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/audit-logs')
                 ->assertOk();
         }
 
-        foreach ([UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::Member] as $role) {
+        foreach ([UserRole::EsdAdmin, UserRole::Member] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]))
                 ->get('/audit-logs')
                 ->assertForbidden();

@@ -50,7 +50,7 @@ class EmailTemplateSeeder extends Seeder
                         .$this->button('Confirm or Decline Assignment', '{confirmation_url}')
                         .'<p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#94a3b8;">'
                         .'This link expires in 7 days. If you did not expect this assignment, please contact your '
-                        .'Testing Center.</p>',
+                        .'Field Office.</p>',
                 ),
                 'body_plain' => "Dear {member_name},\n\nYou have been assigned as a PROCTAD member for {exam_name} on {exam_date}, "
                     ."serving as {designation} (PROCTAD ID: {proctad_id}).\n\n"

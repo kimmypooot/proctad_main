@@ -125,7 +125,7 @@ const NOTE_TONES = {
 
                         <dl class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
                             <div>
-                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</dt>
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</dt>
                                 <dd class="mt-0.5 text-slate-700">{{ result.field_office ?? '—' }}</dd>
                             </div>
                             <div>

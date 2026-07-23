@@ -27,7 +27,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn () => Password::min(8)->letters()->numbers());
 
-        // Public scanner links: budget per link, not per IP. A testing center
+        // Public scanner links: budget per link, not per IP. A venue
         // runs several phones through one NAT, so an IP-keyed limit would lock
         // out legitimate scanning long before it inconvenienced anyone walking
         // the sequential PROCTAD ID range from a leaked link.

@@ -141,7 +141,7 @@ class ExaminationReportTest extends TestCase
         $this->actingAs($admin)->get("/examinations/{$exam->id}/reports/payroll-posting")
             ->assertRedirect();
 
-        $this->assertStringContainsString('testing center', session('error'));
+        $this->assertStringContainsString('venue', session('error'));
     }
 
     public function test_payroll_posting_expands_roster_beyond_ten_rows_without_error(): void

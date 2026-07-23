@@ -175,7 +175,7 @@ class EvaluationController extends Controller
 
     /**
      * Resolve the full evaluation context for a selected assignment:
-     * designation, testing center, school, room, and — for a Supervising
+     * designation, field office, school, room, and — for a Supervising
      * Examiner — the Room Examiners/Proctors positionally inferred as theirs
      * (see SupervisionHierarchyResolver for the caveats on that inference).
      */

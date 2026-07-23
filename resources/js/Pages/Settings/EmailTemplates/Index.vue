@@ -158,7 +158,31 @@ const resetLogFilters = () => {
             subtitle="Edit the content of system-sent emails. Changes take effect immediately for all future emails."
         />
 
-        <div v-if="templates.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <!-- Mobile (below md): a card per template so preview/edit stay on screen. -->
+        <div v-if="templates.length" class="mt-6 space-y-3 md:hidden">
+            <div
+                v-for="template in templates"
+                :key="`m-${template.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="font-medium text-slate-900">{{ template.name }}</p>
+                        <p class="font-mono text-xs text-slate-500">{{ template.code }}</p>
+                    </div>
+                    <BaseBadge :variant="template.is_active ? 'success' : 'neutral'" class="shrink-0">
+                        {{ template.is_active ? 'Active' : 'Inactive' }}
+                    </BaseBadge>
+                </div>
+                <p class="mt-2 text-xs text-slate-600" :title="template.subject">{{ template.subject }}</p>
+                <div class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                    <IconButton icon="eye" label="Preview" @click="openPreview(template)" />
+                    <IconButton v-if="can.manage" icon="pencil" label="Edit" @click="openEdit(template)" />
+                </div>
+            </div>
+        </div>
+
+        <div v-if="templates.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
@@ -236,7 +260,33 @@ const resetLogFilters = () => {
                 </button>
             </div>
 
-            <div v-if="logs.data.length" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <!-- Mobile (below md): a card per sent email so "view content" stays on screen. -->
+            <div v-if="logs.data.length" class="mt-4 space-y-3 md:hidden">
+                <div
+                    v-for="log in logs.data"
+                    :key="`m-${log.id}`"
+                    class="rounded-xl border border-slate-200 bg-white p-4"
+                >
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <p class="font-medium text-slate-900">{{ log.recipient_name || '—' }}</p>
+                            <p class="truncate text-xs text-slate-500">{{ log.recipient_email }}</p>
+                        </div>
+                        <BaseBadge :variant="logStatusVariant(log.status)" class="shrink-0">{{ log.status }}</BaseBadge>
+                    </div>
+                    <p class="mt-2 text-xs text-slate-600" :title="log.subject">{{ log.subject }}</p>
+                    <p v-if="log.error_message" class="mt-0.5 text-xs text-accent-600">{{ log.error_message }}</p>
+                    <dl class="mt-2 space-y-1 text-xs text-slate-500">
+                        <div v-if="log.template_name" class="flex gap-1"><dt class="font-medium text-slate-400">Template:</dt><dd class="text-slate-600">{{ log.template_name }}</dd></div>
+                        <div class="flex gap-1"><dt class="font-medium text-slate-400">When:</dt><dd class="text-slate-600">{{ log.at }}</dd></div>
+                    </dl>
+                    <div v-if="log.has_body" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                        <IconButton icon="eye" label="View sent content" @click="openLog(log)" />
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="logs.data.length" class="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">
                     <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>

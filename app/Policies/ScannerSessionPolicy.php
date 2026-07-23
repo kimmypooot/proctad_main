@@ -10,7 +10,7 @@ use App\Models\User;
  * Issuing a scanner link hands out the ability to confirm attendance without
  * logging in, so it follows the same authority as running the scanner itself
  * (routes/web.php) — and FO-scoped roles may only issue links that stay inside
- * their own Testing Center.
+ * their own Field Office.
  */
 class ScannerSessionPolicy
 {

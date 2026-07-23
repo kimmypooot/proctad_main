@@ -16,7 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Testing Center Staff and Field Directors who are also accredited members
+ * Field Office Staff and Field Directors who are also accredited members
  * serve where they work. The regional roles (Super Admin, ESD Admin, the two
  * directors) may be assigned anywhere in RO VIII, and ordinary members keep
  * the looser room-role rule.
@@ -54,9 +54,8 @@ class StaffJurisdictionTest extends TestCase
 
     private function venue(FieldOffice $office): ExaminationSchool
     {
-        $school = School::factory()->create([
+        $school = School::factory()->forFieldOffice($office->id)->create([
             'name' => "{$office->code} National High School",
-            'field_office_id' => $office->id,
             'is_active' => true,
         ]);
 

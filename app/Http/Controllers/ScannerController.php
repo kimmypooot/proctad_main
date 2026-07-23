@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AssignmentStatus;
 use App\Enums\CertificateType;
 use App\Enums\ExamRole;
 use App\Http\Middleware\ResolveScannerSession;
@@ -10,6 +11,7 @@ use App\Models\ExamAssignment;
 use App\Models\ExamAssignmentAttendance;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
+use App\Models\ExamRoom;
 use App\Models\Member;
 use App\Models\OepAssignment;
 use App\Models\OepAttendance;
@@ -20,6 +22,7 @@ use App\Models\TrainingAssignment;
 use App\Models\User;
 use App\Services\AlternateActivator;
 use App\Services\CertificateService;
+use App\Services\RoomStaffingCalculator;
 use App\Services\TestAdministratorServiceHistory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,7 +33,10 @@ use Inertia\Response;
 
 class ScannerController extends Controller
 {
-    public function __construct(private CertificateService $certificates) {}
+    public function __construct(
+        private CertificateService $certificates,
+        private RoomStaffingCalculator $roomStaffing,
+    ) {}
 
     /** @var array<array{CertificateType, ExamAssignment|TrainingAssignment, User}> */
     private array $pendingCertificates = [];
@@ -90,7 +96,7 @@ class ScannerController extends Controller
         } elseif ($raw['code'] !== '') {
             $member = Member::with('fieldOffice:id,name,code')
                 ->where('proctad_id', $raw['code'])
-                // FO Admins can only look up members of their own Testing Center.
+                // FO Admins can only look up members of their own Field Office.
                 ->when($user->role->isFieldOfficeScoped(),
                     fn ($q) => $q->where('field_office_id', $user->field_office_id))
                 ->first();
@@ -635,6 +641,89 @@ class ScannerController extends Controller
             'recent' => $recent,
             'roster' => $roster,
             'cover' => $examinationId && $venueId ? $this->coverPanel($examinationId, $venueId, $user) : null,
+            'roomMap' => $examinationId && $venueId ? $this->roomMap($venueId, $user) : null,
+        ];
+    }
+
+    /**
+     * Per-room staffing-and-attendance map for one venue: which rooms are fully
+     * in (every seat scanned present) versus still waiting on someone.
+     *
+     * Reuses RoomStaffingCalculator::breakdown() so the room grouping — one
+     * Supervising Examiner spanning a group of rooms, credited to each room in
+     * the group — matches the Assign Rooms step exactly. Attendance is then laid
+     * over each room's three seats (Supervising Examiner, Room Examiner,
+     * Proctor); a room is "filled" once all three have reported.
+     */
+    private function roomMap(int $venueId, User $user): ?array
+    {
+        $venue = ExaminationSchool::find($venueId);
+
+        if (! $venue) {
+            return null;
+        }
+
+        $rooms = $venue->rooms()->get()
+            ->sortBy(fn (ExamRoom $room) => (int) preg_replace('/\D/', '', $room->room_number) ?: 0)
+            ->values();
+
+        if ($rooms->isEmpty()) {
+            return ['rooms' => [], 'filled' => 0, 'total' => 0];
+        }
+
+        $assignments = ExamAssignment::query()
+            ->where('examination_school_id', $venueId)
+            ->whereIn('role', [
+                ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value,
+            ])
+            ->whereIn('status', [AssignmentStatus::Pending->value, AssignmentStatus::Confirmed->value])
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->with('member:id,first_name,middle_name,last_name,suffix')
+            ->get();
+
+        // Attendance is looked up per assignment id, so the same Supervising
+        // Examiner reads as present in every room of their group at once.
+        $attendedById = $assignments->mapWithKeys(fn (ExamAssignment $a) => [$a->id => $a->attendance_confirmed_at !== null]);
+
+        $rows = $assignments->map(fn (ExamAssignment $a) => [
+            'id' => $a->id,
+            'role' => $a->role->value,
+            'exam_room_id' => $a->exam_room_id,
+            'status' => $a->status->value,
+            'member_name' => $a->member?->name,
+        ]);
+
+        $mapped = $this->roomStaffing->breakdown($rooms, $rows)->map(function (array $room) use ($attendedById) {
+            $seats = collect([
+                ['role_label' => 'Supervising Examiner', 'name' => $room['supervising_examiner'], 'aid' => $room['supervising_examiner_assignment_id']],
+                ['role_label' => 'Room Examiner', 'name' => $room['room_examiner'], 'aid' => $room['room_examiner_assignment_id']],
+                ['role_label' => 'Proctor', 'name' => $room['proctor'], 'aid' => $room['proctor_assignment_id']],
+            ])->map(fn (array $seat) => [
+                'role_label' => $seat['role_label'],
+                'name' => $seat['name'],
+                'assigned' => $seat['name'] !== null,
+                'present' => $seat['aid'] !== null && ($attendedById[$seat['aid']] ?? false),
+            ]);
+
+            $required = $seats->count();
+            $present = $seats->where('present', true)->count();
+
+            return [
+                'id' => $room['id'],
+                'room_number' => $room['room_number'],
+                'designation' => $room['designation'],
+                'seats' => $seats->values(),
+                'staffed_count' => $seats->where('assigned', true)->count(),
+                'present_count' => $present,
+                'required_count' => $required,
+                'filled' => $present === $required,
+            ];
+        })->values();
+
+        return [
+            'rooms' => $mapped,
+            'filled' => $mapped->where('filled', true)->count(),
+            'total' => $mapped->count(),
         ];
     }
 
@@ -660,11 +749,16 @@ class ScannerController extends Controller
             ->get();
 
         return [
-            // Seats whose holder has not reported. Alternates are excluded:
-            // a reserve who never turned up is not a seat needing cover.
+            // Seats whose holder has not reported. Limited to the room-floor
+            // roles an Alternate Examiner can actually take over (Supervising
+            // Examiner, Room Examiner, Proctor) — REC/LEC and other committee
+            // seats are staffed from a different pool and are never covered
+            // from this venue's standby, so they get no absent/replace prompt.
+            // Alternates are excluded too: a reserve who never turned up is not
+            // a seat needing cover.
             'seats' => $assignments
                 ->filter(fn (ExamAssignment $a) => $a->attendance_confirmed_at === null
-                    && $a->role !== ExamRole::AlternateExaminer
+                    && $a->role->isCoverable()
                     && ! $a->isSubstitute())
                 ->values()
                 ->map(fn (ExamAssignment $a) => [
@@ -703,7 +797,7 @@ class ScannerController extends Controller
      * Appreciation for Management approval (user-confirmed flow, spec 2.3).
      *
      * REC/LEC/CE-for-Investigation assignments cover multiple schools but
-     * staff only one testing center: scanning at their testing center
+     * staff only one field office: scanning at their field office
      * behaves exactly like any other role (confirms the assignment, queues
      * the certificate); scanning at one of their *covered* schools instead
      * records a separate per-school attendance row (no certificate

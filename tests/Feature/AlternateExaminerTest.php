@@ -44,7 +44,7 @@ class AlternateExaminerTest extends TestCase
         ]);
 
         $this->office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
-        $school = School::factory()->create(['field_office_id' => $this->office->id, 'is_active' => true]);
+        $school = School::factory()->forFieldOffice($this->office->id)->create(['is_active' => true]);
         $this->venue = ExaminationSchool::create([
             'examination_id' => $this->examination->id,
             'school_id' => $school->id,
@@ -167,7 +167,7 @@ class AlternateExaminerTest extends TestCase
     /** The standby pool is per venue — an alternate covers where they stand. */
     public function test_an_alternate_cannot_cover_another_venue(): void
     {
-        $otherSchool = School::factory()->create(['field_office_id' => $this->office->id, 'is_active' => true]);
+        $otherSchool = School::factory()->forFieldOffice($this->office->id)->create(['is_active' => true]);
         $otherVenue = ExaminationSchool::create([
             'examination_id' => $this->examination->id,
             'school_id' => $otherSchool->id,

@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 /**
  * Which "hat" a signed-in user is currently wearing.
  *
- * Commission staff can also be accredited PROCTAD members — a Testing Center
+ * Commission staff can also be accredited PROCTAD members — a Field Office
  * Staff who proctors, a Director who chairs the REC. They are one person with
  * one account (see MemberController::resolveAccount, which links a new member
  * record to an existing account by email rather than minting a second login),

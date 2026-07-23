@@ -51,7 +51,7 @@ class ScannerCoverTest extends TestCase
     {
         return ExaminationSchool::factory()->create([
             'examination_id' => $this->exam->id,
-            'school_id' => School::factory()->create(['field_office_id' => $this->office->id]),
+            'school_id' => School::factory()->forFieldOffice($this->office->id)->create(),
         ]);
     }
 
@@ -185,7 +185,94 @@ class ScannerCoverTest extends TestCase
             });
     }
 
-    /** An authenticated Testing Center Staff gets the same operations. */
+    /**
+     * REC/LEC and other committee seats are staffed from a different pool and
+     * cannot be covered from a single venue's standby, so they must never be
+     * offered an absent/replace prompt in the cover panel.
+     */
+    public function test_committee_seats_are_not_offered_for_cover(): void
+    {
+        $session = $this->link();
+        $proctor = $this->seat(ExamRole::Proctor);
+        $this->seat(ExamRole::RecChair);
+        $this->seat(ExamRole::LecMember);
+
+        $this->get("/scan/{$session->token}")
+            ->assertOk()
+            ->assertInertia(function (Assert $page) use ($proctor) {
+                $cover = $page->toArray()['props']['attendanceSummary']['cover'];
+
+                // Only the room-floor Proctor seat is coverable.
+                $this->assertSame([$proctor->id], collect($cover['seats'])->pluck('id')->all());
+            });
+    }
+
+    /** A crafted request cannot call an alternate into a committee seat. */
+    public function test_a_committee_seat_cannot_be_covered_by_an_alternate(): void
+    {
+        $session = $this->link();
+        $recSeat = $this->seat(ExamRole::RecChair);
+        $alternate = $this->seat(ExamRole::AlternateExaminer);
+
+        $this->post("/scan/{$session->token}/mark-absent", ['assignment_id' => $recSeat->id]);
+        $this->post("/scan/{$session->token}/activate-alternate", [
+            'assignment_id' => $recSeat->id,
+            'alternate_assignment_id' => $alternate->id,
+        ])->assertSessionHas('error');
+
+        $this->assertNull($alternate->fresh()->covering_for_assignment_id);
+    }
+
+    /**
+     * The room attendance map reports a room "filled" only once all three of its
+     * seats (Supervising Examiner, Room Examiner, Proctor) have reported, and a
+     * single Supervising Examiner counts as present in every room of their group.
+     */
+    public function test_the_room_map_reports_fill_status(): void
+    {
+        $session = $this->link();
+
+        $roomA = \App\Models\ExamRoom::create(['examination_school_id' => $this->venue->id, 'room_number' => '101', 'capacity' => 25]);
+        $roomB = \App\Models\ExamRoom::create(['examination_school_id' => $this->venue->id, 'room_number' => '102', 'capacity' => 25]);
+
+        // One Supervising Examiner anchors the group (room 101) and covers both.
+        $se = $this->roomSeat(ExamRole::SupervisingExaminer, $roomA);
+        $reA = $this->roomSeat(ExamRole::RoomExaminer, $roomA);
+        $proctorA = $this->roomSeat(ExamRole::Proctor, $roomA);
+        $this->roomSeat(ExamRole::RoomExaminer, $roomB);
+        $this->roomSeat(ExamRole::Proctor, $roomB);
+
+        // Room A's whole seating reports in; the shared SE presence carries to B.
+        foreach ([$se, $reA, $proctorA] as $seat) {
+            $seat->update(['attendance_confirmed_at' => now()]);
+        }
+
+        $this->get("/scan/{$session->token}")
+            ->assertOk()
+            ->assertInertia(function (Assert $page) {
+                $map = $page->toArray()['props']['attendanceSummary']['roomMap'];
+
+                $this->assertSame(2, $map['total']);
+                $this->assertSame(1, $map['filled']); // only room 101 is fully in
+
+                $byRoom = collect($map['rooms'])->keyBy('room_number');
+                $this->assertTrue($byRoom['101']['filled']);
+                $this->assertSame(3, $byRoom['101']['present_count']);
+                // Room 102 shares the present SE, but its own RE/Proctor haven't scanned.
+                $this->assertFalse($byRoom['102']['filled']);
+                $this->assertSame(1, $byRoom['102']['present_count']);
+            });
+    }
+
+    private function roomSeat(ExamRole $role, \App\Models\ExamRoom $room): ExamAssignment
+    {
+        $seat = $this->seat($role);
+        $seat->update(['exam_room_id' => $room->id]);
+
+        return $seat;
+    }
+
+    /** An authenticated Field Office Staff gets the same operations. */
     public function test_signed_in_staff_can_cover_from_the_scanner(): void
     {
         $seat = $this->seat(ExamRole::Proctor);

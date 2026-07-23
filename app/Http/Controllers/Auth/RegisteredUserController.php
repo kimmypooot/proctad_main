@@ -71,7 +71,7 @@ class RegisteredUserController extends Controller
         ], [
             'mobile_number.regex' => 'Enter a valid Philippine mobile number (e.g. 09171234567).',
             'date_of_birth.before' => 'You must be at least 18 years old to register.',
-            'field_office_id.required' => 'Please select your Testing Center.',
+            'field_office_id.required' => 'Please select your Field Office.',
             'terms.accepted' => 'You must accept the Terms and Conditions to register.',
         ]);
 
@@ -93,7 +93,7 @@ class RegisteredUserController extends Controller
         if (Member::where('email', $email)->exists()) {
             throw ValidationException::withMessages([
                 'email' => 'A PROCTAD record already exists with this email address. '
-                    .'Please sign in instead, or contact your Testing Center if you believe this is an error.',
+                    .'Please sign in instead, or contact your Field Office if you believe this is an error.',
             ]);
         }
 
@@ -130,7 +130,7 @@ class RegisteredUserController extends Controller
             throw ValidationException::withMessages([
                 'email' => 'A PROCTAD record already exists for this name and date of birth. '
                     .'If that is you, please sign in instead — you can use the password option if you '
-                    .'can no longer access your Google account. Otherwise contact your Testing Center.',
+                    .'can no longer access your Google account. Otherwise contact your Field Office.',
             ]);
         }
 

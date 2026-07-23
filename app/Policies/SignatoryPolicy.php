@@ -30,7 +30,7 @@ class SignatoryPolicy
 
     /**
      * ESD / Super Admin manage any entry (spec 4.3); FO Admins only entries
-     * of their own Testing Center (spec 4.4) — never region-wide defaults.
+     * of their own Field Office (spec 4.4) — never region-wide defaults.
      */
     private function manage(User $user, Signatory $signatory): bool
     {

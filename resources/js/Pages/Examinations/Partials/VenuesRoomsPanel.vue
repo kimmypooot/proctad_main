@@ -230,7 +230,7 @@ const groupOepAssignments = (assignments) => {
 
         <p v-if="can.manageVenues && !availableSchools.length && !venues.length" class="text-xs text-amber-600">
             No active schools are available to attach. Register a school first under
-            <a href="/schools" class="font-medium underline">Testing Center → Schools</a>.
+            <a href="/locations" class="font-medium underline">Locations</a>.
         </p>
 
         <!-- Add school modal -->

@@ -68,7 +68,7 @@ const closeViewer = () => (viewing.value = null);
             <EmptyState
                 icon="academic-cap"
                 title="No PROCTAD record linked to your account"
-                description="Your training records become available once your Testing Center registers you in the PROCTAD registry."
+                description="Your training records become available once your Field Office registers you in the PROCTAD registry."
             />
         </div>
 

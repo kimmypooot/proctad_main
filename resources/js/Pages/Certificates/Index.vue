@@ -139,7 +139,68 @@ const submitResign = () => {
             <BaseButton variant="secondary" size="sm" @click="showResign = true">Re-sign Selected</BaseButton>
         </div>
 
-        <div v-if="loading || certificates.data.length" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <!--
+            Mobile (below md): a card per certificate. The table's action icons
+            (view/download/regenerate) sit in the last column and scroll off the
+            right edge on a phone; the cards keep them on screen.
+        -->
+        <div v-if="certificates.data.length" class="mt-4 space-y-3 md:hidden" :class="{ 'opacity-50': loading }">
+            <div
+                v-for="certificate in certificates.data"
+                :key="`m-${certificate.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+            >
+                <div class="flex items-start gap-3">
+                    <input
+                        v-if="can.bulkResign && certificate.status === 'released'"
+                        v-model="selected"
+                        type="checkbox"
+                        :value="certificate.id"
+                        class="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 accent-brand-600"
+                    >
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <p class="font-mono text-xs font-semibold text-brand-700">{{ certificate.certificate_no ?? '— pending —' }}</p>
+                                <p class="text-xs text-slate-500">{{ certificate.type_label }}</p>
+                            </div>
+                            <BaseBadge :variant="certificate.status_variant" class="shrink-0">{{ certificate.status_label }}</BaseBadge>
+                        </div>
+
+                        <p class="mt-2 truncate font-medium text-slate-900" :title="certificate.member.name">{{ certificate.member.name }}</p>
+                        <p class="font-mono text-xs text-brand-700">{{ certificate.member.proctad_id }}</p>
+
+                        <dl class="mt-2 space-y-1 text-xs text-slate-500">
+                            <div v-if="certificate.field_office" class="flex gap-1">
+                                <dt class="font-medium text-slate-400">Field Office:</dt>
+                                <dd class="text-slate-600">{{ certificate.field_office }}</dd>
+                            </div>
+                            <div v-if="certificate.source" class="flex gap-1">
+                                <dt class="font-medium text-slate-400">Source:</dt>
+                                <dd class="text-slate-600">{{ certificate.source }}</dd>
+                            </div>
+                            <div v-if="certificate.released_at" class="flex gap-1">
+                                <dt class="font-medium text-slate-400">Released:</dt>
+                                <dd class="text-slate-600">{{ certificate.released_at }}</dd>
+                            </div>
+                        </dl>
+
+                        <p v-if="certificate.disapproval_remarks" class="mt-1 text-xs text-accent-600">{{ certificate.disapproval_remarks }}</p>
+
+                        <div v-if="certificate.downloadable" class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
+                            <IconButton icon="eye" label="View" @click="viewCertificate(certificate)" />
+                            <IconButton icon="arrow-down-tray" label="Download" external :href="`/certificates/${certificate.id}/download`" />
+                            <IconButton v-if="certificate.regenerable" icon="arrow-path" label="Regenerate PDF" @click="regenTarget = certificate" />
+                        </div>
+                        <div v-else-if="certificate.previewable" class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
+                            <IconButton icon="eye" label="Preview" @click="previewCertificate(certificate)" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="loading || certificates.data.length" class="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
@@ -154,7 +215,7 @@ const submitResign = () => {
                         <th class="px-3 py-2">Certificate No.</th>
                         <th class="hidden px-3 py-2 sm:table-cell">Type</th>
                         <th class="px-3 py-2">Member</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 xl:table-cell">Field Office</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Source</th>
                         <th class="hidden px-3 py-2 lg:table-cell">Released</th>
                         <th class="px-3 py-2">Status</th>

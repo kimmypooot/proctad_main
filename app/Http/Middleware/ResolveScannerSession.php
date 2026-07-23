@@ -29,7 +29,7 @@ class ResolveScannerSession
             return Inertia::render('Errors/LinkExpired', [
                 'title' => 'This scanner link is no longer active',
                 'message' => 'Scanner links are issued for a single examination day and can be switched off at any time. This one has expired or was revoked.',
-                'followUp' => 'Please ask your Testing Center administrator to issue a new scanner link.',
+                'followUp' => 'Please ask your Field Office administrator to issue a new scanner link.',
             ])->toResponse($request)->setStatusCode(403);
         }
 

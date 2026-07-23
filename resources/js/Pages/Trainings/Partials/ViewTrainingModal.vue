@@ -219,7 +219,7 @@ watch(() => props.show, (open) => {
                             <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 <tr>
                                     <th class="px-3 py-2">Member</th>
-                                    <th class="hidden px-3 py-2 sm:table-cell">Testing Center</th>
+                                    <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
                                     <th class="px-3 py-2">Attendance</th>
                                     <th class="px-3 py-2 text-center">Actions</th>
                                 </tr>

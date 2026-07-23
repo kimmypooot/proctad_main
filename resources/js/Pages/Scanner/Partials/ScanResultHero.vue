@@ -177,7 +177,7 @@ watch(
         </p>
 
         <p v-if="outcome === 'venue_required'" class="mt-4 rounded-lg bg-white/70 px-3 py-2 text-sm text-amber-900">
-            This assignment covers several schools. Ask a Testing Center administrator for a scanner link pinned to
+            This assignment covers several schools. Ask a Field Office administrator for a scanner link pinned to
             this venue.
         </p>
     </div>

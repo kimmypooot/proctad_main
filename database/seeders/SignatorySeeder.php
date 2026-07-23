@@ -14,7 +14,7 @@ class SignatorySeeder extends Seeder
             return;
         }
 
-        // Region-wide default used when a Testing Center has no signatory of its own.
+        // Region-wide default used when a Field Office has no signatory of its own.
         Signatory::create([
             'field_office_id' => null,
             'name' => 'Atty. Marilyn E. Taldo',

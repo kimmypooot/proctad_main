@@ -51,7 +51,7 @@ const sexOptions = [
 
         <SelectInput
             v-model="form.field_office_id"
-            label="Testing Center"
+            label="Field Office"
             optional
             placeholder="Region-wide / unassigned"
             :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"

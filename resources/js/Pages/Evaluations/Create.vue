@@ -104,7 +104,7 @@ const resetSelection = () => {
     form.exam_assignment_id = '';
     form.room_ratings = [];
     // Ratees belong to one venue; leaving them would offer the previous
-    // testing center's staff against a new assignment.
+    // field office's staff against a new assignment.
     availableRatees.value = [];
 };
 
@@ -392,7 +392,7 @@ const errorCount = computed(() => Object.keys(form.errors).length);
                 </div>
 
                 <!-- Blocked, not finished. Naming the actual reason turns a dead
-                     end into something the member can ask their Testing Center
+                     end into something the member can ask their Field Office
                      about — which on a half-day examination is the difference
                      between evaluating that afternoon and not at all. -->
                 <div
@@ -402,7 +402,7 @@ const errorCount = computed(() => Object.keys(form.errors).length);
                     <SectionTitle icon="clock" label="Waiting on attendance confirmation" />
                     <p class="mt-3 text-sm leading-relaxed text-amber-900">
                         Your attendance hasn't been recorded yet, so the evaluation isn't open to you.
-                        Your Testing Center needs to confirm it first — this usually happens shortly
+                        Your Field Office needs to confirm it first — this usually happens shortly
                         after the examination.
                     </p>
                     <ul class="mt-3 space-y-1 text-sm text-amber-900">
@@ -572,7 +572,7 @@ const errorCount = computed(() => Object.keys(form.errors).length);
                                 :options="rateeOptionsFor(index)"
                                 :error="form.errors[`room_ratings.${index}.exam_assignment_id`]
                                     || form.errors[`room_ratings.${index}.ratee_name`]"
-                                :hint="availableRatees.length ? null : 'No room examiners or proctors are assigned to this testing center — contact your Testing Center before submitting.'"
+                                :hint="availableRatees.length ? null : 'No room examiners or proctors are assigned to this field office — contact your Field Office before submitting.'"
                                 @update:model-value="(value) => selectRatee(index, value)"
                             />
 
@@ -705,7 +705,7 @@ const errorCount = computed(() => Object.keys(form.errors).length);
 
                             <SelectInput
                                 v-model="form.overall_rating"
-                                label="Overall, how would you rate the conduct of the examination at your testing center?"
+                                label="Overall, how would you rate the conduct of the examination at your field office?"
                                 required
                                 :options="overallRatingOptions"
                                 :error="form.errors.overall_rating"

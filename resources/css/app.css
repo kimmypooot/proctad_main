@@ -116,6 +116,18 @@
         color: white;
     }
 
+    /* iOS zooms the page in when a focused form control's font is under 16px,
+       yanking the layout around — most noticeable tapping the scanner's manual
+       entry on a phone. Enforce 16px on touch-sized viewports; desktop keeps the
+       smaller `text-sm` controls untouched. */
+    @media (max-width: 640px) {
+        input:not([type='checkbox']):not([type='radio']),
+        select,
+        textarea {
+            font-size: 16px;
+        }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         html {
             scroll-behavior: auto;

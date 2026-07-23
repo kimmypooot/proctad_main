@@ -48,7 +48,7 @@ class ExamVenueTest extends TestCase
         $otherFo = FieldOffice::factory()->create();
         $foAdmin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]);
         $examination = Examination::factory()->create();
-        $school = School::factory()->create(['field_office_id' => $otherFo->id]);
+        $school = School::factory()->forFieldOffice($otherFo->id)->create();
 
         $this->actingAs($foAdmin)
             ->post("/examinations/{$examination->id}/venues", ['school_id' => $school->id])
@@ -88,7 +88,7 @@ class ExamVenueTest extends TestCase
         $fo = FieldOffice::factory()->create();
         $otherFo = FieldOffice::factory()->create();
         $foAdmin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]);
-        $school = School::factory()->create(['field_office_id' => $otherFo->id]);
+        $school = School::factory()->forFieldOffice($otherFo->id)->create();
         $venue = ExaminationSchool::factory()->create(['school_id' => $school->id]);
 
         $this->actingAs($foAdmin)

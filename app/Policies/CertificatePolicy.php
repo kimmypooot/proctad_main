@@ -16,11 +16,11 @@ class CertificatePolicy
 
     /**
      * Approve or disapprove: the certificate type's primary approver role
-     * (Field Director within their own Testing Center for Appearance/
+     * (Field Director within their own Field Office for Appearance/
      * Designation Order, Management region-wide for Appreciation), plus two
      * fallback paths for when the primary approver is unavailable — Super
      * Admin/ESD Admin region-wide for any type, and Field Director locally
-     * for any type originating in their own Testing Center.
+     * for any type originating in their own Field Office.
      */
     public function decide(User $user, Certificate $certificate): bool
     {
@@ -88,7 +88,7 @@ class CertificatePolicy
      * signatory, and release date — only the rendering is refreshed, e.g.
      * after a letterhead or template change). Released certificates only;
      * region-wide admins region-wide, FO-scoped staff within their own
-     * Testing Center — mirroring the download scope minus the owning member.
+     * Field Office — mirroring the download scope minus the owning member.
      */
     public function regenerate(User $user, Certificate $certificate): bool
     {

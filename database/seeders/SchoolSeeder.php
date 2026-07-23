@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\FieldOffice;
 use App\Models\School;
+use App\Models\TestingCenter;
 use Illuminate\Database\Seeder;
 
 class SchoolSeeder extends Seeder
@@ -50,9 +51,12 @@ class SchoolSeeder extends Seeder
             }
 
             foreach ($schools as $school) {
+                $center = TestingCenter::firstOrCreate(['name' => $school['municipality']], ['is_active' => true]);
+                $center->fieldOffices()->syncWithoutDetaching([$office->id]);
+
                 School::create([
-                    ...$school,
-                    'field_office_id' => $office->id,
+                    'name' => $school['name'],
+                    'testing_center_id' => $center->id,
                     'contact_person' => null,
                     'contact_number' => null,
                     'contact_email' => null,

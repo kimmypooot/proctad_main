@@ -218,7 +218,7 @@ class MyProctadTest extends TestCase
 
     /**
      * A member may submit evidence but must never be able to mark themselves
-     * eligible — the Testing Center verifies and flips `complied`.
+     * eligible — the Field Office verifies and flips `complied`.
      */
     public function test_member_uploads_a_requirement_document_without_becoming_compliant(): void
     {
@@ -268,7 +268,7 @@ class MyProctadTest extends TestCase
             ->assertNotFound();
     }
 
-    /** Replacing evidence a Testing Center already accepted would erase the basis of that decision. */
+    /** Replacing evidence a Field Office already accepted would erase the basis of that decision. */
     public function test_member_cannot_replace_an_already_verified_document(): void
     {
         Storage::fake('local');

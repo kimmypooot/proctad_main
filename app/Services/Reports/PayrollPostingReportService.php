@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  * paragraph (A13, merged A13:E16), a 10-row pre-numbered roster block (rows
  * 19-28, expanded via row insertion if the roster is larger), a certification
  * block with a computed total (D29, merged D29:E32), and a signatory block
- * (D36/D37). Scoped to a single testing center, since the acknowledgment text
+ * (D36/D37). Scoped to a single venue, since the acknowledgment text
  * and signatory are venue/field-office specific.
  */
 class PayrollPostingReportService
@@ -51,7 +51,7 @@ class PayrollPostingReportService
         $blocking = [];
 
         if (! $venueId) {
-            $blocking[] = 'Select a testing center before generating Payroll Posting.';
+            $blocking[] = 'Select a venue before generating Payroll Posting.';
 
             return ['blocking' => $blocking, 'warnings' => []];
         }
@@ -59,11 +59,11 @@ class PayrollPostingReportService
         $roster = $this->buildRoster($examination, $venueId, $blocking);
 
         if (empty($blocking) && $roster->isEmpty()) {
-            $blocking[] = 'No confirmed roster found for this examination and testing center.';
+            $blocking[] = 'No confirmed roster found for this examination and venue.';
         }
 
         if (empty($blocking) && ! $this->resolveSignatory($venueId)) {
-            $blocking[] = 'No active signatory configured for this testing center or region-wide default. Configure one under Configuration > Signatories.';
+            $blocking[] = 'No active signatory configured for this venue or region-wide default. Configure one under Configuration > Signatories.';
         }
 
         return ['blocking' => $blocking, 'warnings' => []];
@@ -72,7 +72,7 @@ class PayrollPostingReportService
     public function build(Examination $examination, ?int $venueId): BinaryFileResponse
     {
         if (! $venueId) {
-            throw new ReportPreconditionException('Select a testing center before generating Payroll Posting.');
+            throw new ReportPreconditionException('Select a venue before generating Payroll Posting.');
         }
 
         $blocking = [];
@@ -83,14 +83,14 @@ class PayrollPostingReportService
         }
 
         if ($roster->isEmpty()) {
-            throw new ReportPreconditionException('No confirmed roster found for this examination and testing center.');
+            throw new ReportPreconditionException('No confirmed roster found for this examination and venue.');
         }
 
         $signatory = $this->resolveSignatory($venueId);
 
         if (! $signatory) {
             throw new ReportPreconditionException(
-                'No active signatory configured for this testing center or region-wide default. Configure one under Configuration > Signatories.'
+                'No active signatory configured for this venue or region-wide default. Configure one under Configuration > Signatories.'
             );
         }
 
@@ -204,11 +204,17 @@ class PayrollPostingReportService
 
     private function resolveSignatory(int $venueId): ?Signatory
     {
+        // A venue's testing center can be handled by several field offices; use
+        // the first as the signing office, falling back to the region-wide
+        // default when none is linked.
         $fieldOfficeId = ExaminationSchool::query()
-            ->with('school:id,field_office_id')
+            ->with('school.testingCenter.fieldOffices:id')
             ->find($venueId)
             ?->school
-            ?->field_office_id;
+            ?->testingCenter
+            ?->fieldOffices
+            ?->first()
+            ?->id;
 
         return Signatory::currentFor($fieldOfficeId);
     }

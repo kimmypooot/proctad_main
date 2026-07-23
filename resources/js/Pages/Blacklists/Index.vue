@@ -161,7 +161,7 @@ const submitLift = () => liftForm.post(`/blacklists/${lifting.value.id}/lift`, {
             <SelectInput
                 v-if="fieldOffices"
                 v-model="fieldOfficeId"
-                label="Testing Center"
+                label="Field Office"
                 placeholder="All field offices"
                 :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
             />
@@ -173,7 +173,7 @@ const submitLift = () => liftForm.post(`/blacklists/${lifting.value.id}/lift`, {
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
                         <th class="px-3 py-2">Member</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 md:table-cell">Field Office</th>
                         <th class="px-3 py-2">Reason</th>
                         <th class="hidden px-3 py-2 lg:table-cell">Blacklisted</th>
                         <th class="px-3 py-2">Status</th>

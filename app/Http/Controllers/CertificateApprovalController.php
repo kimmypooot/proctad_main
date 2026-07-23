@@ -17,7 +17,7 @@ class CertificateApprovalController extends Controller
 {
     /**
      * The approval queue: Field Directors see all pending certificate types
-     * for their own Testing Center — Appearance/Designation Order as the
+     * for their own Field Office — Appearance/Designation Order as the
      * primary approver, plus Appreciation as a local fallback for when
      * Management isn't available. Management sees pending Appreciation
      * certificates region-wide (spec 2.3 / 4.1 / 4.2). Super Admin/ESD Admin

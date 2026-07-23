@@ -48,7 +48,7 @@ class PublicScannerSessionTest extends TestCase
         $this->exam = Examination::factory()->create();
         $this->venue = ExaminationSchool::factory()->create([
             'examination_id' => $this->exam->id,
-            'school_id' => School::factory()->create(['field_office_id' => $this->office->id]),
+            'school_id' => School::factory()->forFieldOffice($this->office->id)->create(),
         ]);
         $this->assignment = ExamAssignment::factory()->create([
             'examination_id' => $this->exam->id,
@@ -252,7 +252,7 @@ class PublicScannerSessionTest extends TestCase
     public function test_a_link_cannot_name_another_examinations_venue(): void
     {
         $otherVenue = ExaminationSchool::factory()->create([
-            'school_id' => School::factory()->create(['field_office_id' => $this->office->id]),
+            'school_id' => School::factory()->forFieldOffice($this->office->id)->create(),
         ]);
 
         $this->actingAs($this->issuer)

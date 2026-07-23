@@ -76,13 +76,43 @@ const submit = () => {
             </template>
         </DashboardPageHeader>
 
-        <div v-if="trainings.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <!-- Mobile (below md): a card per training. Tap to view; edit stays a button. -->
+        <div v-if="trainings.length" class="mt-6 space-y-3 md:hidden">
+            <div
+                v-for="training in trainings"
+                :key="`m-${training.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+                @click="viewing = training"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="font-medium text-slate-900">{{ training.title }}</p>
+                        <p class="text-xs text-slate-500">{{ training.type_label }}</p>
+                    </div>
+                    <BaseBadge :variant="training.completed ? 'success' : 'warning'" class="shrink-0">
+                        {{ training.completed ? 'Completed' : 'Scheduled' }}
+                    </BaseBadge>
+                </div>
+                <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <div><dt class="font-medium text-slate-400">Date</dt><dd class="text-slate-600">{{ training.training_date }}</dd></div>
+                    <div><dt class="font-medium text-slate-400">Participants</dt><dd class="text-slate-600">{{ training.assignments_count }}</dd></div>
+                    <div v-if="training.field_office?.name" class="col-span-2"><dt class="font-medium text-slate-400">Field Office</dt><dd class="text-slate-600">{{ training.field_office.name }}</dd></div>
+                    <div v-if="training.exam?.title" class="col-span-2"><dt class="font-medium text-slate-400">Connected Exam</dt><dd class="text-slate-600">{{ training.exam.title }}</dd></div>
+                    <div v-if="training.venue" class="col-span-2"><dt class="font-medium text-slate-400">Venue</dt><dd class="text-slate-600">{{ training.venue }}</dd></div>
+                </dl>
+                <div v-if="can.manage && !training.completed" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                    <IconButton icon="pencil" label="Edit" @click.stop="openEdit(training)" />
+                </div>
+            </div>
+        </div>
+
+        <div v-if="trainings.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
                         <th class="px-3 py-2">Training</th>
                         <th class="hidden px-3 py-2 sm:table-cell">Type</th>
-                        <th class="hidden px-3 py-2 lg:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 lg:table-cell">Field Office</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Connected Exam</th>
                         <th class="px-3 py-2">Date</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Venue</th>

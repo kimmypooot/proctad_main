@@ -38,8 +38,10 @@ const expiringSoon = computed(() => {
 
 <template>
     <div class="flex min-h-screen flex-col bg-slate-100">
+        <!-- pt clears the status bar / notch when the link is saved to the home
+             screen and opened standalone; env(...) is 0 in an ordinary browser. -->
         <header class="bg-gradient-to-br from-brand-800 to-brand-600 text-white shadow-lg">
-            <div class="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6 sm:py-5">
+            <div class="mx-auto w-full max-w-3xl px-4 pb-4 pt-[calc(1rem_+_env(safe-area-inset-top))] sm:px-6 sm:pb-5 sm:pt-[calc(1.25rem_+_env(safe-area-inset-top))]">
                 <div class="flex items-center gap-3">
                     <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 p-1.5 ring-1 ring-white/20">
                         <img :src="'/images/brand/proctad-logo.png'" alt="" class="h-full w-full object-contain">
@@ -84,12 +86,13 @@ const expiringSoon = computed(() => {
             <slot />
         </main>
 
-        <footer class="mx-auto w-full max-w-3xl px-4 pb-6 sm:px-6">
+        <!-- pb clears the home-indicator bar on gesture-nav phones. -->
+        <footer class="mx-auto w-full max-w-3xl px-4 pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] sm:px-6">
             <p class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-500">
                 <AppIcon name="lock-closed" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                 <span>
                     Temporary scanning link issued by <strong class="font-semibold text-slate-700">{{ session.issued_by }}</strong>.
-                    Keep it within your testing center — anyone who opens it can record attendance for this event.
+                    Keep it within your venue — anyone who opens it can record attendance for this event.
                 </span>
             </p>
             <p class="mt-3 text-center text-[0.7rem] text-slate-400">

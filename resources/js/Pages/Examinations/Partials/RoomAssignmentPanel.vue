@@ -27,7 +27,7 @@ const venueFilter = ref('');
 const statusFilter = ref('all');
 
 const venueOptions = computed(() => [
-    { value: '', label: 'All Testing Centers' },
+    { value: '', label: 'All Venues' },
     ...venuesWithRooms.value.map((v) => ({ value: String(v.id), label: v.school_name })),
 ]);
 
@@ -112,7 +112,7 @@ const clearRoom = (room, fieldKey) => {
         <template v-if="venuesWithRooms.length">
             <div class="rounded-xl border border-slate-200 bg-white p-4">
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
-                    <SelectInput v-model="venueFilter" label="Testing Center" placeholder="All Testing Centers" :options="venueOptions" />
+                    <SelectInput v-model="venueFilter" label="Venue" placeholder="All Venues" :options="venueOptions" />
                     <SelectInput v-model="statusFilter" label="Room Status" placeholder="All Rooms" :options="statusOptions" />
                     <div class="flex items-end gap-2 pb-0.5">
                         <div class="min-w-[4.5rem] rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-center">

@@ -151,7 +151,7 @@ class BlacklistController extends Controller
 
     /**
      * Whether this user may blacklist a member anywhere within their own scope
-     * (region-wide roles: anywhere; FO-scoped roles: their own Testing Center) —
+     * (region-wide roles: anywhere; FO-scoped roles: their own Field Office) —
      * mirrors BlacklistPolicy::manage() without needing a concrete Member.
      */
     private function canCreateAny(User $user): bool

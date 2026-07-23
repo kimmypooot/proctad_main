@@ -60,7 +60,7 @@ class ServiceRecordsExport implements FromCollection, WithHeadings, WithMapping
         // "Attendance" replaces the old Yes/No "Attendance Confirmed": a blank
         // no longer means only "unrecorded", so a boolean would now hide a
         // recorded absence behind the same "No" as a missing scan.
-        return ['PROCTAD ID', 'Member', 'Testing Center', 'Examination', 'Exam Date', 'Role', 'Attendance', 'Service Note', 'Rating'];
+        return ['PROCTAD ID', 'Member', 'Field Office', 'Examination', 'Exam Date', 'Role', 'Attendance', 'Service Note', 'Rating'];
     }
 
     public function map($assignment): array

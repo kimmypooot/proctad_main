@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\UserRole;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -23,8 +22,9 @@ class AuditLogController extends Controller
 
         $logs = AuditLog::query()
             ->with('user:id,name')
-            // Field Directors only see activity within their own Testing Center (spec 4.2).
-            ->when($user->role === UserRole::FieldDirector,
+            // Field-office-scoped staff (Field Director and FO Admin) only see
+            // activity within their own Field Office (spec 4.2).
+            ->when($user->role->isFieldOfficeScoped(),
                 fn ($q) => $q->where('field_office_id', $user->field_office_id))
             ->when($request->filled('action'), fn ($q) => $q->where('action', $request->string('action')))
             ->when($request->filled('type'), fn ($q) => $q->where('auditable_type', $request->string('type')))

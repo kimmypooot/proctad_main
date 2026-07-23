@@ -201,8 +201,8 @@ class ReportController extends Controller
     private function venueReadiness(?int $fieldOfficeId, ?int $year, ?int $examTypeId): array
     {
         return ExaminationSchool::query()
-            ->with(['school:id,name,field_office_id', 'examination:id,title,exam_date,exam_type_id', 'rooms:id,examination_school_id'])
-            ->when($fieldOfficeId, fn ($q) => $q->whereHas('school', fn ($qq) => $qq->where('field_office_id', $fieldOfficeId)))
+            ->with(['school:id,name', 'examination:id,title,exam_date,exam_type_id', 'rooms:id,examination_school_id'])
+            ->when($fieldOfficeId, fn ($q) => $q->whereHas('school', fn ($qq) => $qq->forFieldOffice($fieldOfficeId)))
             ->when($year || $examTypeId, fn ($q) => $q->whereHas('examination', function ($qq) use ($year, $examTypeId) {
                 $qq->when($year, fn ($q3) => $q3->whereYear('exam_date', $year))
                     ->when($examTypeId, fn ($q3) => $q3->where('exam_type_id', $examTypeId));

@@ -38,6 +38,14 @@ class AlternateActivator
             return 'Only an Alternate Examiner can be called in to cover a seat.';
         }
 
+        // Only room-floor seats (Supervising Examiner, Room Examiner, Proctor)
+        // are covered from a venue's standby pool. REC/LEC and other committee
+        // roles staff a field office or the region and cannot be filled by an
+        // alternate standing in one venue.
+        if (! $vacant->role->isCoverable()) {
+            return 'Only a Supervising Examiner, Room Examiner, or Proctor seat can be covered by an alternate.';
+        }
+
         if ($alternate->is($vacant)) {
             return 'An assignment cannot cover for itself.';
         }

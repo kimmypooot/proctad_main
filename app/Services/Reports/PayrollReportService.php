@@ -61,7 +61,7 @@ class PayrollReportService
         [$page1, $page2, $page3] = $this->buildRosterRows($examination, $venueId, $blocking);
 
         if (empty($blocking) && $page1->isEmpty() && $page2->isEmpty() && $page3->isEmpty()) {
-            $blocking[] = 'No confirmed roster found for this examination'.($venueId ? ' and testing center.' : '.');
+            $blocking[] = 'No confirmed roster found for this examination'.($venueId ? ' and venue.' : '.');
         }
 
         return ['blocking' => $blocking, 'warnings' => []];
@@ -78,7 +78,7 @@ class PayrollReportService
 
         if ($page1->isEmpty() && $page2->isEmpty() && $page3->isEmpty()) {
             throw new ReportPreconditionException(
-                'No confirmed roster found for this examination'.($venueId ? ' and testing center.' : '.')
+                'No confirmed roster found for this examination'.($venueId ? ' and venue.' : '.')
             );
         }
 

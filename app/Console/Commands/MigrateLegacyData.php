@@ -50,6 +50,8 @@ class MigrateLegacyData extends Command
 
     private array $schoolMap = [];
 
+    private array $testingCenterMap = [];
+
     private array $examMap = [];
 
     private array $venueMap = [];        // legacy exam_school_id → examination_school.id
@@ -227,10 +229,12 @@ class MigrateLegacyData extends Command
                 continue;
             }
 
+            $fieldOfficeId = $this->foMap[$row->field_office_id];
+
             $id = DB::table('schools')->insertGetId([
-                'field_office_id' => $this->foMap[$row->field_office_id],
+                'field_office_id' => $fieldOfficeId,
+                'testing_center_id' => $this->resolveTestingCenter($fieldOfficeId, $row->municipality),
                 'name' => $row->school_name,
-                'municipality' => $row->municipality,
                 'contact_person' => $row->contact_person ?: null,
                 'contact_number' => $row->contact_number ?: null,
                 'contact_email' => $row->contact_email ?: null,
@@ -241,6 +245,24 @@ class MigrateLegacyData extends Command
             $this->schoolMap[$row->school_id] = $id;
             $this->tally('schools');
         }
+    }
+
+    /**
+     * Promote a legacy free-text municipality into a Testing Center under the
+     * field office, reusing one already created for the same city.
+     */
+    private function resolveTestingCenter(int $fieldOfficeId, ?string $municipality): int
+    {
+        $city = trim((string) $municipality) ?: 'Unspecified';
+        $key = $fieldOfficeId.'|'.$city;
+
+        return $this->testingCenterMap[$key] ??= DB::table('testing_centers')->insertGetId([
+            'field_office_id' => $fieldOfficeId,
+            'name' => $city,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function importSignatories(): void

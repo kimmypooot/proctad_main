@@ -86,7 +86,7 @@ const closeViewer = () => (viewing.value = null);
             <EmptyState
                 icon="clock"
                 title="No PROCTAD record linked to your account"
-                description="Your service history becomes available once your Testing Center registers you in the PROCTAD registry."
+                description="Your service history becomes available once your Field Office registers you in the PROCTAD registry."
             />
         </div>
 
@@ -124,7 +124,7 @@ const closeViewer = () => (viewing.value = null);
                     v-model="search"
                     label="Search"
                     icon="magnifying-glass"
-                    placeholder="Examination or testing center"
+                    placeholder="Examination or field office"
                 />
                 <SelectInput
                     v-model="typeFilter"
@@ -221,7 +221,7 @@ const closeViewer = () => (viewing.value = null);
             <EmptyState
                 icon="clock"
                 title="No service records yet"
-                description="Your examination assignments will appear here once your Testing Center deploys you."
+                description="Your examination assignments will appear here once your Field Office deploys you."
             />
         </div>
 
@@ -246,7 +246,7 @@ const closeViewer = () => (viewing.value = null);
                         </p>
                     </div>
                     <div>
-                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</p>
+                        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</p>
                         <p class="mt-0.5 text-sm text-slate-800">{{ viewing.testing_center ?? '—' }}</p>
                     </div>
                     <div>

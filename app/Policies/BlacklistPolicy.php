@@ -16,7 +16,7 @@ class BlacklistPolicy
 
     /**
      * Blacklist a member: Super Admin/ESD Admin region-wide, or Field
-     * Director/Testing Center Staff for a member in their own Testing Center.
+     * Director/Field Office Staff for a member in their own Field Office.
      */
     public function create(User $user, Member $member): bool
     {

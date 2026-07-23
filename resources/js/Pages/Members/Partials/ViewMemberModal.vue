@@ -141,7 +141,7 @@ const detailItems = (m) => [
     ['Email', m.email],
     ['Mobile Number', m.mobile_number],
     ['Agency', m.agency],
-    ['Testing Center', m.field_office?.name ?? '—'],
+    ['Field Office', m.field_office?.name ?? '—'],
     ['Position', m.position ?? '—'],
     ['Registered', m.created_at],
 ];

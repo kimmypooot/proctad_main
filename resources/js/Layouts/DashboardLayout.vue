@@ -93,7 +93,7 @@ const roleLabels = {
     director_iv: 'Regional Director IV',
     director_iii: 'Assistant Regional Director III',
     field_director: 'Field Director / Caretaker',
-    fo_admin: 'Testing Center Staff',
+    fo_admin: 'Field Office Staff',
     member: 'PROCTAD Member',
 };
 
@@ -134,7 +134,7 @@ const navByRole = {
             ],
         },
         {
-            section: 'Management',
+            section: 'Registry',
             items: [
                 { label: 'PROCTAD Members', icon: 'users', href: '/members' },
                 { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
@@ -150,9 +150,14 @@ const navByRole = {
             ],
         },
         {
+            section: 'Locations',
+            items: [
+                { label: 'Locations', icon: 'map-pin', href: '/locations' },
+            ],
+        },
+        {
             section: 'Configuration',
             items: [
-                { label: 'Schools', icon: 'building-office', href: '/schools' },
                 { label: 'Signatories', icon: 'identification', href: '/signatories' },
             ],
         },
@@ -168,6 +173,12 @@ const navByRole = {
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
                 { label: 'Service History', icon: 'clock', href: '/service-history' },
+            ],
+        },
+        {
+            section: 'Monitoring',
+            items: [
+                { label: 'Audit Trail', icon: 'eye', href: '/audit-logs' },
             ],
         },
     ],
@@ -184,11 +195,11 @@ const navByRole = {
                 { label: 'Pending Approvals', icon: 'clipboard-check', href: '/approvals', badge: 'pendingApprovals' },
             ],
         },
-        // Field Directors run their Testing Center's operations as well as
+        // Field Directors run their Field Office's operations as well as
         // approving, so this mirrors fo_admin's menu plus Approvals and the
         // Audit Trail.
         {
-            section: 'Management',
+            section: 'Registry',
             items: [
                 { label: 'PROCTAD Members', icon: 'users', href: '/members' },
                 { label: 'Other Examination Personnel', icon: 'user-group', href: '/other-examination-personnel' },
@@ -204,9 +215,14 @@ const navByRole = {
             ],
         },
         {
+            section: 'Locations',
+            items: [
+                { label: 'Locations', icon: 'map-pin', href: '/locations' },
+            ],
+        },
+        {
             section: 'Configuration',
             items: [
-                { label: 'Schools', icon: 'building-office', href: '/schools' },
                 { label: 'Signatories', icon: 'identification', href: '/signatories' },
             ],
         },
@@ -217,17 +233,17 @@ const navByRole = {
             ],
         },
         {
-            section: 'Monitoring',
-            items: [
-                { label: 'Audit Trail', icon: 'eye', href: '/audit-logs' },
-            ],
-        },
-        {
             section: 'Reports',
             items: [
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
                 { label: 'Service History', icon: 'clock', href: '/service-history' },
+            ],
+        },
+        {
+            section: 'Monitoring',
+            items: [
+                { label: 'Audit Trail', icon: 'eye', href: '/audit-logs' },
             ],
         },
     ],
@@ -293,26 +309,22 @@ const navByRole = {
             ],
         },
         {
+            section: 'Locations',
+            items: [
+                { label: 'Locations', icon: 'map-pin', href: '/locations' },
+            ],
+        },
+        {
             section: 'Configuration',
             items: [
-                { label: 'Schools', icon: 'building-office', href: '/schools' },
                 { label: 'Signatories', icon: 'identification', href: '/signatories' },
-                { label: 'Testing Centers', icon: 'map-pin', href: '/field-offices' },
                 { label: 'Letterheads', icon: 'document-text', href: '/letterheads' },
                 { label: 'Fee Management', icon: 'scale', href: '/fee-schedules' },
             ],
         },
         {
-            section: 'Communications',
+            section: 'Tools',
             items: [
-                { label: 'Email Templates', icon: 'envelope', href: '/email-templates' },
-            ],
-        },
-        {
-            section: 'Administration',
-            items: [
-                { label: 'User Accounts', icon: 'user-group', href: '/users' },
-                { label: 'System Settings', icon: 'cog-6-tooth', href: '/settings' },
                 { label: 'QR Scanner', icon: 'qr-code', href: '/scanner' },
             ],
         },
@@ -322,6 +334,14 @@ const navByRole = {
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
                 { label: 'Service History', icon: 'clock', href: '/service-history' },
+            ],
+        },
+        {
+            section: 'Administration',
+            items: [
+                { label: 'User Accounts', icon: 'user-group', href: '/users' },
+                { label: 'System Settings', icon: 'cog-6-tooth', href: '/settings' },
+                { label: 'Email Templates', icon: 'envelope', href: '/email-templates' },
             ],
         },
     ],
@@ -360,32 +380,23 @@ navByRole.super_admin = [
         ],
     },
     {
+        section: 'Locations',
+        items: [
+            { label: 'Locations', icon: 'map-pin', href: '/locations' },
+        ],
+    },
+    {
         section: 'Configuration',
         items: [
-            { label: 'Schools', icon: 'building-office', href: '/schools' },
             { label: 'Signatories', icon: 'identification', href: '/signatories' },
-            { label: 'Testing Centers', icon: 'map-pin', href: '/field-offices' },
             { label: 'Letterheads', icon: 'document-text', href: '/letterheads' },
             { label: 'Fee Management', icon: 'scale', href: '/fee-schedules' },
         ],
     },
     {
-        section: 'Communications',
+        section: 'Tools',
         items: [
-            { label: 'Email Templates', icon: 'envelope', href: '/email-templates' },
-        ],
-    },
-    {
-        section: 'Administration',
-        items: [
-            { label: 'User Accounts', icon: 'user-group', href: '/users' },
             { label: 'QR Scanner', icon: 'qr-code', href: '/scanner' },
-        ],
-    },
-    {
-        section: 'Monitoring',
-        items: [
-            { label: 'Audit Logs', icon: 'eye', href: '/audit-logs' },
         ],
     },
     {
@@ -398,15 +409,23 @@ navByRole.super_admin = [
         ],
     },
     {
-        section: 'System',
+        section: 'Monitoring',
         items: [
+            { label: 'Audit Logs', icon: 'eye', href: '/audit-logs' },
+        ],
+    },
+    {
+        section: 'Administration',
+        items: [
+            { label: 'User Accounts', icon: 'user-group', href: '/users' },
             { label: 'System Settings', icon: 'cog-6-tooth', href: '/settings' },
+            { label: 'Email Templates', icon: 'envelope', href: '/email-templates' },
         ],
     },
 ];
 
 /*
- * Dual-role staff (a Testing Center Staff who also proctors, a Director who
+ * Dual-role staff (a Field Office Staff who also proctors, a Director who
  * chairs the REC) hold one account with two hats. `workspace` says which is on;
  * it changes navigation and the dashboard only — every page behind these links
  * is still gated on the real role server-side. See App\Support\Workspace.

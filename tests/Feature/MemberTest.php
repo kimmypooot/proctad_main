@@ -140,7 +140,7 @@ class MemberTest extends TestCase
         $member = Member::factory()->create(['field_office_id' => $this->leyte->id]);
 
         // Management is region-wide oversight only. Field Directors run their own
-        // Testing Center's operations and are covered separately below.
+        // Field Office's operations and are covered separately below.
         $user = $this->staff(UserRole::DirectorIv);
 
         $this->actingAs($user)->get("/members/{$member->id}")->assertRedirect('/members');
@@ -152,7 +152,7 @@ class MemberTest extends TestCase
     }
 
     /**
-     * Field Directors operate their own Testing Center alongside FO Admin staff.
+     * Field Directors operate their own Field Office alongside FO Admin staff.
      * The scoping half matters most: every controller scope keys off
      * isFieldOfficeScoped(), so a Director must not reach another office's data.
      */
@@ -172,7 +172,7 @@ class MemberTest extends TestCase
         $this->actingAs($director)->get("/members/{$own->id}/details")->assertOk();
         $this->actingAs($director)->delete("/members/{$own->id}")->assertRedirect();
 
-        // But not another Testing Center's. Deleting is blocked by the policy;
+        // But not another Field Office's. Deleting is blocked by the policy;
         // creating is blocked one layer earlier, by the field-office scope rule
         // on StoreMemberRequest — different mechanisms, same boundary.
         $this->actingAs($director)->delete("/members/{$other->id}")->assertForbidden();

@@ -17,7 +17,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 
 /**
  * Per-room Proctor / Room Examiner / Supervising Examiner breakdown for one
- * examination, optionally scoped to a single testing center and/or filtered
+ * examination, optionally scoped to a single venue and/or filtered
  * to complete/incomplete rooms — mirrors whatever the admin has filtered on
  * the Assign Rooms step. Formatted for printing (title block, bold header,
  * autofilter, incomplete-row highlight, landscape print setup).
@@ -40,7 +40,7 @@ class RoomAssignmentsExport implements FromCollection, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['Testing Center', 'Room Number', 'Capacity', 'Designation', 'Proctor', 'Room Examiner', 'Supervising Examiner', 'Status'];
+        return ['Venue', 'Room Number', 'Capacity', 'Designation', 'Proctor', 'Room Examiner', 'Supervising Examiner', 'Status'];
     }
 
     public function map($row): array
@@ -82,7 +82,7 @@ class RoomAssignmentsExport implements FromCollection, WithHeadings, WithMapping
 
                 $sheet->mergeCells("A2:{$lastColumn}2");
                 $subtitle = implode('  ·  ', array_filter([
-                    $this->venueLabel ? "Testing Center: {$this->venueLabel}" : 'All Testing Centers',
+                    $this->venueLabel ? "Venue: {$this->venueLabel}" : 'All Venues',
                     $this->statusFilter !== 'all' ? 'Status: '.ucfirst($this->statusFilter) : null,
                     'Generated '.now()->format('M j, Y g:i A'),
                 ]));

@@ -129,7 +129,7 @@ class ExaminationTest extends TestCase
         $venueOffice = FieldOffice::create(['name' => 'Eastern Visayas', 'code' => 'EV']);
         $assigneeOffice = FieldOffice::create(['name' => 'Northern Samar', 'code' => 'NS']);
         $exam = Examination::factory()->create();
-        $school = School::factory()->create(['field_office_id' => $venueOffice->id]);
+        $school = School::factory()->forFieldOffice($venueOffice->id)->create();
         $venue = ExaminationSchool::factory()->create(['examination_id' => $exam->id, 'school_id' => $school->id]);
         $room = ExamRoom::factory()->create(['examination_school_id' => $venue->id, 'room_number' => 'Room-001']);
 

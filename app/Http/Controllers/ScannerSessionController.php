@@ -43,13 +43,13 @@ class ScannerSessionController extends Controller
 
         $user = $request->user();
 
-        // A venue belongs to a Testing Center; an FO-scoped issuer must not be
+        // A venue belongs to a Field Office; an FO-scoped issuer must not be
         // able to hand out a link into someone else's.
         if ($venueId = $validated['examination_school_id'] ?? null) {
             $venue = ExaminationSchool::with('school')->findOrFail($venueId);
 
             abort_if(
-                $user->role->isFieldOfficeScoped() && $user->field_office_id !== $venue->school?->field_office_id,
+                $user->role->isFieldOfficeScoped() && ! $venue->school?->handledByOffice($user->field_office_id),
                 403,
             );
         }

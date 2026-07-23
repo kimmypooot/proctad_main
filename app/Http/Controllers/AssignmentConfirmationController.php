@@ -92,7 +92,7 @@ class AssignmentConfirmationController extends Controller
         if (! $recorded) {
             // Responses are deliberately one-shot. Say where to go instead of
             // leaving the member at a dead end with no recourse.
-            return back()->with('error', 'You have already responded to this assignment. To change your response, please contact your Testing Center.');
+            return back()->with('error', 'You have already responded to this assignment. To change your response, please contact your Field Office.');
         }
 
         return back()->with('success', $confirmed

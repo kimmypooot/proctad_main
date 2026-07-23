@@ -49,7 +49,7 @@ class ExaminationController extends Controller
         ])
             ->with(['venues' => function ($query) use ($foScoped, $user) {
                 $query->with('rooms:id,examination_school_id')
-                    ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->where('field_office_id', $user->field_office_id)));
+                    ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->forFieldOffice($user->field_office_id)));
             }])
             ->orderByDesc('exam_date')
             ->get();
@@ -177,6 +177,10 @@ class ExaminationController extends Controller
                     'marked_absent_at' => $assignment->marked_absent_at?->format('M d, Y H:i'),
                     'marked_absent_by' => $assignment->markedAbsentBy?->name,
                     'is_alternate' => $assignment->role === ExamRole::AlternateExaminer,
+                    // Only room-floor seats (Supervising Examiner, Room Examiner,
+                    // Proctor) can be marked absent and covered by an alternate;
+                    // REC/LEC committee seats are staffed from a different pool.
+                    'is_coverable' => $assignment->role->isCoverable(),
                     'covering_for' => $assignment->coveringFor === null ? null : [
                         'id' => $assignment->coveringFor->id,
                         'member_name' => $assignment->coveringFor->member?->name,
@@ -248,8 +252,8 @@ class ExaminationController extends Controller
             ]);
 
         $venues = $examination->venues()
-            ->with('school:id,name,municipality,field_office_id', 'rooms', 'oepAssignments.personnel:id,oep_id,first_name,middle_name,last_name,suffix,personnel_type')
-            ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->where('field_office_id', $user->field_office_id)))
+            ->with('school:id,name,testing_center_id', 'school.testingCenter:id,name', 'school.testingCenter.fieldOffices:id', 'rooms', 'oepAssignments.personnel:id,oep_id,first_name,middle_name,last_name,suffix,personnel_type')
+            ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->forFieldOffice($user->field_office_id)))
             ->get()
             ->map(function (ExaminationSchool $venue) use ($roomAssignments, $roomRoles) {
                 $normalizedAssignments = $roomAssignments->filter(fn ($a) => $a['examination_school_id'] === $venue->id);
@@ -270,11 +274,15 @@ class ExaminationController extends Controller
                 return [
                     'id' => $venue->id,
                     'school_name' => $venue->school?->name,
-                    'municipality' => $venue->school?->municipality,
+                    'municipality' => $venue->school?->testingCenter?->name,
                     // The testing center this venue sits under — lets the LEC
                     // covered-schools picker offer only same-center venues,
                     // matching coveredSchoolJurisdictionRule.
-                    'field_office_id' => $venue->school?->field_office_id,
+                    'testing_center_id' => $venue->school?->testing_center_id,
+                    // Offices that handle this venue's testing center — the
+                    // room-role picker uses it to hide confined staff whose
+                    // office isn't one of them (mirrors staffJurisdictionRule).
+                    'field_office_ids' => $venue->school?->testingCenter?->fieldOffices->pluck('id') ?? [],
                     'rooms' => $venue->rooms->map(fn ($room) => [
                         'id' => $room->id,
                         'room_number' => $room->room_number,
@@ -380,8 +388,8 @@ class ExaminationController extends Controller
         $roomRoles = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
 
         $venues = $examination->venues()
-            ->with('school:id,name,field_office_id', 'rooms')
-            ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->where('field_office_id', $user->field_office_id)))
+            ->with('school:id,name', 'rooms')
+            ->when($foScoped, fn ($q) => $q->whereHas('school', fn ($s) => $s->forFieldOffice($user->field_office_id)))
             ->when(! empty($validated['venue_id']), fn ($q) => $q->where('id', $validated['venue_id']))
             ->get();
 

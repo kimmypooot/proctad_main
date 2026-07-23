@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * Bulks up Member data with a realistic 6-month registration spread so the
- * admin dashboard's analytics (trend chart, per-Testing-Center breakdown,
+ * admin dashboard's analytics (trend chart, per-Field-Office breakdown,
  * status breakdown, recent registrations feed) have something to show
  * beyond MemberSeeder's flat 18-member same-day baseline. Not part of the
  * main DatabaseSeeder chain — run on demand:
@@ -31,7 +31,7 @@ class DashboardDemoDataSeeder extends Seeder
         $offices = FieldOffice::where('code', '!=', 'RO8')->get();
 
         if ($offices->isEmpty()) {
-            $this->command?->warn('No Testing Center field offices found — run FieldOfficeSeeder first.');
+            $this->command?->warn('No field offices found — run FieldOfficeSeeder first.');
 
             return;
         }

@@ -24,6 +24,6 @@ class ExaminationSchoolPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $venue->school?->field_office_id;
+            && $venue->school?->handledByOffice($user->field_office_id);
     }
 }

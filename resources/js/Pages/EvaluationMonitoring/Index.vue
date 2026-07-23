@@ -80,7 +80,7 @@ watch([examinationId, fieldOfficeId, role, status], applyFilters);
             <SelectInput
                 v-if="fieldOffices"
                 v-model="fieldOfficeId"
-                label="Testing Center"
+                label="Field Office"
                 placeholder="All field offices"
                 :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
             />
@@ -109,7 +109,7 @@ watch([examinationId, fieldOfficeId, role, status], applyFilters);
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>
                         <th class="px-3 py-2">Member</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Testing Center</th>
+                        <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
                         <th class="px-3 py-2">Designation</th>
                         <th class="hidden px-3 py-2 md:table-cell">Venue / Room</th>
                         <th class="px-3 py-2">Status</th>

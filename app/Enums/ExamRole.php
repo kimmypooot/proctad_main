@@ -14,7 +14,7 @@ enum ExamRole: string
     case RecMember = 'rec_member';
     case RecStaffAssistant = 'rec_staff_assistant';
 
-    // Local (Testing Center) Examination Committee
+    // Local (Field Office) Examination Committee
     case LecChair = 'lec_chair';
     case LecCoChair = 'lec_co_chair';
     case LecMember = 'lec_member';
@@ -74,11 +74,11 @@ enum ExamRole: string
 
     /**
      * REC (all), LEC (all), and Chief Examiner for Investigation are assigned
-     * to exactly one testing center (their duty station) but reference
+     * to exactly one field office (their duty station) but reference
      * multiple schools they're responsible for monitoring — those covered
      * schools are pre-determined (no separate confirmation) but each still
      * needs its own attendance scan/manual entry, tracked independently of
-     * the testing-center attendance that drives certificate issuance.
+     * the field-office attendance that drives certificate issuance.
      */
     public function isCoverageRole(): bool
     {
@@ -130,5 +130,31 @@ enum ExamRole: string
     public function isEvaluable(): bool
     {
         return in_array($this, self::evaluableCases(), true);
+    }
+
+    /**
+     * Seats an Alternate Examiner from the venue's standby pool can be called
+     * in to fill when the assignee does not report.
+     *
+     * Only the room-floor duties an alternate is physically able to take over —
+     * Supervising Examiner, Room Examiner, Proctor. REC/LEC staff a testing
+     * center or the region as a committee and are never covered from a single
+     * venue's alternate pool, so they must not be offered a "mark absent / call
+     * an alternate" prompt on the scanner.
+     *
+     * @return array<int, self>
+     */
+    public static function coverableCases(): array
+    {
+        return [
+            self::SupervisingExaminer,
+            self::RoomExaminer,
+            self::Proctor,
+        ];
+    }
+
+    public function isCoverable(): bool
+    {
+        return in_array($this, self::coverableCases(), true);
     }
 }

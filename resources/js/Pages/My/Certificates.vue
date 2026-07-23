@@ -81,7 +81,7 @@ const closeViewer = () => (viewing.value = null);
             <EmptyState
                 icon="document-check"
                 title="No PROCTAD record linked to your account"
-                description="Your certificates become available once your Testing Center registers you in the PROCTAD registry."
+                description="Your certificates become available once your Field Office registers you in the PROCTAD registry."
             />
         </div>
 

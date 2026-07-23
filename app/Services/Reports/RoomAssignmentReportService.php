@@ -34,7 +34,7 @@ class RoomAssignmentReportService
         $warnings = [];
 
         if ($proctors->isEmpty()) {
-            $blocking[] = 'No confirmed Proctor assignments with a room found for this examination'.($venueId ? ' and testing center.' : '.');
+            $blocking[] = 'No confirmed Proctor assignments with a room found for this examination'.($venueId ? ' and venue.' : '.');
         }
 
         $supervisingExaminersByRoom = $this->supervisingExaminersByRoom($examination, $proctors);
@@ -53,7 +53,7 @@ class RoomAssignmentReportService
 
         if ($proctors->isEmpty()) {
             throw new ReportPreconditionException(
-                'No confirmed Proctor assignments with a room found for this examination'.($venueId ? ' and testing center.' : '.')
+                'No confirmed Proctor assignments with a room found for this examination'.($venueId ? ' and venue.' : '.')
             );
         }
 

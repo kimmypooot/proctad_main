@@ -16,7 +16,7 @@ defineProps({
     followUp: {
         type: String,
         default:
-            'Please contact your Testing Center and ask them to send a new confirmation request. Your assignment itself has not been cancelled.',
+            'Please contact your Field Office and ask them to send a new confirmation request. Your assignment itself has not been cancelled.',
     },
 });
 </script>

@@ -130,7 +130,7 @@ const statusVariant = computed(() => ({
                     </div>
 
                     <p v-else-if="alreadyResponded" class="mt-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
-                        Your response has been recorded. To change it, please contact your Testing Center.
+                        Your response has been recorded. To change it, please contact your Field Office.
                     </p>
 
                     <div v-if="!alreadyResponded" class="mt-6">
@@ -194,7 +194,7 @@ const statusVariant = computed(() => ({
                     </div>
 
                     <p class="mt-8 border-t border-slate-100 pt-4 text-xs leading-relaxed text-slate-400">
-                        If you did not expect this assignment, please contact your Testing Center.
+                        If you did not expect this assignment, please contact your Field Office.
                     </p>
                 </div>
             </div>

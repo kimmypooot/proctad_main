@@ -29,7 +29,7 @@ enum UserRole: string
             self::DirectorIv => 'Regional Director IV',
             self::DirectorIii => 'Assistant Regional Director III',
             self::FieldDirector => 'Field Director / Caretaker',
-            self::FoAdmin => 'Testing Center Staff',
+            self::FoAdmin => 'Field Office Staff',
             self::Member => 'PROCTAD Member',
         };
     }

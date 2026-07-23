@@ -62,7 +62,40 @@ const save = (row) => {
         <div class="mt-6 space-y-8">
             <section v-for="group in examRoleGroups" :key="`exam-role-${group.key}`">
                 <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ group.label }}</h2>
-                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <!-- Mobile (below md): a stacked card per rate. -->
+                <div class="space-y-2 md:hidden">
+                    <div
+                        v-for="row in group.rows"
+                        :key="`m-${row.payee_value}`"
+                        class="rounded-xl border border-slate-200 bg-white p-4"
+                    >
+                        <p class="font-medium text-slate-900">
+                            {{ row.label }}
+                            <BaseBadge v-if="!row.configured" variant="warning" size="xs" class="ml-2">Not set</BaseBadge>
+                        </p>
+                        <div class="mt-2 flex items-center gap-2">
+                            <input
+                                v-model.number="formFor(row).amount"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                class="w-32 rounded-md border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                :disabled="!can.manage"
+                            >
+                            <button
+                                v-if="can.manage"
+                                type="button"
+                                class="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                                :disabled="formFor(row).processing"
+                                @click="save(row)"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
                         <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>
@@ -106,7 +139,40 @@ const save = (row) => {
 
             <section v-for="group in personnelTypeGroups" :key="`personnel-type-${group.key}`">
                 <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ group.label }}</h2>
-                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <!-- Mobile (below md): a stacked card per rate. -->
+                <div class="space-y-2 md:hidden">
+                    <div
+                        v-for="row in group.rows"
+                        :key="`m-${row.payee_value}`"
+                        class="rounded-xl border border-slate-200 bg-white p-4"
+                    >
+                        <p class="font-medium text-slate-900">
+                            {{ row.label }}
+                            <BaseBadge v-if="!row.configured" variant="warning" size="xs" class="ml-2">Not set</BaseBadge>
+                        </p>
+                        <div class="mt-2 flex items-center gap-2">
+                            <input
+                                v-model.number="formFor(row).amount"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                class="w-32 rounded-md border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                :disabled="!can.manage"
+                            >
+                            <button
+                                v-if="can.manage"
+                                type="button"
+                                class="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                                :disabled="formFor(row).processing"
+                                @click="save(row)"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
                         <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>

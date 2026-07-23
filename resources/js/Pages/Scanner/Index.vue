@@ -472,6 +472,41 @@ const submitManualFallback = () => {
             },
         });
 };
+
+/* --- Room attendance map ---
+ * Per-room fill status for the selected venue. A room is "filled" once all its
+ * seats (Supervising Examiner, Room Examiner, Proctor) have reported. One
+ * Supervising Examiner spans a group of rooms server-side, so they show present
+ * in every room of their group at once. */
+const SEAT_ABBREV = {
+    'Supervising Examiner': 'SE',
+    'Room Examiner': 'RE',
+    Proctor: 'P',
+};
+
+const roomStatus = (room) => {
+    if (room.present_count === room.required_count) return 'filled';
+    if (room.present_count > 0) return 'partial';
+    return 'awaiting';
+};
+
+const roomStatusMeta = {
+    filled: { label: 'Filled', badge: 'bg-emerald-100 text-emerald-800', wrap: 'border-emerald-200 bg-emerald-50/50' },
+    partial: { label: 'Partial', badge: 'bg-amber-100 text-amber-800', wrap: 'border-amber-200 bg-amber-50/40' },
+    awaiting: { label: 'Awaiting', badge: 'bg-slate-100 text-slate-500', wrap: 'border-slate-200 bg-white' },
+};
+
+const seatMeta = (seat) => {
+    if (seat.present) return { icon: 'check-circle', class: 'bg-emerald-50 text-emerald-700' };
+    if (seat.assigned) return { icon: 'clock', class: 'bg-amber-50 text-amber-700' };
+    return { icon: null, class: 'bg-slate-50 text-slate-400' };
+};
+
+// The live-attendance panel splits into two tabs — the running tally + recent
+// scans, and the per-room fill map — so only one renders at a time. The Map tab
+// exists only once the venue has rooms.
+const activeTab = ref('attendance');
+const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.total));
 </script>
 
 <template>
@@ -489,18 +524,18 @@ const submitManualFallback = () => {
              through" apart from "the queue panel isn't rendering". -->
         <div
             v-if="isPublic"
-            class="sticky top-0 z-20 -mx-4 mb-4 border-y px-4 py-2.5 sm:-mx-6 sm:px-6"
+            class="sticky top-0 z-20 -mx-4 mb-5 border-y px-4 py-3 sm:-mx-6 sm:px-6"
             :class="syncTones[syncStatus.tone]"
             role="status"
             aria-live="polite"
         >
-            <div class="flex items-center gap-2.5">
+            <div class="flex items-center gap-3">
                 <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="syncStatus.dot" />
                 <p class="min-w-0 flex-1 truncate text-sm font-semibold">{{ syncStatus.label }}</p>
                 <button
                     v-if="pendingScans.length"
                     type="button"
-                    class="shrink-0 rounded-lg bg-white/70 px-3 py-1.5 text-xs font-bold ring-1 ring-black/5 disabled:opacity-50"
+                    class="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-white/80 px-4 py-2 text-xs font-bold ring-1 ring-black/5 disabled:opacity-50"
                     :disabled="syncing"
                     @click="syncNow"
                 >
@@ -522,7 +557,7 @@ const submitManualFallback = () => {
 
         <div class="grid gap-6" :class="isPublic ? 'mt-6' : 'mt-6 lg:grid-cols-2'">
             <!-- Scanner panel -->
-            <div class="rounded-xl border border-slate-200 bg-white p-6">
+            <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
                 <!-- Public link: the event and venue are fixed by the token and
                      shown in the shell header, so no pickers here. -->
                 <div v-if="!isPublic" class="flex items-center gap-2">
@@ -768,13 +803,44 @@ const submitManualFallback = () => {
 
             <!-- Result + live attendance panel -->
             <div class="space-y-6">
-                <div v-if="attendanceSummary" class="rounded-xl border border-slate-200 bg-white p-6">
-                    <div class="flex items-baseline justify-between">
+                <div v-if="attendanceSummary" class="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+                    <!-- Two views of the same venue behind tabs, so neither has
+                         to scroll past the other on a phone. A full-width
+                         segmented control gives each a big, thumb-friendly
+                         target. The Map tab appears only once the venue has rooms. -->
+                    <div v-if="hasRoomMap" class="flex gap-1 rounded-xl bg-slate-100 p-1">
+                        <button
+                            type="button"
+                            class="min-h-10 flex-1 rounded-lg px-3 text-sm font-semibold transition-colors"
+                            :class="activeTab === 'attendance' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
+                            @click="activeTab = 'attendance'"
+                        >
+                            Live Attendance
+                        </button>
+                        <button
+                            type="button"
+                            class="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors"
+                            :class="activeTab === 'map' ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'"
+                            @click="activeTab = 'map'"
+                        >
+                            Attendance Map
+                            <span
+                                class="rounded-full px-1.5 text-[0.7rem] font-bold"
+                                :class="activeTab === 'map' ? 'bg-brand-100 text-brand-700' : 'bg-slate-200 text-slate-500'"
+                            >
+                                {{ attendanceSummary.roomMap.filled }}/{{ attendanceSummary.roomMap.total }}
+                            </span>
+                        </button>
+                    </div>
+                    <div v-else class="flex items-baseline justify-between">
                         <h2 class="text-base font-semibold text-slate-900">Live Attendance</h2>
                         <p v-if="isPublic" class="text-xs font-semibold text-slate-400">
                             {{ Math.round((attendanceSummary.present / Math.max(attendanceSummary.total, 1)) * 100) }}% checked in
                         </p>
                     </div>
+
+                    <!-- Live Attendance tab -->
+                    <div v-show="!hasRoomMap || activeTab === 'attendance'">
 
                     <!-- Public: a progress bar plus three numbers reads faster on
                          a phone than three stat cards stacked down the screen. -->
@@ -859,7 +925,7 @@ const submitManualFallback = () => {
                                         <BaseButton
                                             v-if="!seat.absent"
                                             variant="outline"
-                                            size="sm"
+                                            :size="isPublic ? 'md' : 'sm'"
                                             :disabled="coverBusy || !isOnline"
                                             @click="markAbsent(seat)"
                                         >
@@ -868,7 +934,7 @@ const submitManualFallback = () => {
                                         <BaseButton
                                             v-else-if="!seat.covered_by"
                                             variant="secondary"
-                                            size="sm"
+                                            :size="isPublic ? 'md' : 'sm'"
                                             :disabled="coverBusy || !isOnline || !cover.alternates.length"
                                             @click="openCover(seat)"
                                         >
@@ -914,6 +980,56 @@ const submitManualFallback = () => {
                             No Alternate Examiner is on standby at this venue.
                         </p>
                     </template>
+                    </div>
+                    <!-- /Live Attendance tab -->
+
+                    <!-- Attendance Map tab: per-room fill status. v-if keeps its
+                         roomMap references safe when the venue has no rooms. -->
+                    <div v-if="hasRoomMap" v-show="activeTab === 'map'" class="mt-4">
+                        <div class="flex items-baseline justify-between">
+                            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Room Attendance</h3>
+                            <span class="text-xs font-semibold text-slate-500">
+                                {{ attendanceSummary.roomMap.filled }}/{{ attendanceSummary.roomMap.total }} rooms filled
+                            </span>
+                        </div>
+                        <!-- On a phone the map is its tab's whole content, so let
+                             it flow with the page rather than trap a scroll area
+                             inside another; cap it only on larger split layouts. -->
+                        <ul class="mt-3 space-y-2 sm:max-h-[32rem] sm:overflow-y-auto">
+                            <li
+                                v-for="room in attendanceSummary.roomMap.rooms"
+                                :key="room.id"
+                                class="rounded-lg border p-2.5"
+                                :class="roomStatusMeta[roomStatus(room)].wrap"
+                            >
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="min-w-0 truncate text-sm font-semibold text-slate-800">
+                                        {{ room.room_number }}<span v-if="room.designation" class="font-normal text-slate-400"> · {{ room.designation }}</span>
+                                    </p>
+                                    <span
+                                        class="shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] font-bold"
+                                        :class="roomStatusMeta[roomStatus(room)].badge"
+                                    >
+                                        {{ room.present_count }}/{{ room.required_count }} {{ roomStatusMeta[roomStatus(room)].label }}
+                                    </span>
+                                </div>
+                                <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                    <span
+                                        v-for="seat in room.seats"
+                                        :key="seat.role_label"
+                                        class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.7rem] font-medium"
+                                        :class="seatMeta(seat).class"
+                                        :title="seat.role_label"
+                                    >
+                                        <AppIcon v-if="seatMeta(seat).icon" :name="seatMeta(seat).icon" class="h-3 w-3" />
+                                        <span class="font-bold">{{ SEAT_ABBREV[seat.role_label] }}</span>
+                                        <template v-if="seat.name"> · {{ seat.name }}</template>
+                                        <template v-else> · unassigned</template>
+                                    </span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- Public mode reads its verdict from ScanResultHero at the top

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\UserRole;
 use App\Models\FieldOffice;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -13,24 +14,52 @@ class FieldOfficeTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_index_is_visible_to_esd_admin_but_not_fo_admin_or_members(): void
+    public function test_locations_counts_staff_at_shared_testing_centers(): void
+    {
+        $leyte1 = FieldOffice::factory()->create(['name' => 'Leyte I']);
+        $leyte2 = FieldOffice::factory()->create(['name' => 'Leyte II']);
+
+        // One shared center; four staff sit under Leyte II, none under Leyte I.
+        $center = TestingCenter::factory()->create(['name' => 'Tacloban City']);
+        $center->fieldOffices()->attach([$leyte1->id, $leyte2->id]);
+        User::factory()->count(4)->create(['role' => UserRole::FoAdmin, 'field_office_id' => $leyte2->id]);
+
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+
+        // Both offices report the shared pool of four, not 0 vs 4.
+        $this->actingAs($admin)
+            ->get('/locations')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('fieldOffices.0.name', 'Leyte I')
+                ->where('fieldOffices.0.users_count', 4)
+                ->where('fieldOffices.1.name', 'Leyte II')
+                ->where('fieldOffices.1.users_count', 4)
+                ->where('testingCenters.0.users_count', 4));
+    }
+
+    public function test_locations_shows_field_offices_and_gates_management(): void
     {
         $esdAdmin = User::factory()->create(['role' => UserRole::EsdAdmin]);
         FieldOffice::factory()->count(2)->create();
 
+        // Admins browse every field office and may manage them.
         $this->actingAs($esdAdmin)
-            ->get('/field-offices')
+            ->get('/locations')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Settings/FieldOffices/Index')
+                ->component('Locations/Index')
                 ->has('fieldOffices', 2)
-                ->where('can.manage', true));
+                ->where('can.manageFieldOffices', true));
 
+        // Field-office staff can browse Locations but not manage field offices.
         $foAdmin = User::factory()->create(['role' => UserRole::FoAdmin]);
-        $this->actingAs($foAdmin)->get('/field-offices')->assertForbidden();
+        $this->actingAs($foAdmin)
+            ->get('/locations')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('can.manageFieldOffices', false));
 
         $member = User::factory()->create(['role' => UserRole::Member]);
-        $this->actingAs($member)->get('/field-offices')->assertForbidden();
+        $this->actingAs($member)->get('/locations')->assertForbidden();
     }
 
     public function test_super_admin_can_create_and_update(): void
@@ -78,5 +107,38 @@ class FieldOfficeTest extends TestCase
             'name' => 'Another Office',
             'code' => 'LEY',
         ])->assertSessionHasErrors('code');
+    }
+
+    public function test_super_admin_can_delete_an_empty_field_office(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $office = FieldOffice::factory()->create();
+
+        $this->actingAs($admin)->delete("/field-offices/{$office->id}")->assertRedirect();
+
+        $this->assertModelMissing($office);
+    }
+
+    public function test_field_office_with_dependents_cannot_be_deleted(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $office = FieldOffice::factory()->create();
+        // Members anchor the office, so deletion is refused (testing-center links
+        // just detach and never block).
+        \App\Models\Member::factory()->create(['field_office_id' => $office->id]);
+
+        $this->actingAs($admin)->delete("/field-offices/{$office->id}")
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertModelExists($office);
+    }
+
+    public function test_fo_admin_cannot_delete_field_office(): void
+    {
+        $foAdmin = User::factory()->create(['role' => UserRole::FoAdmin]);
+        $office = FieldOffice::factory()->create();
+
+        $this->actingAs($foAdmin)->delete("/field-offices/{$office->id}")->assertForbidden();
     }
 }

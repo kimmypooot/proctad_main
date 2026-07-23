@@ -87,17 +87,17 @@ class ExamAssignmentController extends Controller
                 return;
             }
 
-            $venueFieldOfficeId = ExaminationSchool::find($value)?->school?->field_office_id;
-            if ($venueFieldOfficeId === null) {
+            $handlingIds = ExaminationSchool::find($value)?->school?->handlingFieldOfficeIds() ?? [];
+            if ($handlingIds === []) {
                 return;
             }
 
             $outOfJurisdiction = Member::whereIn('id', array_filter($memberIds))
-                ->where('field_office_id', '!=', $venueFieldOfficeId)
+                ->whereNotIn('field_office_id', $handlingIds)
                 ->exists();
 
             if ($outOfJurisdiction) {
-                $fail('Proctor, Room Examiner, and Supervising Examiner assignments must stay within the venue\'s own field office.');
+                $fail('Proctor, Room Examiner, and Supervising Examiner assignments must stay within a field office that handles the venue\'s testing center.');
             }
         };
     }
@@ -109,8 +109,8 @@ class ExamAssignmentController extends Controller
      * REC (and Chief Examiner for Investigation) monitor region-wide, so their
      * covered schools are unrestricted. LEC is seated at one testing center —
      * which school inside it they end up at is decided later, but it never
-     * leaves that center — so every covered school must share the field office
-     * of the assignment's own venue.
+     * leaves that center — so every covered school must share the testing
+     * center of the assignment's own venue.
      */
     private function coveredSchoolJurisdictionRule(Request $request): \Closure
     {
@@ -126,7 +126,7 @@ class ExamAssignmentController extends Controller
             // Without a venue there is no center to measure the coverage
             // against, so the list cannot be validated rather than silently
             // accepted.
-            $centerId = ExaminationSchool::find($request->input('examination_school_id'))?->school?->field_office_id;
+            $centerId = ExaminationSchool::find($request->input('examination_school_id'))?->school?->testing_center_id;
 
             if ($centerId === null) {
                 $fail('Set this assignment\'s venue before choosing covered schools for a Local Examination Committee role.');
@@ -135,7 +135,7 @@ class ExamAssignmentController extends Controller
             }
 
             $outsideCenter = ExaminationSchool::whereIn('id', $value)
-                ->whereHas('school', fn ($q) => $q->where('field_office_id', '!=', $centerId))
+                ->whereHas('school', fn ($q) => $q->where('testing_center_id', '!=', $centerId))
                 ->exists();
 
             if ($outsideCenter) {
@@ -180,9 +180,9 @@ class ExamAssignmentController extends Controller
     }
 
     /**
-     * Confines field-office-scoped staff to their own testing center.
+     * Confines field-office-scoped staff to their own field office.
      *
-     * A Testing Center Staff or Field Director who is also an accredited member
+     * A Field Office Staff or Field Director who is also an accredited member
      * serves where they work — unlike the regional roles (Super Admin, ESD
      * Admin, the two directors), who may be assigned anywhere in the region,
      * and unlike ordinary members, whose only jurisdiction limit is the
@@ -209,13 +209,13 @@ class ExamAssignmentController extends Controller
                 return;
             }
 
-            $venueFieldOfficeId = ExaminationSchool::find($request->input('examination_school_id'))
-                ?->school?->field_office_id;
+            $venueSchool = ExaminationSchool::find($request->input('examination_school_id'))?->school;
+            $handlingIds = $venueSchool?->handlingFieldOfficeIds() ?? [];
 
             foreach ($members as $member) {
-                if ($venueFieldOfficeId === null) {
+                if ($venueSchool === null) {
                     $fail(sprintf(
-                        '%s is %s and can only be assigned to a venue within their own testing center, so this assignment needs one.',
+                        '%s is %s and can only be assigned to a venue within their own field office, so this assignment needs one.',
                         $member->name,
                         $member->user->role->label(),
                     ));
@@ -227,9 +227,9 @@ class ExamAssignmentController extends Controller
                 // own office is the fallback for an account with none set.
                 $ownOffice = $member->user->field_office_id ?? $member->field_office_id;
 
-                if ($ownOffice !== null && $ownOffice !== $venueFieldOfficeId) {
+                if ($ownOffice !== null && ! in_array($ownOffice, $handlingIds, true)) {
                     $fail(sprintf(
-                        '%s is %s and can only be assigned within their own testing center.',
+                        '%s is %s and can only be assigned within a field office that handles the venue\'s testing center.',
                         $member->name,
                         $member->user->role->label(),
                     ));
@@ -298,7 +298,7 @@ class ExamAssignmentController extends Controller
 
         $member = Member::findOrFail($validated['member_id']);
 
-        // FO Admins may only assign members of their own Testing Center.
+        // FO Admins may only assign members of their own Field Office.
         abort_if(
             $user->role->isFieldOfficeScoped() && $member->field_office_id !== $user->field_office_id,
             403,
@@ -565,7 +565,7 @@ class ExamAssignmentController extends Controller
                 fn (string $attribute, mixed $value, \Closure $fail) => $this
                     ->reservedSeatRule(is_string($value) ? $value : null)($attribute, $assignment->member_id, $fail),
                 // Also re-checked on edit: the venue can be moved out of a
-                // field-office-scoped member's own testing center here just as
+                // field-office-scoped member's own field office here just as
                 // easily as it can be set wrongly at creation.
                 $this->staffJurisdictionRule($request, [$assignment->member_id]),
             ],
@@ -632,12 +632,12 @@ class ExamAssignmentController extends Controller
         // venue's via venueJurisdictionRule, but isn't guaranteed for every
         // row (e.g. legacy data), and a venue's FO admin must always be able
         // to room-assign whoever the venue's own unassigned pool shows them.
-        $assignment->loadMissing('examinationSchool.school');
-        $venueFieldOfficeId = $assignment->examinationSchool?->school?->field_office_id;
+        $assignment->loadMissing('examinationSchool.school.testingCenter');
+        $venueSchool = $assignment->examinationSchool?->school;
 
         abort_unless(
             $request->user()->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)
-                || ($request->user()->role->isFieldOfficeScoped() && $request->user()->field_office_id === $venueFieldOfficeId),
+                || ($request->user()->role->isFieldOfficeScoped() && $venueSchool?->handledByOffice($request->user()->field_office_id)),
             403,
         );
 
@@ -768,7 +768,7 @@ class ExamAssignmentController extends Controller
 
     /**
      * Request a Designation Order for this assignment — queued for approval by
-     * the Field Director of the concerned Testing Center (spec 2.3).
+     * the Field Director of the concerned Field Office (spec 2.3).
      */
     public function requestDesignationOrder(
         Request $request,

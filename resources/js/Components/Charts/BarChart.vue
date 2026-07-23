@@ -46,7 +46,7 @@ const bars = computed(() => props.items.map((item, i) => {
         <table v-if="showTable" class="mt-4 w-full text-sm">
             <thead>
                 <tr class="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <th class="py-1.5">Testing Center</th>
+                    <th class="py-1.5">Field Office</th>
                     <th class="py-1.5 text-right">Members</th>
                 </tr>
             </thead>

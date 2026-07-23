@@ -44,7 +44,7 @@ class ExamAssignmentTest extends TestCase
     {
         return ExaminationSchool::factory()->create([
             'examination_id' => $this->exam->id,
-            'school_id' => School::factory()->create(['field_office_id' => $office->id])->id,
+            'school_id' => School::factory()->forFieldOffice($office->id)->create()->id,
         ]);
     }
 

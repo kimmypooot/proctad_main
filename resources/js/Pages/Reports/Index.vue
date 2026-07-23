@@ -65,7 +65,7 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
     <DashboardLayout>
         <DashboardPageHeader
             title="Reports & Statistics"
-            subtitle="Region-wide and Testing Center statistics — filter by Testing Center, year, exam type, and gender."
+            subtitle="Region-wide and Field Office statistics — filter by Field Office, year, exam type, and gender."
         />
 
         <!-- Filters -->
@@ -74,9 +74,9 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
                 <SelectInput
                     v-if="filterOptions.canPickFieldOffice"
                     v-model="form.field_office_id"
-                    label="Testing Center"
+                    label="Field Office"
                     optional
-                    placeholder="All Testing Centers"
+                    placeholder="All Field Offices"
                     :options="fieldOfficeOptions"
                 />
                 <SelectInput v-model="form.year" label="Year" optional placeholder="All Years" :options="yearOptions" />
@@ -117,7 +117,7 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
         <!-- Breakdowns -->
         <div class="mt-8 grid gap-6 lg:grid-cols-2">
             <div class="rounded-xl border border-slate-200 bg-white p-5">
-                <h2 class="text-base font-semibold text-slate-900">By Testing Center</h2>
+                <h2 class="text-base font-semibold text-slate-900">By Field Office</h2>
                 <table v-if="byFieldOffice.length" class="mt-3 w-full text-sm">
                     <tbody class="divide-y divide-slate-100">
                         <tr v-for="row in byFieldOffice" :key="row.label" class="transition-colors hover:bg-brand-50/40">

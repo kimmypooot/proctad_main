@@ -55,7 +55,7 @@ const clearSignature = () => {
 onBeforeUnmount(() => setSignaturePreview(null));
 
 const scopeOptions = [
-    { value: 'region', label: 'Region-wide (default for all Testing Centers)' },
+    { value: 'region', label: 'Region-wide (default for all Field Offices)' },
     ...props.fieldOffices.map((fo) => ({ value: fo.id, label: fo.name })),
 ];
 
@@ -128,7 +128,42 @@ const confirmDelete = () => {
             </template>
         </DashboardPageHeader>
 
-        <div v-if="signatories.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <!-- Mobile (below md): a card per signatory so the edit/remove actions stay on screen. -->
+        <div v-if="signatories.length" class="mt-6 space-y-3 md:hidden">
+            <div
+                v-for="signatory in signatories"
+                :key="`m-${signatory.id}`"
+                class="rounded-xl border border-slate-200 bg-white p-4"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="font-medium text-slate-900">{{ signatory.name }}</p>
+                        <p class="text-xs text-slate-500">{{ signatory.position }}</p>
+                    </div>
+                    <BaseBadge :variant="signatory.active ? 'success' : 'neutral'" class="shrink-0">
+                        {{ signatory.active ? 'Active' : 'Inactive' }}
+                    </BaseBadge>
+                </div>
+                <div class="mt-2 flex items-center gap-3">
+                    <BaseBadge :variant="signatory.field_office ? 'neutral' : 'brand'">
+                        {{ signatory.field_office?.name ?? 'Region-wide' }}
+                    </BaseBadge>
+                    <img
+                        v-if="signatory.signature_url"
+                        :src="signatory.signature_url"
+                        :alt="`${signatory.name} signature`"
+                        class="h-8 w-auto max-w-[140px] object-contain"
+                    >
+                    <span v-else class="text-xs text-slate-400">Signed by hand</span>
+                </div>
+                <div v-if="signatory.can_manage" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                    <IconButton icon="pencil" label="Edit" @click="openEdit(signatory)" />
+                    <IconButton icon="trash" label="Remove" variant="danger" @click="deleting = signatory" />
+                </div>
+            </div>
+        </div>
+
+        <div v-if="signatories.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <tr>

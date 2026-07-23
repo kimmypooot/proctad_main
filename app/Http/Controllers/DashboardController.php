@@ -101,13 +101,13 @@ class DashboardController extends Controller
      * SaaS-style analytics for the admin dashboard: a 6-month registration
      * trend, member status breakdown, and a recent-registrations feed.
      * Region-wide roles (Super Admin/ESD Admin) see the whole region plus a
-     * per-Testing-Center breakdown and can filter the recent-registrations
-     * feed to one office; Testing Center Staff (FO-scoped) see their own
+     * per-Field-Office breakdown and can filter the recent-registrations
+     * feed to one office; Field Office Staff (FO-scoped) see their own
      * office only, with a region-wide total alongside for context.
      */
     private function adminAnalytics(UserRole $role, User $user, Request $request): ?array
     {
-        // Field Directors run their Testing Center's operations alongside FO
+        // Field Directors run their Field Office's operations alongside FO
         // Admin staff, so they get the same operational analytics.
         if (! in_array($role, [UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector], true)) {
             return null;
@@ -396,7 +396,7 @@ class DashboardController extends Controller
             UserRole::SuperAdmin, UserRole::EsdAdmin => [
                 $this->stat('Active PROCTAD Members', $activeMembers()->count(), 'users', 'Region-wide', '/members'),
                 $this->stat('Examinations', Examination::count(), 'clipboard-check', 'All exam events', '/examinations'),
-                $this->stat('Testing Centers', FieldOffice::count(), 'building-office', 'RO VIII', '/field-offices'),
+                $this->stat('Field Offices', FieldOffice::count(), 'building-office', 'RO VIII', '/locations'),
                 $this->stat('System Users', User::where('role', '!=', UserRole::Member)->count(), 'user-circle', 'Staff accounts', '/users'),
             ],
             UserRole::DirectorIv, UserRole::DirectorIii => [
@@ -428,7 +428,7 @@ class DashboardController extends Controller
                     'Appearance & Designation Orders',
                     '/approvals',
                 ),
-                $this->stat('Active Members in Testing Center', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
+                $this->stat('Active Members in Field Office', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
                 $this->stat('Service Records', ExamAssignment::where('field_office_id', $user->field_office_id)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Approved This Month',
@@ -444,7 +444,7 @@ class DashboardController extends Controller
                 ),
             ],
             UserRole::FoAdmin => [
-                $this->stat('Active Members in Testing Center', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
+                $this->stat('Active Members in Field Office', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
                 $this->stat('Service Records', ExamAssignment::where('field_office_id', $user->field_office_id)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Issuance Requests',

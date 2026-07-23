@@ -45,14 +45,14 @@ class StoreMemberRequest extends FormRequest
     }
 
     /**
-     * Testing Center Admins can only register members in their own Testing Center.
+     * Field Office Admins can only register members in their own Field Office.
      */
     protected function fieldOfficeScopeRule(): \Closure
     {
         return function (string $attribute, mixed $value, \Closure $fail) {
             $user = $this->user();
             if ($user->role->isFieldOfficeScoped() && (int) $value !== $user->field_office_id) {
-                $fail('You can only manage members of your own Testing Center.');
+                $fail('You can only manage members of your own Field Office.');
             }
         };
     }
