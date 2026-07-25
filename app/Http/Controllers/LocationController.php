@@ -28,7 +28,7 @@ class LocationController extends Controller
         $scoped = $user->role->isFieldOfficeScoped();
 
         $fieldOffices = FieldOffice::query()
-            ->when($scoped, fn ($q) => $q->whereKey($user->field_office_id))
+            ->when($scoped, fn ($q) => $q->whereIn('id', $user->scopedFieldOfficeIds()))
             ->withCount(['testingCenters', 'members'])
             ->orderBy('name')
             ->get()

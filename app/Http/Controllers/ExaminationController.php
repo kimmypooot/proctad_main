@@ -43,9 +43,9 @@ class ExaminationController extends Controller
         $foScoped = $user->role->isFieldOfficeScoped();
 
         $examinations = Examination::withCount([
-            'assignments' => fn ($q) => $q->when($foScoped, fn ($q2) => $q2->where('field_office_id', $user->field_office_id)),
+            'assignments' => fn ($q) => $q->when($foScoped, fn ($q2) => $q2->whereIn('field_office_id', $user->scopedFieldOfficeIds())),
             'assignments as confirmed_assignments_count' => fn ($q) => $q->where('status', 'confirmed')
-                ->when($foScoped, fn ($q2) => $q2->where('field_office_id', $user->field_office_id)),
+                ->when($foScoped, fn ($q2) => $q2->whereIn('field_office_id', $user->scopedFieldOfficeIds())),
         ])
             ->with(['venues' => function ($query) use ($foScoped, $user) {
                 $query->with('rooms:id,examination_school_id')
@@ -129,7 +129,7 @@ class ExaminationController extends Controller
                 'coveringFor.member:id,first_name,middle_name,last_name,suffix',
                 'coveredBy.member:id,first_name,middle_name,last_name,suffix',
             )
-            ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
             ->get();
 
         $computedRatings = $ratingCalculator->computeForMany($assignmentModels);
@@ -204,24 +204,30 @@ class ExaminationController extends Controller
         $assignable = $user->can('create', ExamAssignment::class)
             ? Member::query()
                 ->where('status', 'active')
-                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                // Members are scoped by testing center, so staff of either Leyte
+                // office can draw on the whole Tacloban City roster. Regional
+                // office members join every pool: they serve region-wide.
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q
+                    ->where(fn ($q) => $q
+                        ->whereIn('testing_center_id', $user->scopedTestingCenterIds())
+                        ->orWhereHas('fieldOffice', fn ($o) => $o->where('is_regional', true))))
                 ->whereDoesntHave('assignments', fn ($q) => $q->where('examination_id', $examination->id))
                 ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
-                // For confined_to_office_id below — one query, not one per row.
-                ->with('user:id,role,field_office_id')
+                // For confined_to_center_id below — one query, not one per row.
+                ->with('user:id,role,field_office_id', 'fieldOffice:id,is_regional')
                 ->orderBy('last_name')
-                ->get(['id', 'user_id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'field_office_id'])
+                ->get(['id', 'user_id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'field_office_id', 'testing_center_id'])
                 ->map(fn (Member $member) => [
                     'id' => $member->id,
                     'label' => "{$member->name} ({$member->proctad_id})",
                     // Non-null for members who also hold a field-office-scoped
                     // staff post: they serve only where they work, so the
-                    // picker hides them unless the chosen venue is in that
-                    // office. Mirrors staffJurisdictionRule, which is the
+                    // picker hides them unless the chosen venue sits in one of
+                    // their centers. Mirrors staffJurisdictionRule, which is the
                     // actual guarantee — this only spares an admin from
                     // picking someone the server is going to refuse.
-                    'confined_to_office_id' => $member->user?->role?->isFieldOfficeScoped()
-                        ? ($member->user->field_office_id ?? $member->field_office_id)
+                    'confined_to_center_ids' => $member->user?->role?->isFieldOfficeScoped()
+                        ? $member->user->scopedTestingCenterIds()
                         : null,
                 ])
             : [];
@@ -279,10 +285,6 @@ class ExaminationController extends Controller
                     // covered-schools picker offer only same-center venues,
                     // matching coveredSchoolJurisdictionRule.
                     'testing_center_id' => $venue->school?->testing_center_id,
-                    // Offices that handle this venue's testing center — the
-                    // room-role picker uses it to hide confined staff whose
-                    // office isn't one of them (mirrors staffJurisdictionRule).
-                    'field_office_ids' => $venue->school?->testingCenter?->fieldOffices->pluck('id') ?? [],
                     'rooms' => $venue->rooms->map(fn ($room) => [
                         'id' => $room->id,
                         'room_number' => $room->room_number,
@@ -311,7 +313,7 @@ class ExaminationController extends Controller
         $availableOep = $user->can('create', OepAssignment::class)
             ? OtherExaminationPersonnel::query()
                 ->where('is_active', true)
-                ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
                 ->orderBy('last_name')
                 ->get(['id', 'first_name', 'middle_name', 'last_name', 'suffix', 'oep_id'])
                 ->map(fn (OtherExaminationPersonnel $oep) => ['value' => $oep->id, 'label' => "{$oep->name} ({$oep->oep_id})"])
@@ -320,7 +322,9 @@ class ExaminationController extends Controller
         $availableSchools = $user->can('create', ExaminationSchool::class)
             ? School::query()
                 ->where('is_active', true)
-                ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                // Schools have no field office of their own — they belong to a
+                // testing center, which one or more offices handle.
+                ->when($foScoped, fn ($q) => $q->whereIn('testing_center_id', $user->scopedTestingCenterIds()))
                 ->whereDoesntHave('examinationSchools', fn ($q) => $q->where('examination_id', $examination->id))
                 ->orderBy('name')
                 ->get(['id', 'name'])

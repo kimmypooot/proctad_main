@@ -34,7 +34,7 @@ class TrainingAssignmentController extends Controller
         $member = Member::findOrFail($validated['member_id']);
 
         abort_if(
-            $user->role->isFieldOfficeScoped() && $member->field_office_id !== $user->field_office_id,
+            $user->role->isFieldOfficeScoped() && ! $member->isWithinJurisdictionOf($user),
             403,
         );
 

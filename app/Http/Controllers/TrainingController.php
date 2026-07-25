@@ -31,7 +31,7 @@ class TrainingController extends Controller
         return Inertia::render('Trainings/Index', [
             'trainings' => Training::withCount('assignments')
                 ->with('fieldOffice:id,name', 'exam:id,title,exam_date')
-                ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
                 ->orderByDesc('training_date')
                 ->get()
                 ->map(fn (Training $training) => [
@@ -84,7 +84,7 @@ class TrainingController extends Controller
 
         $assignments = $training->assignments()
             ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix', 'fieldOffice:id,name,code')
-            ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
             ->get()
             ->map(fn (TrainingAssignment $assignment) => [
                 'id' => $assignment->id,
@@ -102,7 +102,7 @@ class TrainingController extends Controller
         $assignable = $user->can('create', TrainingAssignment::class)
             ? Member::query()
                 ->where('status', 'active')
-                ->when($foScoped, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
                 ->whereDoesntHave('trainingAssignments', fn ($q) => $q->where('training_id', $training->id))
                 ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
                 ->orderBy('last_name')

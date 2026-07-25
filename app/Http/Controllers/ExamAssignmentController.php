@@ -87,17 +87,24 @@ class ExamAssignmentController extends Controller
                 return;
             }
 
-            $handlingIds = ExaminationSchool::find($value)?->school?->handlingFieldOfficeIds() ?? [];
-            if ($handlingIds === []) {
+            $centerId = ExaminationSchool::find($value)?->school?->testing_center_id;
+            if ($centerId === null) {
                 return;
             }
 
+            // Members serve the testing center they were registered at, so the
+            // comparison is center to center — a member of either Leyte office
+            // may staff a Tacloban City room. Regional-office members are exempt:
+            // they serve region-wide and may be placed at any venue.
             $outOfJurisdiction = Member::whereIn('id', array_filter($memberIds))
-                ->whereNotIn('field_office_id', $handlingIds)
+                ->where(fn ($q) => $q
+                    ->where('testing_center_id', '!=', $centerId)
+                    ->orWhereNull('testing_center_id'))
+                ->whereDoesntHave('fieldOffice', fn ($q) => $q->where('is_regional', true))
                 ->exists();
 
             if ($outOfJurisdiction) {
-                $fail('Proctor, Room Examiner, and Supervising Examiner assignments must stay within a field office that handles the venue\'s testing center.');
+                $fail('Proctor, Room Examiner, and Supervising Examiner assignments must stay within the venue\'s testing center.');
             }
         };
     }
@@ -210,12 +217,12 @@ class ExamAssignmentController extends Controller
             }
 
             $venueSchool = ExaminationSchool::find($request->input('examination_school_id'))?->school;
-            $handlingIds = $venueSchool?->handlingFieldOfficeIds() ?? [];
+            $venueCenterId = $venueSchool?->testing_center_id;
 
             foreach ($members as $member) {
                 if ($venueSchool === null) {
                     $fail(sprintf(
-                        '%s is %s and can only be assigned to a venue within their own field office, so this assignment needs one.',
+                        '%s is %s and can only be assigned to a venue within their own jurisdiction, so this assignment needs one.',
                         $member->name,
                         $member->user->role->label(),
                     ));
@@ -223,13 +230,15 @@ class ExamAssignmentController extends Controller
                     return;
                 }
 
-                // The employment record is the authority; the registry record's
-                // own office is the fallback for an account with none set.
-                $ownOffice = $member->user->field_office_id ?? $member->field_office_id;
+                // The employment record is the authority — the centers their
+                // office serves. The registry record's own center is the
+                // fallback for a staff account with no office set.
+                $ownCenters = $member->user->scopedTestingCenterIds()
+                    ?: array_filter([$member->testing_center_id]);
 
-                if ($ownOffice !== null && ! in_array($ownOffice, $handlingIds, true)) {
+                if ($ownCenters !== [] && ! in_array($venueCenterId, $ownCenters, true)) {
                     $fail(sprintf(
-                        '%s is %s and can only be assigned within a field office that handles the venue\'s testing center.',
+                        '%s is %s and can only be assigned within a testing center they serve.',
                         $member->name,
                         $member->user->role->label(),
                     ));
@@ -298,9 +307,10 @@ class ExamAssignmentController extends Controller
 
         $member = Member::findOrFail($validated['member_id']);
 
-        // FO Admins may only assign members of their own Field Office.
+        // FO-scoped staff may only assign members within their jurisdiction —
+        // their own testing centers, plus region-wide members.
         abort_if(
-            $user->role->isFieldOfficeScoped() && $member->field_office_id !== $user->field_office_id,
+            $user->role->isFieldOfficeScoped() && ! $member->isWithinJurisdictionOf($user),
             403,
         );
 
@@ -371,7 +381,7 @@ class ExamAssignmentController extends Controller
         $members = Member::query()
             ->whereIn('id', $validated['member_ids'])
             ->where('status', 'active')
-            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->withinJurisdictionOf($user))
             ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
             ->get();
 
@@ -432,7 +442,8 @@ class ExamAssignmentController extends Controller
             ->all();
 
         $skippedMembers = Member::whereIn('id', $skippedIds)
-            ->get(['id', 'first_name', 'middle_name', 'last_name', 'suffix', 'status', 'field_office_id'])
+            ->with('fieldOffice:id,is_regional')
+            ->get(['id', 'first_name', 'middle_name', 'last_name', 'suffix', 'status', 'field_office_id', 'testing_center_id'])
             ->keyBy('id');
 
         $descriptions = collect($skippedIds)->map(function ($id) use ($skippedMembers, $alreadyAssigned, $blacklistedIds, $user) {
@@ -444,7 +455,7 @@ class ExamAssignmentController extends Controller
                 in_array($id, $blacklistedIds, true) => 'blacklisted',
                 $member === null => 'not found',
                 $member->status !== MemberStatus::Active => 'inactive',
-                $user->role->isFieldOfficeScoped() && $member->field_office_id !== $user->field_office_id => 'different field office',
+                $user->role->isFieldOfficeScoped() && ! $member->isWithinJurisdictionOf($user) => 'different testing center',
                 default => 'ineligible',
             };
 
@@ -479,7 +490,7 @@ class ExamAssignmentController extends Controller
 
         $assignments = ExamAssignment::whereIn('id', $validated['assignment_ids'])
             ->where('status', AssignmentStatus::Pending)
-            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
             ->get();
 
         foreach ($assignments as $assignment) {
@@ -680,7 +691,8 @@ class ExamAssignmentController extends Controller
         $assignment->loadMissing('examination', 'member');
 
         abort_if(
-            $user->role->isFieldOfficeScoped() && $assignment->field_office_id !== $user->field_office_id,
+            $user->role->isFieldOfficeScoped()
+                && ! in_array($assignment->field_office_id, $user->scopedFieldOfficeIds(), true),
             403,
         );
 

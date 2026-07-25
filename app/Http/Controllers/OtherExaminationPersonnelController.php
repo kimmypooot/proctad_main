@@ -31,7 +31,7 @@ class OtherExaminationPersonnelController extends Controller
 
         $personnel = OtherExaminationPersonnel::query()
             ->with('fieldOffice:id,name,code')
-            ->when(! $regionWide, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when(! $regionWide, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search')->trim();
                 $q->where(fn ($q) => $q
@@ -198,7 +198,7 @@ class OtherExaminationPersonnelController extends Controller
     {
         return FieldOffice::query()
             ->where(fn ($q) => $q->where('is_active', true)->when($currentId, fn ($q2) => $q2->orWhere('id', $currentId)))
-            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereKey($user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('id', $user->scopedFieldOfficeIds()))
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
     }

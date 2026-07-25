@@ -132,7 +132,7 @@ class Certificate extends Model
             ->whereIn('type', $types)
             ->when(
                 ! $user->role->isRegionWide(),
-                fn (Builder $q) => $q->where('field_office_id', $user->field_office_id),
+                fn (Builder $q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()),
             );
     }
 }

@@ -185,9 +185,12 @@ class StaffJurisdictionTest extends TestCase
             ->assertInertia(function (\Inertia\Testing\AssertableInertia $page) use ($confined, $regional, $ordinary) {
                 $byId = collect($page->toArray()['props']['assignableMembers'])->keyBy('id');
 
-                $this->assertSame($this->leyte->id, $byId[$confined->id]['confined_to_office_id']);
-                $this->assertNull($byId[$regional->id]['confined_to_office_id']);
-                $this->assertNull($byId[$ordinary->id]['confined_to_office_id']);
+                $this->assertSame(
+                    [$this->leyteVenue->school->testing_center_id],
+                    $byId[$confined->id]['confined_to_center_ids'],
+                );
+                $this->assertNull($byId[$regional->id]['confined_to_center_ids']);
+                $this->assertNull($byId[$ordinary->id]['confined_to_center_ids']);
             });
     }
 
