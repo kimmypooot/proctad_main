@@ -47,16 +47,25 @@ class LocationController extends Controller
 
         $testingCenters = TestingCenter::query()
             ->when($scoped, fn ($q) => $q->forFieldOffice($user->field_office_id))
-            ->with('fieldOffices:id')
+            ->with('fieldOffices:id,name')
             ->withCount(['schools', 'users'])
             ->orderBy('name')
             ->get()
             ->map(fn (TestingCenter $center) => [
                 ...$center->only('id', 'name', 'is_active'),
                 'field_office_ids' => $center->fieldOffices->pluck('id'),
+                // The office new registrants at this center are filed under.
+                // Only contested where a center is shared (Tacloban City), but
+                // shown everywhere so the routing is never a mystery.
+                'primary_field_office_id' => $center->fieldOffices
+                    ->firstWhere(fn ($office) => (bool) $office->pivot->is_primary)?->id,
+                'handling_offices' => $center->fieldOffices
+                    ->map(fn ($office) => $office->only('id', 'name'))
+                    ->values(),
                 'schools_count' => $center->schools_count,
                 'users_count' => $center->users_count,
                 'can_manage' => $user->can('update', $center),
+                'can_designate_primary' => $user->can('designatePrimary', $center),
             ]);
 
         $schools = School::query()

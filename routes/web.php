@@ -279,6 +279,11 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::get('/locations', [LocationController::class, 'index'])->name('locations.index');
         Route::resource('schools', SchoolController::class)->only('store', 'update', 'destroy');
         Route::resource('testing-centers', TestingCenterController::class)->only('store', 'update', 'destroy');
+        // Which office receives new registrations at a shared center — the
+        // hosting rotation. Separate from update(): a different authority
+        // decides it (see TestingCenterPolicy::designatePrimary).
+        Route::patch('/testing-centers/{testingCenter}/primary-office', [TestingCenterController::class, 'designatePrimary'])
+            ->name('testing-centers.primary-office');
 
         Route::resource('other-examination-personnel', OtherExaminationPersonnelController::class);
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/details', [OtherExaminationPersonnelController::class, 'details'])

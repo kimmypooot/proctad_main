@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FieldOffice;
 use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 
 class TestingCenterController extends Controller
 {
@@ -69,6 +71,37 @@ class TestingCenterController extends Controller
         $testingCenter->update($validated);
 
         return back()->with('success', 'Testing center updated.');
+    }
+
+    /**
+     * Hand intake for a shared center to one of its handling offices, which is
+     * how a hosting rotation is recorded. Only meaningful where a center is
+     * shared, but accepted for any center so the flag is never left unset.
+     */
+    public function designatePrimary(Request $request, TestingCenter $testingCenter): RedirectResponse
+    {
+        Gate::authorize('designatePrimary', $testingCenter);
+
+        $validated = $request->validate([
+            'field_office_id' => [
+                'required', 'integer',
+                // Must already handle this center — intake cannot be handed to
+                // an office that does not serve it.
+                Rule::exists('field_office_testing_center', 'field_office_id')
+                    ->where('testing_center_id', $testingCenter->id),
+            ],
+        ], [
+            'field_office_id.exists' => 'That field office does not handle this testing center.',
+        ]);
+
+        $testingCenter->designatePrimaryFieldOffice((int) $validated['field_office_id']);
+
+        $office = FieldOffice::find($validated['field_office_id']);
+
+        return back()->with(
+            'success',
+            "New registrations at {$testingCenter->name} now go to {$office->name}.",
+        );
     }
 
     public function destroy(TestingCenter $testingCenter): RedirectResponse
