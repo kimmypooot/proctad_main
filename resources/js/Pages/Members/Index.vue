@@ -5,11 +5,12 @@ import ViewMemberModal from './Partials/ViewMemberModal.vue';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BasePagination from '@/Components/BasePagination.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import SelectInput from '@/Components/SelectInput.vue';
-import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { useToasts } from '@/Composables/useToasts';
 import { messageFor, SessionExpiredError } from '@/Composables/useJsonFetch';
@@ -153,7 +154,7 @@ const downloadSelectedIdCards = async () => {
         </DashboardPageHeader>
 
         <!-- Filters -->
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <TextInput
                 v-model="search"
                 label="Search"
@@ -172,7 +173,7 @@ const downloadSelectedIdCards = async () => {
                 placeholder="All field offices"
                 :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
             />
-        </div>
+        </BaseCard>
 
         <!-- Bulk actions -->
         <div
@@ -195,14 +196,18 @@ const downloadSelectedIdCards = async () => {
         </div>
 
         <!-- Results -->
-        <div v-if="loading || members.data.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <BaseTable
+            v-if="loading || members.data.length"
+            class="mt-6"
+            :loading="loading"
+            :skeleton-columns="7"
+        >
+            <template #head>
                     <tr>
                         <th class="w-10 px-3 py-2">
                             <input
                                 type="checkbox"
-                                class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600 focus:ring-2 focus:ring-brand-100"
+                                class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
                                 :checked="allOnPageSelected"
                                 aria-label="Select all members on this page"
                                 @change="toggleSelectAll"
@@ -211,15 +216,13 @@ const downloadSelectedIdCards = async () => {
                         <th class="px-3 py-2">PROCTAD ID</th>
                         <th class="px-3 py-2">Name</th>
                         <th class="hidden px-3 py-2 md:table-cell">Agency</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
+                        <th class="hidden px-3 py-2 sm:table-cell">Testing Center</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Last Exam Served</th>
                         <th class="px-3 py-2">Status</th>
                     </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <TableSkeleton v-if="loading" :columns="7" />
+            </template>
                     <tr
-                        v-for="member in loading ? [] : members.data"
+                        v-for="member in members.data"
                         :key="member.id"
                         class="transition-colors hover:bg-brand-50/40"
                         :class="selectedIds.includes(member.id) && 'bg-brand-50/60'"
@@ -227,7 +230,7 @@ const downloadSelectedIdCards = async () => {
                         <td class="px-3 py-2">
                             <input
                                 type="checkbox"
-                                class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600 focus:ring-2 focus:ring-brand-100"
+                                class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
                                 :checked="selectedIds.includes(member.id)"
                                 :aria-label="`Select ${member.name}`"
                                 @change="toggleSelected(member.id)"
@@ -242,10 +245,14 @@ const downloadSelectedIdCards = async () => {
                             <button @click="viewMember(member.id)" class="hover:underline text-left">
                                 {{ member.name }}
                             </button>
-                            <p class="text-xs font-normal text-slate-400 sm:hidden">{{ member.field_office?.name ?? '—' }}</p>
+                            <p class="text-xs font-normal text-slate-400 sm:hidden">{{ member.testing_center?.name ?? member.field_office?.name ?? '—' }}</p>
                         </td>
                         <td class="hidden max-w-[14rem] truncate px-3 py-2 text-slate-600 md:table-cell" :title="member.agency">{{ member.agency }}</td>
-                        <td class="hidden max-w-[10rem] truncate px-3 py-2 text-slate-600 sm:table-cell" :title="member.field_office?.name ?? ''">{{ member.field_office?.name ?? '—' }}</td>
+                        <td class="hidden max-w-[10rem] px-3 py-2 text-slate-600 sm:table-cell" :title="member.field_office?.name ?? ''">
+                            <p class="truncate">{{ member.testing_center?.name ?? '—' }}</p>
+                            <p v-if="member.needs_testing_center" class="text-xs text-amber-600">Needs a testing center</p>
+                            <p v-else class="truncate text-xs text-slate-400">{{ member.field_office?.name ?? '—' }}</p>
+                        </td>
                         <td class="hidden px-3 py-2 xl:table-cell">
                             <template v-if="member.last_served">
                                 <p class="text-slate-700">{{ member.last_served.title }}</p>
@@ -257,9 +264,7 @@ const downloadSelectedIdCards = async () => {
                             <BaseBadge :variant="member.status_variant">{{ member.status_label }}</BaseBadge>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState

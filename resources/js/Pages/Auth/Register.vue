@@ -6,11 +6,20 @@ import TextInput from '@/Components/TextInput.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import FormErrorSummary from '@/Components/FormErrorSummary.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import { useFormErrors } from '@/Composables/useFormErrors';
+
+/** Keys whose humanised form would not match the label on the control. */
+const errorLabels = {
+    testing_center_id: 'Testing Center',
+    date_of_birth: 'Date of Birth',
+    terms: 'Terms and Conditions',
+};
 
 const props = defineProps({
     google: { type: Object, default: null },
-    fieldOffices: { type: Array, required: true },
+    testingCenters: { type: Array, required: true },
 });
 
 const sexOptions = [
@@ -36,9 +45,11 @@ const form = useForm({
     mobile_number: '',
     agency: '',
     position: '',
-    field_office_id: '',
+    testing_center_id: '',
     terms: false,
 });
+
+useFormErrors(form);
 
 const submit = () => {
     form
@@ -111,9 +122,10 @@ const submit = () => {
         </a>
 
         <form v-if="google" class="space-y-5" novalidate @submit.prevent="submit">
+            <FormErrorSummary :errors="form.errors" :labels="errorLabels" />
             <div class="grid gap-5 sm:grid-cols-2">
                 <TextInput
-                    v-model="form.first_name"
+                    v-model="form.first_name" name="first_name"
                     label="First Name"
                     required
                     autocomplete="given-name"
@@ -122,7 +134,7 @@ const submit = () => {
                     :error="form.errors.first_name"
                 />
                 <TextInput
-                    v-model="form.middle_name"
+                    v-model="form.middle_name" name="middle_name"
                     label="Middle Name"
                     optional
                     autocomplete="additional-name"
@@ -131,7 +143,7 @@ const submit = () => {
                     :error="form.errors.middle_name"
                 />
                 <TextInput
-                    v-model="form.last_name"
+                    v-model="form.last_name" name="last_name"
                     label="Last Name"
                     required
                     autocomplete="family-name"
@@ -140,7 +152,7 @@ const submit = () => {
                     :error="form.errors.last_name"
                 />
                 <TextInput
-                    v-model="form.suffix"
+                    v-model="form.suffix" name="suffix"
                     label="Suffix"
                     optional
                     placeholder="Jr., III"
@@ -148,14 +160,14 @@ const submit = () => {
                     :error="form.errors.suffix"
                 />
                 <SelectInput
-                    v-model="form.sex"
+                    v-model="form.sex" name="sex"
                     label="Sex"
                     required
                     :options="sexOptions"
                     :error="form.errors.sex"
                 />
                 <TextInput
-                    v-model="form.date_of_birth"
+                    v-model="form.date_of_birth" name="date_of_birth"
                     label="Date of Birth"
                     type="date"
                     required
@@ -167,7 +179,7 @@ const submit = () => {
             </div>
 
             <TextInput
-                v-model="form.mobile_number"
+                v-model="form.mobile_number" name="mobile_number"
                 label="Mobile Number"
                 type="tel"
                 inputmode="tel"
@@ -179,32 +191,32 @@ const submit = () => {
             />
 
             <SelectInput
-                v-model="form.field_office_id"
-                label="Field Office"
+                v-model="form.testing_center_id" name="testing_center_id"
+                label="Testing Center"
                 required
-                placeholder="Select your Field Office"
-                :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
-                :error="form.errors.field_office_id"
-                hint="The CSC Field Office you serve as a test administrator under."
+                placeholder="Select your Testing Center"
+                :options="testingCenters.map((tc) => ({ value: tc.id, label: tc.name }))"
+                :error="form.errors.testing_center_id"
+                hint="The city where you serve as a test administrator."
             />
 
             <div class="grid gap-5 sm:grid-cols-2">
                 <TextInput
-                    v-model="form.agency"
+                    v-model="form.agency" name="agency"
                     label="Agency"
                     required
                     placeholder="e.g. DepEd Division Office"
                     :error="form.errors.agency"
                 />
                 <TextInput
-                    v-model="form.position"
+                    v-model="form.position" name="position"
                     label="Position"
                     optional
                     :error="form.errors.position"
                 />
             </div>
 
-            <CheckboxInput v-model="form.terms" :error="form.errors.terms">
+            <CheckboxInput v-model="form.terms" name="terms" :error="form.errors.terms">
                 I have read and agree to the
                 <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline">Terms and Conditions</a>
                 and

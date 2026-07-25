@@ -150,6 +150,36 @@ const submitCenter = () => {
     })).post('/testing-centers', { ...opts, onFinish: () => centerForm.transform((d) => d) });
 };
 
+/* --- Intake (hosting rotation) modal ---
+   Which office a shared center's new registrants are filed under. Registration
+   asks applicants for a city, not an office — Leyte I and Leyte II both serve
+   Tacloban City and an applicant cannot know which they belong to — so one
+   office has to own intake, and this is how that hand-over is recorded when
+   hosting rotates. --- */
+const intakeForm = useForm({ field_office_id: null });
+const showIntakeForm = ref(false);
+const intakeCenter = ref(null);
+
+const officeName = (center, officeId) =>
+    center.handling_offices?.find((o) => o.id === officeId)?.name ?? null;
+
+const primaryOfficeName = (center) => officeName(center, center.primary_field_office_id);
+
+const openIntakeForm = (center) => {
+    intakeForm.clearErrors();
+    intakeCenter.value = center;
+    intakeForm.field_office_id = center.primary_field_office_id;
+    showIntakeForm.value = true;
+};
+
+const submitIntake = () => {
+    intakeForm.patch(`/testing-centers/${intakeCenter.value.id}/primary-office`, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => (showIntakeForm.value = false),
+    });
+};
+
 /* --- School modal --- */
 const schoolForm = useForm({
     id: null, name: '', testing_center_id: null,
@@ -323,8 +353,8 @@ const statusOptions = [
                     </p>
                 </div>
                 <template v-if="can.manageFieldOffices">
-                    <IconButton icon="pencil" label="Edit" @click.stop="openOfficeEdit(office)" />
-                    <IconButton icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'office', item: office }" />
+                    <IconButton icon-only icon="pencil" label="Edit" @click.stop="openOfficeEdit(office)" />
+                    <IconButton icon-only icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'office', item: office }" />
                 </template>
                 <AppIcon name="chevron-right" class="h-4 w-4 shrink-0 text-slate-300" />
             </button>
@@ -354,11 +384,22 @@ const statusOptions = [
                     <p class="text-xs text-slate-500">
                         {{ center.schools_count }} school{{ center.schools_count === 1 ? '' : 's' }}
                         · {{ center.users_count }} staff
+                        <!-- Only ambiguous where a center is shared; showing it
+                             there answers "who gets our new registrants?" -->
+                        <template v-if="center.field_office_ids.length > 1">
+                            · Intake:
+                            <span class="font-medium text-slate-700">{{ primaryOfficeName(center) ?? 'not set' }}</span>
+                        </template>
                     </p>
                 </div>
+                <IconButton
+                    v-if="center.can_designate_primary && center.field_office_ids.length > 1"
+                    icon-only icon="arrow-path" label="Change intake office"
+                    @click.stop="openIntakeForm(center)"
+                />
                 <template v-if="center.can_manage">
-                    <IconButton icon="pencil" label="Edit" @click.stop="openCenterEdit(center)" />
-                    <IconButton icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'center', item: center }" />
+                    <IconButton icon-only icon="pencil" label="Edit" @click.stop="openCenterEdit(center)" />
+                    <IconButton icon-only icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'center', item: center }" />
                 </template>
                 <AppIcon name="chevron-right" class="h-4 w-4 shrink-0 text-slate-300" />
             </button>
@@ -388,8 +429,8 @@ const statusOptions = [
                     </p>
                 </div>
                 <template v-if="school.can_manage">
-                    <IconButton icon="pencil" label="Edit" @click="openSchoolEdit(school)" />
-                    <IconButton icon="trash" label="Remove" variant="danger" @click="deleting = { type: 'school', item: school }" />
+                    <IconButton icon-only icon="pencil" label="Edit" @click="openSchoolEdit(school)" />
+                    <IconButton icon-only icon="trash" label="Remove" variant="danger" @click="deleting = { type: 'school', item: school }" />
                 </template>
             </div>
             <EmptyState
@@ -458,6 +499,39 @@ const statusOptions = [
                 <BaseButton variant="outline" size="sm" @click="showCenterForm = false">Cancel</BaseButton>
                 <BaseButton type="submit" form="center-form" variant="primary" size="sm" :loading="centerForm.processing" :disabled="centerForm.processing">
                     {{ centerForm.id ? 'Save Changes' : 'Add Testing Center' }}
+                </BaseButton>
+            </template>
+        </BaseModal>
+
+        <!-- Intake office (hosting rotation) modal -->
+        <BaseModal :show="showIntakeForm" title="Change Intake Office" @close="showIntakeForm = false">
+            <form id="intake-form" class="space-y-4" novalidate @submit.prevent="submitIntake">
+                <p class="text-xs text-slate-500">
+                    Testing Center: <span class="font-medium text-slate-700">{{ intakeCenter?.name }}</span>
+                </p>
+
+                <SelectInput
+                    v-model="intakeForm.field_office_id"
+                    label="Receives new registrations"
+                    required
+                    :options="(intakeCenter?.handling_offices ?? []).map((o) => ({ value: o.id, label: o.name }))"
+                    :error="intakeForm.errors.field_office_id"
+                />
+
+                <div class="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <AppIcon name="information-circle" class="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                        Applicants choose a city, not a field office, so one office has to receive
+                        <span class="font-semibold">{{ intakeCenter?.name }}</span> registrations. Change this when
+                        hosting rotates. Existing members are not moved — both offices already see and manage
+                        everyone at a shared center.
+                    </p>
+                </div>
+            </form>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="showIntakeForm = false">Cancel</BaseButton>
+                <BaseButton type="submit" form="intake-form" variant="primary" size="sm" :loading="intakeForm.processing" :disabled="intakeForm.processing">
+                    Save Changes
                 </BaseButton>
             </template>
         </BaseModal>
