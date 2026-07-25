@@ -154,6 +154,13 @@ const confirmDelete = () => {
                         :alt="`${signatory.name} signature`"
                         class="h-8 w-auto max-w-[140px] object-contain"
                     >
+                    <BaseBadge
+                        v-else-if="signatory.active"
+                        variant="warning"
+                        title="No e-signature uploaded — certificates issued now will have a blank signature line."
+                    >
+                        No e-signature
+                    </BaseBadge>
                     <span v-else class="text-xs text-slate-400">Signed by hand</span>
                 </div>
                 <div v-if="signatory.can_manage" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
@@ -189,7 +196,14 @@ const confirmDelete = () => {
                                 :alt="`${signatory.name} signature`"
                                 class="h-8 w-auto max-w-[140px] object-contain"
                             />
-                            <span v-else class="text-xs text-slate-400">Signed by hand</span>
+                            <BaseBadge
+                        v-else-if="signatory.active"
+                        variant="warning"
+                        title="No e-signature uploaded — certificates issued now will have a blank signature line."
+                    >
+                        No e-signature
+                    </BaseBadge>
+                    <span v-else class="text-xs text-slate-400">Signed by hand</span>
                         </td>
                         <td class="hidden px-3 py-2 md:table-cell">
                             <BaseBadge :variant="signatory.field_office ? 'neutral' : 'brand'">

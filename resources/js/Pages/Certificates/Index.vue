@@ -164,7 +164,12 @@ const submitResign = () => {
                                 <p class="font-mono text-xs font-semibold text-brand-700">{{ certificate.certificate_no ?? '— pending —' }}</p>
                                 <p class="text-xs text-slate-500">{{ certificate.type_label }}</p>
                             </div>
-                            <BaseBadge :variant="certificate.status_variant" class="shrink-0">{{ certificate.status_label }}</BaseBadge>
+                            <div class="flex shrink-0 flex-col items-end gap-1">
+                                <BaseBadge :variant="certificate.status_variant">{{ certificate.status_label }}</BaseBadge>
+                                <BaseBadge v-if="certificate.unsigned" variant="warning" title="Released with no e-signature — re-sign to add one.">
+                                    Unsigned
+                                </BaseBadge>
+                            </div>
                         </div>
 
                         <p class="mt-2 truncate font-medium text-slate-900" :title="certificate.member.name">{{ certificate.member.name }}</p>
@@ -248,6 +253,14 @@ const submitResign = () => {
                         <td class="hidden px-3 py-2 text-slate-500 lg:table-cell">{{ certificate.released_at ?? '—' }}</td>
                         <td class="px-3 py-2">
                             <BaseBadge :variant="certificate.status_variant">{{ certificate.status_label }}</BaseBadge>
+                            <BaseBadge
+                                v-if="certificate.unsigned"
+                                variant="warning"
+                                class="mt-1 block w-fit"
+                                title="Released with no e-signature — re-sign to add one."
+                            >
+                                Unsigned
+                            </BaseBadge>
                             <p
                                 v-if="certificate.disapproval_remarks"
                                 class="mt-1 max-w-[12rem] truncate text-xs text-accent-600"

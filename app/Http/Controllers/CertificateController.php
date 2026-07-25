@@ -62,6 +62,11 @@ class CertificateController extends Controller
                 'status' => $certificate->status->value,
                 'status_label' => $certificate->status->label(),
                 'status_variant' => $certificate->status->badgeVariant(),
+                // Released with no signature snapshot: the member's copy carries a
+                // blank signatory line. Surfaced so staff can catch and re-sign it
+                // rather than the member being the first to notice.
+                'unsigned' => $certificate->status === CertificateStatus::Released
+                    && ! $certificate->signatory_signature_path,
                 'disapproval_remarks' => $certificate->disapproval_remarks,
                 'released_at' => $certificate->released_at?->format('M d, Y'),
                 'downloadable' => $user->can('download', $certificate),

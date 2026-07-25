@@ -79,4 +79,40 @@ class CertificateLetterheadTest extends TestCase
 
         $this->assertSame(CertificateStatus::Released, $certificate->fresh()->status);
     }
+
+    /**
+     * The signature image must actually reach the certificate, and only overlay
+     * the name when one is present — the wiring behind the "unsigned" case that
+     * previously shipped blank certificates.
+     */
+    public function test_signature_overlays_the_name_only_when_one_is_present(): void
+    {
+        $certificate = $this->pendingCertificate();
+        $certificate->update([
+            'signatory_name' => 'Atty. Jane D. Reyes',
+            'signatory_position' => 'Director IV',
+            'certificate_no' => 'RO8-COA-2026-00001',
+        ]);
+        $certificate->loadMissing('member.fieldOffice', 'certifiable');
+
+        $vars = [
+            'certificate' => $certificate,
+            'qrDataUri' => null,
+            'verifyUrl' => 'https://example.test/verify',
+            'letterheadDataUri' => null,
+            'watermark' => false,
+            'fontDir' => resource_path('fonts'),
+        ];
+
+        // Assert on the class actually applied to the signatory div (the class
+        // name alone always appears in the <style> block, so it can't discriminate).
+        $signed = view('certificates.certificate', [...$vars, 'signatureDataUri' => 'data:image/png;base64,AAAA'])->render();
+        $this->assertStringContainsString('class="sig-image"', $signed);
+        $this->assertStringContainsString('class="signatory signatory-signed"', $signed);
+
+        $unsigned = view('certificates.certificate', [...$vars, 'signatureDataUri' => null])->render();
+        $this->assertStringNotContainsString('class="sig-image"', $unsigned);
+        // No overlay class on an unsigned cert — the name keeps its full gap.
+        $this->assertStringNotContainsString('class="signatory signatory-signed"', $unsigned);
+    }
 }

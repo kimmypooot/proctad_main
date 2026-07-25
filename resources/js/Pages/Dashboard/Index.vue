@@ -13,6 +13,7 @@ import ProgressRing from '@/Components/ProgressRing.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
 import TableSkeleton from '@/Components/TableSkeleton.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 
 // Cycled by index, not tied to any stat's meaning — purely to break up the
 // grid visually instead of four identical brand-blue chips in a row.
@@ -66,7 +67,6 @@ const quickActions = computed(() => {
         { label: 'Scan QR Code', icon: 'qr-code', href: '/scanner' },
         { label: 'Manage User Accounts', icon: 'user-group', href: '/users' },
         { label: 'Examinations', icon: 'calendar', href: '/examinations' },
-        { label: 'Evaluation Monitoring', icon: 'document-check', href: '/evaluation-monitoring' },
         { label: 'Certificate Approvals', icon: 'clipboard-check', href: '/approvals' },
     ];
 });
@@ -145,15 +145,6 @@ const applyFeedFilter = () => {
                     :icon="stat.icon"
                     :href="stat.href"
                     :accent="secondaryStatAccents[i % secondaryStatAccents.length]"
-                />
-                <StatCard
-                    v-if="analytics.evaluationCompliance"
-                    compact
-                    label="Evaluation Compliance"
-                    :value="`${analytics.evaluationCompliance.percentage}%`"
-                    icon="document-check"
-                    href="/evaluation-monitoring"
-                    :accent="secondaryStatAccents[analytics.secondaryStats.length % secondaryStatAccents.length]"
                 />
             </div>
 
@@ -337,8 +328,9 @@ const applyFeedFilter = () => {
                         <!-- Identity -->
                         <Link href="/my/profile" class="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md">
                             <span class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-white ring-4 ring-brand-50">
-                                <img v-if="memberSummary.photo_url" :src="memberSummary.photo_url" :alt="memberSummary.name" class="h-full w-full object-cover">
-                                <AppIcon v-else name="user-circle" class="h-8 w-8" />
+                                <UserAvatar :src="memberSummary.photo_url" :name="memberSummary.name">
+                                    <AppIcon name="user-circle" class="h-8 w-8" />
+                                </UserAvatar>
                             </span>
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-semibold text-slate-900">{{ memberSummary.name }}</p>
