@@ -73,6 +73,25 @@ class AuditLogTest extends TestCase
                 ->has('logs.data', $leyteMemberLogs));
     }
 
+    public function test_fo_admin_sees_only_own_field_office_entries(): void
+    {
+        $leyte = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $samar = FieldOffice::create(['name' => 'Samar Field Office', 'code' => 'SAM']);
+
+        Member::factory()->create(['field_office_id' => $leyte->id]);
+        Member::factory()->create(['field_office_id' => $samar->id]);
+
+        $admin = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $leyte->id]);
+        $leyteMemberLogs = AuditLog::where('field_office_id', $leyte->id)->count();
+
+        $this->actingAs($admin)
+            ->get('/audit-logs')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('AuditLogs/Index')
+                ->has('logs.data', $leyteMemberLogs));
+    }
+
     public function test_access_is_limited_to_authorized_roles(): void
     {
         // Field-office staff (Field Director and FO Admin) share the same access;
