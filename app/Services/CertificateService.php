@@ -370,10 +370,13 @@ class CertificateService
 
             if ($signatureFile !== null) {
                 [$sigW, $sigH] = $this->fitSignature($signatureFile, maxW: 50.0, maxH: 16.0);
+                // Drop the image so its lower strokes overlap the printed name
+                // (drawn at signatureY) rather than floating in the gap above it
+                // — the way a wet signature sits over the signatory line.
                 $pdf->Image(
                     $signatureFile,
                     $ML + ($cw - $sigW) / 2,
-                    $this->signatureY - $sigH - 1,
+                    $this->signatureY - $sigH + 7,
                     $sigW,
                     $sigH,
                     'PNG',

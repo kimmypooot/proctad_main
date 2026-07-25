@@ -7,6 +7,8 @@ import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import ToastContainer from '@/Components/ToastContainer.vue';
 import Tooltip from '@/Components/Tooltip.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
+import { useOnline } from '@/Composables/useOnline';
 import { useToasts } from '@/Composables/useToasts';
 
 const page = usePage();
@@ -33,6 +35,9 @@ const badgeCounts = computed(() => ({
 const badgeCount = (item) => (item.badge ? badgeCounts.value[item.badge] ?? 0 : 0);
 
 const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
+
+// App-wide connectivity signal for the offline banner.
+const { online } = useOnline();
 
 // Single source of truth for the desktop/mobile split — avoids re-reading
 // window.innerWidth at click time and lets us react to viewport changes.
@@ -133,6 +138,10 @@ const navByRole = {
                 { label: 'Dashboard', icon: 'home', href: '/dashboard' },
             ],
         },
+        // Sections are ordered to follow the examination lifecycle: set up who
+        // and where first (Registry, Locations), run the exam (Examinations),
+        // act on exam day (QR Scanner), then review after (Reports). Set-once
+        // Configuration and Monitoring sit at the bottom.
         {
             section: 'Registry',
             items: [
@@ -142,23 +151,17 @@ const navByRole = {
             ],
         },
         {
-            section: 'Examinations',
-            items: [
-                { label: 'Examinations', icon: 'calendar', href: '/examinations' },
-                { label: 'Certificates', icon: 'paper-airplane', href: '/certificates' },
-                { label: 'Trainings', icon: 'academic-cap', href: '/trainings' },
-            ],
-        },
-        {
             section: 'Locations',
             items: [
                 { label: 'Locations', icon: 'map-pin', href: '/locations' },
             ],
         },
         {
-            section: 'Configuration',
+            section: 'Examinations',
             items: [
-                { label: 'Signatories', icon: 'identification', href: '/signatories' },
+                { label: 'Examinations', icon: 'calendar', href: '/examinations' },
+                { label: 'Certificates', icon: 'paper-airplane', href: '/certificates' },
+                { label: 'Trainings', icon: 'academic-cap', href: '/trainings' },
             ],
         },
         {
@@ -173,6 +176,12 @@ const navByRole = {
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
                 { label: 'Service History', icon: 'clock', href: '/service-history' },
+            ],
+        },
+        {
+            section: 'Configuration',
+            items: [
+                { label: 'Signatories', icon: 'identification', href: '/signatories' },
             ],
         },
         {
@@ -196,8 +205,8 @@ const navByRole = {
             ],
         },
         // Field Directors run their Field Office's operations as well as
-        // approving, so this mirrors fo_admin's menu plus Approvals and the
-        // Audit Trail.
+        // approving, so this mirrors fo_admin's menu (including its lifecycle
+        // ordering) plus Approvals and the Audit Trail.
         {
             section: 'Registry',
             items: [
@@ -207,23 +216,17 @@ const navByRole = {
             ],
         },
         {
-            section: 'Examinations',
-            items: [
-                { label: 'Examinations', icon: 'calendar', href: '/examinations' },
-                { label: 'Certificates', icon: 'paper-airplane', href: '/certificates' },
-                { label: 'Trainings', icon: 'academic-cap', href: '/trainings' },
-            ],
-        },
-        {
             section: 'Locations',
             items: [
                 { label: 'Locations', icon: 'map-pin', href: '/locations' },
             ],
         },
         {
-            section: 'Configuration',
+            section: 'Examinations',
             items: [
-                { label: 'Signatories', icon: 'identification', href: '/signatories' },
+                { label: 'Examinations', icon: 'calendar', href: '/examinations' },
+                { label: 'Certificates', icon: 'paper-airplane', href: '/certificates' },
+                { label: 'Trainings', icon: 'academic-cap', href: '/trainings' },
             ],
         },
         {
@@ -238,6 +241,12 @@ const navByRole = {
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
                 { label: 'Service History', icon: 'clock', href: '/service-history' },
+            ],
+        },
+        {
+            section: 'Configuration',
+            items: [
+                { label: 'Signatories', icon: 'identification', href: '/signatories' },
             ],
         },
         {
@@ -291,6 +300,9 @@ const navByRole = {
                 { label: 'Approvals', icon: 'clipboard-check', href: '/approvals', badge: 'pendingApprovals' },
             ],
         },
+        // Same lifecycle ordering as fo_admin: who and where first, then the
+        // exam, exam-day tools, review, set-once Configuration, and finally the
+        // system-level Administration section.
         {
             section: 'Registry',
             items: [
@@ -300,26 +312,18 @@ const navByRole = {
             ],
         },
         {
-            section: 'Examinations',
-            items: [
-                { label: 'Examinations', icon: 'calendar', href: '/examinations' },
-                { label: 'Certificates', icon: 'document-check', href: '/certificates' },
-                { label: 'Exam Types', icon: 'clipboard-check', href: '/exam-types' },
-                { label: 'Trainings', icon: 'academic-cap', href: '/trainings' },
-            ],
-        },
-        {
             section: 'Locations',
             items: [
                 { label: 'Locations', icon: 'map-pin', href: '/locations' },
             ],
         },
         {
-            section: 'Configuration',
+            section: 'Examinations',
             items: [
-                { label: 'Signatories', icon: 'identification', href: '/signatories' },
-                { label: 'Letterheads', icon: 'document-text', href: '/letterheads' },
-                { label: 'Fee Management', icon: 'scale', href: '/fee-schedules' },
+                { label: 'Examinations', icon: 'calendar', href: '/examinations' },
+                { label: 'Certificates', icon: 'document-check', href: '/certificates' },
+                { label: 'Exam Types', icon: 'clipboard-check', href: '/exam-types' },
+                { label: 'Trainings', icon: 'academic-cap', href: '/trainings' },
             ],
         },
         {
@@ -334,6 +338,14 @@ const navByRole = {
                 { label: 'Reports & Statistics', icon: 'chart-bar', href: '/reports' },
                 { label: 'Evaluation Monitoring', icon: 'clipboard-check', href: '/evaluation-monitoring' },
                 { label: 'Service History', icon: 'clock', href: '/service-history' },
+            ],
+        },
+        {
+            section: 'Configuration',
+            items: [
+                { label: 'Signatories', icon: 'identification', href: '/signatories' },
+                { label: 'Letterheads', icon: 'document-text', href: '/letterheads' },
+                { label: 'Fee Management', icon: 'scale', href: '/fee-schedules' },
             ],
         },
         {
@@ -449,12 +461,6 @@ const switchWorkspace = (target) => {
     userMenuOpen.value = false;
     router.post('/workspace', { workspace: target });
 };
-
-const initials = computed(() => {
-    const name = (user.value?.name ?? '').trim();
-    if (!name) return 'U';
-    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-});
 
 const confirmingLogout = ref(false);
 const loggingOut = ref(false);
@@ -715,8 +721,7 @@ const logout = () => {
                             @click="userMenuOpen = !userMenuOpen"
                         >
                             <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-xs font-semibold text-white">
-                                <img v-if="user?.avatar_url" :src="user.avatar_url" :alt="user?.name" class="h-full w-full object-cover">
-                                <template v-else>{{ initials }}</template>
+                                <UserAvatar :src="user?.avatar_url" :name="user?.name" />
                             </span>
                             <span class="hidden text-left sm:block">
                                 <span class="block text-sm font-bold leading-none text-slate-800">{{ user?.name }}</span>
@@ -791,6 +796,24 @@ const logout = () => {
             </BaseModal>
 
             <ToastContainer />
+
+            <!-- Connectivity banner. Field offices work over venue wifi and
+                 mobile data; a clear, persistent notice beats a silent failure
+                 when a save won't go through. aria-live announces it to SR users. -->
+            <div
+                v-if="!online"
+                class="border-b border-slate-300 bg-slate-800 px-4 py-2.5 text-white sm:px-6"
+                role="status"
+                aria-live="polite"
+            >
+                <div class="mx-auto flex w-full max-w-screen-2xl items-center gap-2 text-sm">
+                    <AppIcon name="exclamation-triangle" class="h-4 w-4 shrink-0 text-amber-300" />
+                    <p class="min-w-0">
+                        <span class="font-semibold">You're offline.</span>
+                        Changes may not save until your connection returns. Attendance scans are held on your device and sync automatically.
+                    </p>
+                </div>
+            </div>
 
             <!-- Staff browse normally while the public site is closed, so this is
                  the only thing stopping it being left on by accident. -->

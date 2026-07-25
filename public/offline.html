@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#2A338F">
+    <title>Offline — ProCTAD</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { -webkit-tap-highlight-color: transparent; }
+        body {
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: calc(1.5rem + env(safe-area-inset-top)) 1.5rem calc(1.5rem + env(safe-area-inset-bottom));
+            font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+            color: #1e293b;
+            background: linear-gradient(160deg, #1c2260 0%, #2A338F 55%, #3d4bae 100%);
+        }
+        .card {
+            width: 100%;
+            max-width: 26rem;
+            background: #fff;
+            border-radius: 1rem;
+            padding: 2rem 1.75rem;
+            box-shadow: 0 20px 45px rgba(13, 16, 48, 0.35);
+            text-align: center;
+        }
+        .logo {
+            width: 4.5rem;
+            height: 4.5rem;
+            margin: 0 auto 1.25rem;
+            border-radius: 9999px;
+            background: #eef0fb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem;
+        }
+        .logo img { width: 100%; height: 100%; object-fit: contain; }
+        h1 { font-size: 1.25rem; font-weight: 700; color: #151a49; margin-bottom: 0.5rem; }
+        p { font-size: 0.9rem; line-height: 1.6; color: #475569; }
+        .hint {
+            margin-top: 1.25rem;
+            padding: 0.85rem 1rem;
+            border-radius: 0.75rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            font-size: 0.8rem;
+            color: #64748b;
+            text-align: left;
+        }
+        .hint strong { color: #334155; }
+        button {
+            margin-top: 1.5rem;
+            width: 100%;
+            min-height: 2.75rem;
+            border: 0;
+            border-radius: 0.75rem;
+            background: #2A338F;
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        button:hover { background: #232b78; }
+        button:active { background: #1c2260; }
+        .status {
+            margin-top: 0.9rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #b8942f;
+        }
+        .status.online { color: #15803d; }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <div class="logo">
+            <img src="/images/brand/proctad-logo.png" alt="ProCTAD">
+        </div>
+        <h1>You're offline</h1>
+        <p>This page hasn't been saved for offline use yet, and there's no connection to load it now.</p>
+        <div class="hint">
+            <strong>On exam day:</strong> attendance you already scanned is safe. Scans taken while offline are
+            held on this device and sync automatically once the venue's connection returns — you won't lose them.
+        </div>
+        <button type="button" id="retry">Try again</button>
+        <p class="status" id="status">Waiting for a connection…</p>
+    </main>
+    <script>
+        var statusEl = document.getElementById('status');
+        function reload() { window.location.reload(); }
+        document.getElementById('retry').addEventListener('click', reload);
+        function render() {
+            if (navigator.onLine) {
+                statusEl.textContent = 'Connection restored — reloading…';
+                statusEl.classList.add('online');
+                setTimeout(reload, 600);
+            } else {
+                statusEl.textContent = 'Waiting for a connection…';
+                statusEl.classList.remove('online');
+            }
+        }
+        window.addEventListener('online', render);
+        window.addEventListener('offline', render);
+        render();
+    </script>
+</body>
+</html>

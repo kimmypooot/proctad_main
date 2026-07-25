@@ -101,7 +101,7 @@
     /* With an e-signature the image itself fills the gap that was reserved for
        a wet signature, so the block sits closer to the body text. */
     .signatory-signed { margin-top: 20pt; }
-    .sig-image { display: block; height: 40pt; width: auto; margin: 0 auto 2pt; }
+    .sig-image { display: block; height: 40pt; width: auto; margin: 0 auto; }
     .sig-name {
         font-family: 'Mirante', serif;
         font-weight: bold;
@@ -109,6 +109,12 @@
         color: #2A338F;
         margin: 0;
     }
+    /* Only when a signature image is present: the negative top margin pulls the
+       printed name up into the lower strokes of the signature, so the
+       e-signature overlays the name the way a wet signature would sit over the
+       signatory line — rather than floating in a gap above it. The PNG is
+       transparent and the name paints last, so the name stays legible. */
+    .signatory-signed .sig-name { margin-top: -22pt; }
     .sig-pos { font-size: 12pt; margin: 0; }
 
     /* Verification QR with the certificate number centred directly beneath

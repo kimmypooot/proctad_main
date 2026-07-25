@@ -53,6 +53,33 @@ class CertificatePagesTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('certificates.data', 1));
     }
 
+    public function test_index_flags_released_certificates_with_no_signature(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+
+        // Released without a signature snapshot — the case this flag exists for.
+        $unsigned = $this->certificate(CertificateType::Appreciation, CertificateStatus::Released);
+        $unsigned->update(['signatory_signature_path' => null]);
+
+        // Released with a signature snapshot — must not be flagged.
+        $signed = $this->certificate(CertificateType::Appearance, CertificateStatus::Released);
+        $signed->update(['signatory_signature_path' => 'signatures/example.png']);
+
+        // Pending is never "unsigned" regardless of snapshot — it isn't issued yet.
+        $pending = $this->certificate(CertificateType::DesignationOrder, CertificateStatus::Pending);
+
+        $this->actingAs($admin)
+            ->get('/certificates')
+            ->assertOk()
+            ->assertInertia(function (Assert $page) use ($unsigned, $signed, $pending) {
+                $rows = collect($page->toArray()['props']['certificates']['data']);
+
+                $this->assertTrue($rows->firstWhere('id', $unsigned->id)['unsigned']);
+                $this->assertFalse($rows->firstWhere('id', $signed->id)['unsigned']);
+                $this->assertFalse($rows->firstWhere('id', $pending->id)['unsigned']);
+            });
+    }
+
     public function test_member_cannot_view_certificates_index(): void
     {
         $member = User::factory()->create(['role' => UserRole::Member]);

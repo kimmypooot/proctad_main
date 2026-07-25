@@ -12,6 +12,11 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 const panel = ref(null);
 
+// The element focused before the modal opened, so we can hand focus back when
+// it closes — otherwise keyboard/screen-reader users are dumped at the top of
+// the page with no idea where they were.
+let previouslyFocused = null;
+
 const widths = {
     sm: 'sm:max-w-sm',
     md: 'sm:max-w-md',
@@ -22,8 +27,48 @@ const widths = {
     '4xl': 'sm:max-w-4xl',
 };
 
+/** Currently focusable, visible children of the panel, in tab order. */
+const focusableWithin = () => {
+    if (!panel.value) return [];
+    const selector = [
+        'a[href]', 'button:not([disabled])', 'input:not([disabled])',
+        'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+
+    return Array.from(panel.value.querySelectorAll(selector))
+        .filter((el) => el.offsetParent !== null || el === document.activeElement);
+};
+
 const onKeydown = (e) => {
-    if (e.key === 'Escape' && props.show) emit('close');
+    if (!props.show) return;
+
+    if (e.key === 'Escape') {
+        emit('close');
+        return;
+    }
+
+    // Focus trap: keep Tab / Shift+Tab cycling inside the dialog so focus never
+    // lands on the page behind it while it's modal.
+    if (e.key === 'Tab') {
+        const focusable = focusableWithin();
+        if (focusable.length === 0) {
+            e.preventDefault();
+            panel.value?.focus();
+            return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+
+        if (e.shiftKey && (active === first || active === panel.value)) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
 };
 
 watch(
@@ -31,10 +76,14 @@ watch(
     (show) => {
         document.body.style.overflow = show ? 'hidden' : '';
         if (show) {
+            previouslyFocused = document.activeElement;
             document.addEventListener('keydown', onKeydown);
-            requestAnimationFrame(() => panel.value?.focus());
+            requestAnimationFrame(() => (focusableWithin()[0] ?? panel.value)?.focus());
         } else {
             document.removeEventListener('keydown', onKeydown);
+            // Restore focus to whatever opened the modal.
+            if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+            previouslyFocused = null;
         }
     },
 );
