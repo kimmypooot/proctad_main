@@ -62,6 +62,7 @@ const sexOptions = [
             v-model="form.photo"
             label="ID Photo"
             optional
+            compress
             accept="image/*"
             :error="form.errors.photo"
             hint="JPG or PNG, max 2 MB."

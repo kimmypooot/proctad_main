@@ -6,6 +6,7 @@ import TextInput from '@/Components/TextInput.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 
 const props = defineProps({
     google: { type: Object, default: null },
@@ -65,12 +66,13 @@ const submit = () => {
         </Head>
 
         <div v-if="google" class="mb-5 flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4">
-            <img
-                v-if="google.avatar"
-                :src="google.avatar"
-                alt=""
-                class="h-10 w-10 shrink-0 rounded-full"
-            >
+            <span class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-xs font-semibold text-white">
+                <UserAvatar
+                    :src="google.avatar"
+                    :name="`${google.first_name ?? ''} ${google.last_name ?? ''}`.trim()"
+                    :initials="`${google.first_name?.[0] ?? ''}${google.last_name?.[0] ?? ''}`"
+                />
+            </span>
             <div class="min-w-0">
                 <p class="text-sm font-semibold text-slate-900">Continuing with Google</p>
                 <p class="truncate text-xs text-slate-600">{{ google.email }}</p>

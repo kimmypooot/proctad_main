@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#2A338F">
 
+    {{-- Progressive Web App — installable, offline-capable exam-day scanner --}}
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ProCTAD">
+
     <title inertia>{{ config('app.name', 'ProCTAD') }}</title>
     <meta name="description" content="The Professionalized Corps of Test Administrators Database (ProCTAD) of the Civil Service Commission Regional Office VIII — building a corps of competent, credible, and professional civil service examination administrators.">
 
@@ -28,7 +35,7 @@
 
     <link rel="canonical" href="{{ url()->current() }}">
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="apple-touch-icon" href="/favicon.svg">
+    <link rel="apple-touch-icon" href="/images/brand/proctad-logo.png">
 
     {{-- Font preconnect for performance --}}
     <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>

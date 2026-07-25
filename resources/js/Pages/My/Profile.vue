@@ -9,6 +9,7 @@ import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import FileInput from '@/Components/FileInput.vue';
 import TextInput from '@/Components/TextInput.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 
 const props = defineProps({
     member: { type: Object, default: null },
@@ -111,8 +112,9 @@ const submit = () => form
                 <div class="bg-gradient-to-br from-brand-700 to-brand-800 px-6 pb-8 pt-6 text-white">
                     <div class="flex items-center gap-4">
                         <div class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/30 bg-white/10">
-                            <img v-if="member.photo_url" :src="member.photo_url" :alt="`Photo of ${member.name}`" class="h-full w-full object-cover">
-                            <AppIcon v-else name="user-circle" class="h-10 w-10 text-white/70" />
+                            <UserAvatar :src="member.photo_url" :name="member.name">
+                                <AppIcon name="user-circle" class="h-10 w-10 text-white/70" />
+                            </UserAvatar>
                         </div>
                         <div class="min-w-0">
                             <p class="truncate text-lg font-bold">{{ member.name }}</p>
@@ -152,6 +154,7 @@ const submit = () => form
                         v-model="form.photo"
                         label="ID Photo"
                         optional
+                        compress
                         accept="image/*"
                         :error="form.errors.photo"
                         hint="JPG or PNG, max 2 MB. If you sign in with Google, your Google photo is shown instead."

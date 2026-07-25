@@ -11,6 +11,7 @@ import EmptyState from '@/Components/EmptyState.vue';
 import MemberIdCard from '@/Components/MemberIdCard.vue';
 import QrCode from '@/Components/QrCode.vue';
 import StepTabs from '@/Components/StepTabs.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 import { useDetailsResource } from '@/Composables/useDetailsResource';
 
 const props = defineProps({
@@ -189,17 +190,12 @@ const detailItems = (m) => [
                 <div class="flex items-start justify-between gap-4">
                     <div class="flex min-w-0 items-start gap-4">
                         <div class="shrink-0">
-                            <img
-                                v-if="member().photo_url"
-                                :src="member().photo_url"
-                                :alt="member().name"
-                                class="h-12 w-12 rounded-full object-cover ring-2 ring-slate-100"
-                            >
-                            <div
-                                v-else
-                                class="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-slate-100"
-                            >
-                                {{ member().first_name?.[0] }}{{ member().last_name?.[0] }}
+                            <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-slate-100">
+                                <UserAvatar
+                                    :src="member().photo_url"
+                                    :name="member().name"
+                                    :initials="`${member().first_name?.[0] ?? ''}${member().last_name?.[0] ?? ''}`"
+                                />
                             </div>
                         </div>
                         <div class="min-w-0">

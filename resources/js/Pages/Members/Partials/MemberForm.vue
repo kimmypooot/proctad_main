@@ -129,6 +129,7 @@ const maxDateOfBirth = (() => {
             v-model="form.photo"
             label="ID Photo"
             optional
+            compress
             accept="image/*"
             :error="form.errors.photo"
             hint="JPG or PNG, max 2 MB. If the member signs in with Google, their Google photo is preferred on the ID."
