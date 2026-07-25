@@ -32,8 +32,35 @@ class MemberFactory extends Factory
             ]),
             'position' => fake()->randomElement(['Administrative Officer II', 'Teacher III', 'Nurse II', 'Engineer I', null]),
             'field_office_id' => FieldOffice::factory(),
+            // Jurisdiction is decided by testing center, so a member without one
+            // is invisible to the very staff who serve them — never what a test
+            // setting only `field_office_id` intends. Resolved here rather than
+            // in an afterCreating hook so the member is inserted once: a second
+            // save would write a spurious "updated" audit entry.
+            //
+            // Declared after `field_office_id` deliberately: the factory expands
+            // attributes in order, so the office is already a resolved id here.
+            'testing_center_id' => function (array $attributes) {
+                $office = FieldOffice::find($attributes['field_office_id']);
+
+                if ($office === null || $office->is_regional) {
+                    return null;
+                }
+
+                return $office->testingCenters()->value('testing_centers.id')
+                    ?? TestingCenterFactory::new()->forFieldOffice($office)->create()->id;
+            },
             'status' => MemberStatus::Active,
         ];
+    }
+
+    /** A regional-office member: serves region-wide, anchored to no center. */
+    public function regional(): static
+    {
+        return $this->state([
+            'field_office_id' => FieldOffice::factory()->state(['is_regional' => true]),
+            'testing_center_id' => null,
+        ]);
     }
 
     public function disqualified(): static

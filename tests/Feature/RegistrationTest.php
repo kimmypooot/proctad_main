@@ -32,8 +32,17 @@ class RegistrationTest extends TestCase
         return $this;
     }
 
+    /**
+     * Registration asks for a testing center, not a field office — the office is
+     * resolved from it server-side. Tests still set up the office (members and
+     * staff hang off it), so this takes the office and uses one of its centers,
+     * creating one when the test did not.
+     */
     private function validPayload(FieldOffice $fieldOffice, array $overrides = []): array
     {
+        $center = $fieldOffice->testingCenters()->first()
+            ?? TestingCenter::factory()->forFieldOffice($fieldOffice)->create();
+
         return array_merge([
             'first_name' => 'Juan',
             'middle_name' => 'Santos',
@@ -44,7 +53,7 @@ class RegistrationTest extends TestCase
             'mobile_number' => '09171234567',
             'agency' => 'DepEd Division Office',
             'position' => 'Teacher III',
-            'field_office_id' => $fieldOffice->id,
+            'testing_center_id' => $center->id,
             'terms' => true,
         ], $overrides);
     }
@@ -67,6 +76,7 @@ class RegistrationTest extends TestCase
         $this->assertNotNull($member);
         $this->assertNotNull($member->proctad_id);
         $this->assertSame($fieldOffice->id, $member->field_office_id);
+        $this->assertSame($fieldOffice->testingCenters()->first()->id, $member->testing_center_id);
         $this->assertSame('male', $member->sex->value ?? $member->sex);
         $this->assertSame('1990-05-15', $member->date_of_birth);
         $this->assertTrue($member->requirements()->exists());
@@ -90,6 +100,76 @@ class RegistrationTest extends TestCase
         );
     }
 
+    /**
+     * The reason registration asks for a testing center at all: Tacloban City is
+     * served by Leyte I and Leyte II in turn, and an applicant cannot know which
+     * of the two they belong to. The center's primary office decides it.
+     */
+    public function test_registration_at_a_shared_center_resolves_to_the_primary_office(): void
+    {
+        $leyteOne = FieldOffice::factory()->create(['code' => 'FOLI-TAC']);
+        $leyteTwo = FieldOffice::factory()->create(['code' => 'FOLII-TAC']);
+
+        $tacloban = TestingCenter::factory()->create(['name' => 'Tacloban City']);
+        $tacloban->fieldOffices()->attach($leyteOne->id, ['is_primary' => false]);
+        $tacloban->fieldOffices()->attach($leyteTwo->id, ['is_primary' => true]);
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($leyteOne, ['testing_center_id' => $tacloban->id]))
+            ->assertRedirect(route('dashboard'));
+
+        $member = Member::where('email', 'juan@example.test')->firstOrFail();
+        $this->assertSame($tacloban->id, $member->testing_center_id);
+        $this->assertSame($leyteTwo->id, $member->field_office_id);
+    }
+
+    /** Hosting rotates, so flipping the primary redirects new intake. */
+    public function test_flipping_the_primary_office_changes_where_new_registrants_land(): void
+    {
+        $leyteOne = FieldOffice::factory()->create(['code' => 'FOLI-TAC']);
+        $leyteTwo = FieldOffice::factory()->create(['code' => 'FOLII-TAC']);
+
+        $tacloban = TestingCenter::factory()->create(['name' => 'Tacloban City']);
+        $tacloban->fieldOffices()->attach($leyteOne->id, ['is_primary' => true]);
+        $tacloban->fieldOffices()->attach($leyteTwo->id, ['is_primary' => false]);
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($leyteOne, ['testing_center_id' => $tacloban->id]))
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertSame(
+            $leyteOne->id,
+            Member::where('email', 'juan@example.test')->value('field_office_id'),
+        );
+    }
+
+    /** A center nobody handles cannot silently swallow a registration. */
+    public function test_registration_is_refused_at_a_center_with_no_field_office(): void
+    {
+        $orphan = TestingCenter::factory()->create(['name' => 'Unassigned City']);
+        $fieldOffice = FieldOffice::factory()->create();
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice, ['testing_center_id' => $orphan->id]))
+            ->assertSessionHasErrors('testing_center_id');
+
+        $this->assertGuest();
+        $this->assertSame(0, User::count());
+    }
+
+    /** Inactive centers are not offered, and must not be accepted if submitted. */
+    public function test_registration_rejects_an_inactive_testing_center(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+        $closed = TestingCenter::factory()->forFieldOffice($fieldOffice)->create(['is_active' => false]);
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice, ['testing_center_id' => $closed->id]))
+            ->assertSessionHasErrors('testing_center_id');
+
+        $this->assertGuest();
+    }
+
     public function test_registration_requires_connecting_google_first(): void
     {
         $fieldOffice = FieldOffice::factory()->create();
@@ -110,8 +190,8 @@ class RegistrationTest extends TestCase
                 'sex' => '',
                 'agency' => '',
                 'date_of_birth' => '',
-                'field_office_id' => '',
-            ]))->assertSessionHasErrors(['sex', 'agency', 'date_of_birth', 'field_office_id']);
+                'testing_center_id' => '',
+            ]))->assertSessionHasErrors(['sex', 'agency', 'date_of_birth', 'testing_center_id']);
 
         $this->assertGuest();
         $this->assertSame(0, User::count());

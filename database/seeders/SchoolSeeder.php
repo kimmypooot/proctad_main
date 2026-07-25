@@ -64,5 +64,43 @@ class SchoolSeeder extends Seeder
                 ]);
             }
         }
+
+        $this->shareTaclobanBetweenBothLeyteOffices();
+        $this->designatePrimaryOffices();
+    }
+
+    /**
+     * Leyte II serves the same testing center as Leyte I. Linking it here — not
+     * in FieldOfficeSeeder — because the centers only exist once the schools
+     * above have created them.
+     */
+    private function shareTaclobanBetweenBothLeyteOffices(): void
+    {
+        $leyteTwo = FieldOffice::where('code', 'LEY2')->first();
+        $tacloban = TestingCenter::where('name', 'Tacloban City')->first();
+
+        if ($leyteTwo && $tacloban) {
+            $tacloban->fieldOffices()->syncWithoutDetaching([$leyteTwo->id]);
+        }
+    }
+
+    /**
+     * Every center needs exactly one office owning intake, since registration
+     * resolves a member's field office from the center they choose. Only
+     * Tacloban is actually contested; the rest each have one candidate.
+     */
+    private function designatePrimaryOffices(): void
+    {
+        foreach (TestingCenter::with('fieldOffices')->get() as $center) {
+            if ($center->fieldOffices->isEmpty()
+                || $center->fieldOffices->contains(fn ($office) => (bool) $office->pivot->is_primary)) {
+                continue;
+            }
+
+            $center->fieldOffices()->updateExistingPivot(
+                $center->fieldOffices->first()->id,
+                ['is_primary' => true],
+            );
+        }
     }
 }

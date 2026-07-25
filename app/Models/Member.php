@@ -6,6 +6,7 @@ use App\Enums\MemberStatus;
 use App\Enums\UserRole;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'first_name', 'middle_name', 'last_name', 'suffix', 'sex', 'date_of_birth', 'email',
-    'mobile_number', 'agency', 'position', 'photo_path', 'field_office_id',
+    'mobile_number', 'agency', 'position', 'photo_path', 'field_office_id', 'testing_center_id',
     'status', 'disqualification_remarks', 'user_id',
 ])]
 class Member extends Model
@@ -132,6 +133,61 @@ class Member extends Model
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);
+    }
+
+    /**
+     * The testing center (city) this member serves — their jurisdiction, and
+     * what decides which staff may see and manage them. Null for regional-office
+     * members, who serve region-wide, and for the handful of members whose
+     * office handles several centers and who have not been placed in one yet.
+     */
+    public function testingCenter(): BelongsTo
+    {
+        return $this->belongsTo(TestingCenter::class);
+    }
+
+    /**
+     * Whether this member serves region-wide rather than out of one testing
+     * center — true for members of the regional office (RO8), who may be
+     * assigned to any venue in the region.
+     *
+     * Prefers an already-loaded relation: this is called per row while building
+     * assignment candidate pools, so the common path must not add a query.
+     */
+    public function isRegionWide(): bool
+    {
+        return (bool) ($this->relationLoaded('fieldOffice')
+            ? $this->fieldOffice?->is_regional
+            : $this->fieldOffice()->value('is_regional'));
+    }
+
+    /**
+     * Members a field-office-scoped user may draw on: those serving a testing
+     * center their office covers, plus regional-office members, who serve
+     * region-wide and so belong to every office's pool.
+     *
+     * The single definition of "within my jurisdiction" for member queries —
+     * used by the members list, the assignment candidate pool, and the bulk
+     * assignment filter, which must agree or staff see people they cannot act on.
+     */
+    public function scopeWithinJurisdictionOf(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->whereIn('testing_center_id', $user->scopedTestingCenterIds())
+            ->orWhereHas('fieldOffice', fn (Builder $o) => $o->where('is_regional', true)));
+    }
+
+    /**
+     * Row-level form of scopeWithinJurisdictionOf, for guards on a single
+     * member. Named differently from the scope on purpose: an instance method
+     * called `withinJurisdictionOf` would shadow the scope for any static-style
+     * call, and the two would silently diverge.
+     */
+    public function isWithinJurisdictionOf(User $user): bool
+    {
+        return $this->isRegionWide()
+            || ($this->testing_center_id !== null
+                && in_array($this->testing_center_id, $user->scopedTestingCenterIds(), true));
     }
 
     public function requirements(): HasMany

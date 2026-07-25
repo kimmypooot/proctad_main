@@ -30,7 +30,27 @@ class TestingCenter extends Model
 
     public function fieldOffices(): BelongsToMany
     {
-        return $this->belongsToMany(FieldOffice::class)->withTimestamps();
+        return $this->belongsToMany(FieldOffice::class)
+            ->withPivot('is_primary')
+            ->withTimestamps();
+    }
+
+    public function members(): HasMany
+    {
+        return $this->hasMany(Member::class);
+    }
+
+    /**
+     * The office that currently owns intake for this center. Only matters where
+     * a center is shared (Tacloban City, handled by Leyte I and Leyte II in
+     * turn) — registration has to resolve to exactly one office, and this is it.
+     * Falls back to any handling office so a center whose primary flag was never
+     * set still accepts registrations.
+     */
+    public function primaryFieldOfficeId(): ?int
+    {
+        return $this->fieldOffices()->wherePivot('is_primary', true)->value('field_offices.id')
+            ?? $this->fieldOffices()->orderBy('field_offices.id')->value('field_offices.id');
     }
 
     /** Staff accounts that operate at this center (see testing_center_user). */
