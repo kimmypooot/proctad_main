@@ -7,6 +7,7 @@ use App\Enums\MemberStatus;
 use App\Enums\UserRole;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use App\Notifications\MemberRequirementReviewed;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,8 +55,16 @@ class MemberTest extends TestCase
             'agency' => 'DepEd Division Office',
             'position' => 'Teacher III',
             'field_office_id' => $office->id,
+            'testing_center_id' => $this->centerFor($office)->id,
             ...$overrides,
         ];
+    }
+
+    /** A testing center the office handles, created on first use. */
+    private function centerFor(FieldOffice $office): TestingCenter
+    {
+        return $office->testingCenters()->first()
+            ?? TestingCenter::factory()->forFieldOffice($office)->create();
     }
 
     public function test_store_mints_proctad_id_and_creates_account_and_requirements(): void

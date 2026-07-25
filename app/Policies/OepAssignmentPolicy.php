@@ -32,6 +32,6 @@ class OepAssignmentPolicy
         $assignment->loadMissing('personnel');
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $assignment->personnel?->field_office_id;
+            && in_array($assignment->personnel?->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 }

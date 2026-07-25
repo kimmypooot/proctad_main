@@ -16,7 +16,9 @@ class BlacklistPolicy
 
     /**
      * Blacklist a member: Super Admin/ESD Admin region-wide, or Field
-     * Director/Field Office Staff for a member in their own Field Office.
+     * Director/Field Office Staff for a member within their jurisdiction —
+     * which spans every office sharing their testing centers, so Leyte I and
+     * Leyte II staff can act on the Tacloban City roster they jointly serve.
      */
     public function create(User $user, Member $member): bool
     {
@@ -34,6 +36,7 @@ class BlacklistPolicy
             return true;
         }
 
-        return $user->role->isFieldOfficeScoped() && $user->field_office_id === $fieldOfficeId;
+        return $user->role->isFieldOfficeScoped()
+            && in_array($fieldOfficeId, $user->scopedFieldOfficeIds(), true);
     }
 }

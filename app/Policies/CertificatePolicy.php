@@ -36,7 +36,7 @@ class CertificatePolicy
 
         if (in_array($user->role, $approverRoles, true)) {
             return $user->role !== UserRole::FieldDirector
-                || $user->field_office_id === $certificate->field_office_id;
+                || in_array($certificate->field_office_id, $user->scopedFieldOfficeIds(), true);
         }
 
         if (in_array($user->role, [UserRole::SuperAdmin, UserRole::EsdAdmin], true)) {
@@ -44,7 +44,7 @@ class CertificatePolicy
         }
 
         return $user->role === UserRole::FieldDirector
-            && $user->field_office_id === $certificate->field_office_id;
+            && in_array($certificate->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 
     /**
@@ -59,7 +59,7 @@ class CertificatePolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $certificate->field_office_id;
+            && in_array($certificate->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 
     /**
@@ -80,7 +80,7 @@ class CertificatePolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $certificate->field_office_id;
+            && in_array($certificate->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 
     /**
@@ -101,6 +101,6 @@ class CertificatePolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $certificate->field_office_id;
+            && in_array($certificate->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 }

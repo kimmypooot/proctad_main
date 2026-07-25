@@ -20,6 +20,6 @@ class EvaluationPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $evaluation->field_office_id;
+            && in_array($evaluation->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 }

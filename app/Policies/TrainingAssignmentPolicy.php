@@ -30,6 +30,6 @@ class TrainingAssignmentPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $assignment->field_office_id;
+            && in_array($assignment->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 }

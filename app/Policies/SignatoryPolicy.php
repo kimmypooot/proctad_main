@@ -31,6 +31,12 @@ class SignatoryPolicy
     /**
      * ESD / Super Admin manage any entry (spec 4.3); FO Admins only entries
      * of their own Field Office (spec 4.4) — never region-wide defaults.
+     *
+     * Deliberately NOT widened to the shared-jurisdiction office set the way
+     * member and record scoping is. A signatory is the office's own signing
+     * official, not something the jurisdiction shares: Leyte I and Leyte II
+     * serve the same testing center but sign their own certificates, and
+     * neither should be able to edit the other's signature block.
      */
     private function manage(User $user, Signatory $signatory): bool
     {
