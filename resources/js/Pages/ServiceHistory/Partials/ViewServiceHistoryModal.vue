@@ -4,6 +4,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import { useDetailsResource } from '@/Composables/useDetailsResource';
 
@@ -58,18 +59,16 @@ watch(() => props.show, (open) => {
                     </BaseBadge>
                 </div>
 
-                <div v-if="records().length" class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                    <table class="min-w-full divide-y divide-slate-200 text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            <tr>
-                                <th class="px-3 py-2">Examination</th>
-                                <th class="px-3 py-2">Date</th>
-                                <th class="hidden px-3 py-2 sm:table-cell">Designation</th>
-                                <th class="hidden px-3 py-2 md:table-cell">Venue / Room</th>
-                                <th class="px-3 py-2">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
+                <BaseTable
+                    v-if="records().length"
+                    :columns="[
+                        { label: 'Examination' },
+                        { label: 'Date' },
+                        { label: 'Designation', class: 'hidden sm:table-cell' },
+                        { label: 'Venue / Room', class: 'hidden md:table-cell' },
+                        { label: 'Status' },
+                    ]"
+                >
                             <tr v-for="record in records()" :key="record.id" class="transition-colors hover:bg-brand-50/40">
                                 <td class="px-3 py-2">
                                     <p class="font-medium text-slate-900">{{ record.exam_title }}</p>
@@ -88,9 +87,7 @@ watch(() => props.show, (open) => {
                                     <BaseBadge :variant="record.status_variant">{{ record.status_label }}</BaseBadge>
                                 </td>
                             </tr>
-                        </tbody>
-                    </table>
-                </div>
+                </BaseTable>
                 <EmptyState
                     v-else
                     icon="clock"

@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useToasts } from '@/Composables/useToasts';
 import AppIcon from './AppIcon.vue';
 
-const { toasts, dismiss } = useToasts();
+const { toasts, dismiss, pause, resume } = useToasts();
 
 /**
  * 'bottom' keeps toasts clear of the top of the screen. The public scanner
@@ -24,6 +24,17 @@ const config = {
     warning: { icon: 'exclamation-triangle', classes: 'bg-amber-50 border-amber-200 text-amber-800', iconColor: 'text-amber-600' },
     error: { icon: 'x-circle', classes: 'bg-accent-50 border-accent-200 text-accent-800', iconColor: 'text-accent-600' },
 };
+
+/**
+ * Only errors interrupt. `role="alert"` is assertive — it cuts a screen reader
+ * off mid-sentence, which is right for "Save failed" and actively hostile for
+ * "Member saved". Everything else announces politely, at the next pause.
+ *
+ * The roles sit on the toasts rather than on the container: a container-level
+ * live region wrapping elements that carry their own roles gets announced twice
+ * by several screen readers.
+ */
+const roleFor = (variant) => (variant === 'error' ? 'alert' : 'status');
 </script>
 
 <template>
@@ -38,7 +49,11 @@ const config = {
                     :key="toast.id"
                     class="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border p-4 shadow-lg sm:w-96"
                     :class="config[toast.variant]?.classes ?? config.info.classes"
-                    role="alert"
+                    :role="roleFor(toast.variant)"
+                    @mouseenter="pause(toast.id)"
+                    @mouseleave="resume(toast.id)"
+                    @focusin="pause(toast.id)"
+                    @focusout="resume(toast.id)"
                 >
                     <AppIcon
                         :name="config[toast.variant]?.icon ?? config.info.icon"
@@ -48,7 +63,7 @@ const config = {
                     <p class="min-w-0 flex-1 text-sm leading-relaxed">{{ toast.message }}</p>
                     <button
                         type="button"
-                        class="shrink-0 opacity-60 transition-opacity hover:opacity-100"
+                        class="-my-1 -mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md opacity-60 transition-opacity hover:opacity-100"
                         aria-label="Dismiss"
                         @click="dismiss(toast.id)"
                     >

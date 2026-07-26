@@ -4,6 +4,8 @@ import { useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import Tooltip from '@/Components/Tooltip.vue';
@@ -93,7 +95,7 @@ const clearRoom = (room, fieldKey) => {
 
 <template>
     <div class="space-y-6">
-        <div class="rounded-xl border border-slate-200 bg-white p-5">
+        <BaseCard padding="none" class="p-5">
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h2 class="text-base font-semibold text-slate-900">Step 3 · Assign Rooms</h2>
@@ -107,10 +109,10 @@ const clearRoom = (room, fieldKey) => {
                     Export to Excel
                 </BaseButton>
             </div>
-        </div>
+        </BaseCard>
 
         <template v-if="venuesWithRooms.length">
-            <div class="rounded-xl border border-slate-200 bg-white p-4">
+            <BaseCard padding="none" class="p-4">
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
                     <SelectInput v-model="venueFilter" label="Venue" placeholder="All Venues" :options="venueOptions" />
                     <SelectInput v-model="statusFilter" label="Room Status" placeholder="All Rooms" :options="statusOptions" />
@@ -125,7 +127,7 @@ const clearRoom = (room, fieldKey) => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </BaseCard>
 
             <div v-for="venue in filteredVenues" :key="venue.id" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
@@ -144,9 +146,8 @@ const clearRoom = (room, fieldKey) => {
                     </div>
                 </div>
 
-                <div v-if="roomsMatchingStatus(venue).length" class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-slate-200 text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <BaseTable v-if="roomsMatchingStatus(venue).length" bare>
+                    <template #head>
                             <tr>
                                 <th class="px-3 py-2">Room</th>
                                 <th class="hidden px-3 py-2 sm:table-cell">Designation</th>
@@ -171,8 +172,8 @@ const clearRoom = (room, fieldKey) => {
                                     </span>
                                 </th>
                             </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
+                    </template>
+
                             <tr
                                 v-for="room in roomsMatchingStatus(venue)"
                                 :key="room.id"
@@ -188,9 +189,9 @@ const clearRoom = (room, fieldKey) => {
                                         <button
                                             v-if="can.assign && canEditField(room, field.key)"
                                             type="button"
-                                            class="shrink-0 text-slate-400 hover:text-accent-600 disabled:pointer-events-none disabled:opacity-40"
+                                            class="-my-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-accent-50 hover:text-accent-600 disabled:pointer-events-none disabled:opacity-40"
                                             :disabled="savingCell === `${room.id}:${field.key}`"
-                                            title="Unassign"
+                                            :aria-label="`Unassign ${room[field.key]} as ${field.label}`"
                                             @click="clearRoom(room, field.key)"
                                         >
                                             <AppIcon name="x-mark" class="h-3.5 w-3.5" />
@@ -214,9 +215,7 @@ const clearRoom = (room, fieldKey) => {
                                     </BaseBadge>
                                 </td>
                             </tr>
-                        </tbody>
-                    </table>
-                </div>
+                </BaseTable>
                 <p v-else class="px-4 py-6 text-center text-sm text-slate-400">
                     No rooms match the current status filter.
                 </p>

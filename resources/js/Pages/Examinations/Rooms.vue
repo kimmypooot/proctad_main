@@ -5,7 +5,9 @@ import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
@@ -338,7 +340,7 @@ const exportSupervisingExaminers = () => exportCsv(
             <span class="text-slate-600">Exam Rooms</span>
         </nav>
 
-        <div class="rounded-xl border border-slate-200 bg-white p-5">
+        <BaseCard padding="none" class="p-5">
             <p class="font-semibold text-slate-900">{{ venue.school_name }}</p>
             <p class="mt-0.5 text-sm text-slate-500">
                 {{ examination.title }} · {{ examination.exam_date }}
@@ -347,7 +349,7 @@ const exportSupervisingExaminers = () => exportCsv(
             <p v-if="venue.contact_person" class="mt-0.5 text-xs text-slate-400">
                 {{ venue.contact_person }}<template v-if="venue.contact_number"> · {{ venue.contact_number }}</template>
             </p>
-        </div>
+        </BaseCard>
 
         <DashboardPageHeader class="mt-6" title="Exam Rooms" subtitle="Manage rooms assigned to this school for the examination.">
             <template #back>
@@ -456,7 +458,12 @@ const exportSupervisingExaminers = () => exportCsv(
                                             <BaseBadge variant="success" class="min-w-0 max-w-full truncate" :title="occupant(room, role).member.name">
                                                 {{ occupant(room, role).member.name }}
                                             </BaseBadge>
-                                            <button type="button" class="shrink-0 text-slate-400 hover:text-accent-600" title="Unassign" @click="clearCell(occupant(room, role))">
+                                            <button
+                                                type="button"
+                                                class="-my-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-accent-50 hover:text-accent-600"
+                                                :aria-label="`Unassign ${occupant(room, role).member.name}`"
+                                                @click="clearCell(occupant(room, role))"
+                                            >
                                                 <AppIcon name="x-mark" class="h-3.5 w-3.5" />
                                             </button>
                                         </div>
@@ -483,9 +490,8 @@ const exportSupervisingExaminers = () => exportCsv(
         </div>
 
         <!-- Rooms table -->
-        <div v-if="rooms.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <BaseTable v-if="rooms.length" class="mt-6">
+            <template #head>
                     <tr>
                         <th class="w-8 px-3 py-2">#</th>
                         <th class="px-3 py-2">Room</th>
@@ -501,8 +507,8 @@ const exportSupervisingExaminers = () => exportCsv(
                         <th class="hidden px-3 py-2 md:table-cell">Added On</th>
                         <th class="px-3 py-2 text-center">Actions</th>
                     </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
+            </template>
+
                     <tr v-for="(room, index) in rooms" :key="room.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="px-3 py-2 text-slate-400">{{ index + 1 }}</td>
                         <td class="px-3 py-2 font-medium text-slate-900">
@@ -528,9 +534,7 @@ const exportSupervisingExaminers = () => exportCsv(
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <EmptyState
             v-else
@@ -794,7 +798,12 @@ const exportSupervisingExaminers = () => exportCsv(
                                             <BaseBadge variant="success" size="xs" class="min-w-0 max-w-full truncate" :title="occupant(room, role).member.name">
                                                 {{ occupant(room, role).member.name }}
                                             </BaseBadge>
-                                            <button type="button" class="shrink-0 text-slate-400 hover:text-accent-600" @click="clearCell(occupant(room, role))">
+                                            <button
+                                                type="button"
+                                                class="-my-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-accent-50 hover:text-accent-600"
+                                                :aria-label="`Unassign ${occupant(room, role).member.name}`"
+                                                @click="clearCell(occupant(room, role))"
+                                            >
                                                 <AppIcon name="x-mark" class="h-3.5 w-3.5" />
                                             </button>
                                         </div>
@@ -845,7 +854,12 @@ const exportSupervisingExaminers = () => exportCsv(
                                             <BaseBadge variant="success" size="xs" class="min-w-0 max-w-full truncate" :title="occupant(room, 'supervising_examiner').member.name">
                                                 {{ occupant(room, 'supervising_examiner').member.name }}
                                             </BaseBadge>
-                                            <button type="button" class="shrink-0 text-slate-400 hover:text-accent-600" @click="clearCell(occupant(room, 'supervising_examiner'))">
+                                            <button
+                                                type="button"
+                                                class="-my-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-accent-50 hover:text-accent-600"
+                                                :aria-label="`Unassign ${occupant(room, 'supervising_examiner').member.name}`"
+                                                @click="clearCell(occupant(room, 'supervising_examiner'))"
+                                            >
                                                 <AppIcon name="x-mark" class="h-3.5 w-3.5" />
                                             </button>
                                         </div>

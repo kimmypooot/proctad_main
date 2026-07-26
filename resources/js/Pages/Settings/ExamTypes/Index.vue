@@ -4,7 +4,9 @@ import { Head, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
@@ -67,10 +69,10 @@ const confirmDelete = () => destroyForm.delete(`/exam-types/${deleting.value.id}
 
         <!-- Mobile (below md): a card per type so the edit/remove actions stay on screen. -->
         <div v-if="examTypes.length" class="mt-6 space-y-3 md:hidden">
-            <div
+            <BaseCard
                 v-for="type in examTypes"
                 :key="`m-${type.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
             >
                 <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
@@ -81,24 +83,23 @@ const confirmDelete = () => destroyForm.delete(`/exam-types/${deleting.value.id}
                         {{ type.is_active ? 'Active' : 'Inactive' }}
                     </BaseBadge>
                 </div>
-                <div v-if="can.manage" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                <div v-if="can.manage" class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
                     <IconButton icon="pencil" label="Edit" @click="openEdit(type)" />
                     <IconButton v-if="type.examinations_count === 0" icon="trash" label="Remove" variant="danger" @click="deleting = type" />
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
-        <div v-if="examTypes.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Name</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Examinations</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
+        <BaseTable
+            v-if="examTypes.length"
+            class="mt-6 hidden md:block"
+            :columns="[
+                { label: 'Name' },
+                { label: 'Examinations', class: 'hidden sm:table-cell' },
+                { label: 'Status' },
+                { label: 'Actions', align: 'center' },
+            ]"
+        >
                     <tr v-for="type in examTypes" :key="type.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="px-3 py-2 font-medium text-slate-900">{{ type.name }}</td>
                         <td class="hidden px-3 py-2 text-slate-600 sm:table-cell">{{ type.examinations_count }}</td>
@@ -120,9 +121,7 @@ const confirmDelete = () => destroyForm.delete(`/exam-types/${deleting.value.id}
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState

@@ -4,6 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
@@ -69,7 +70,7 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
         />
 
         <!-- Filters -->
-        <div class="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+        <BaseCard padding="none" class="mt-6 p-4">
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <SelectInput
                     v-if="filterOptions.canPickFieldOffice"
@@ -87,7 +88,7 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
                     <BaseButton variant="outline" size="sm" @click="clearFilters">Clear</BaseButton>
                 </div>
             </div>
-        </div>
+        </BaseCard>
 
         <!-- Summary -->
         <div class="mt-6 grid gap-4 sm:grid-cols-3">
@@ -116,7 +117,7 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
 
         <!-- Breakdowns -->
         <div class="mt-8 grid gap-6 lg:grid-cols-2">
-            <div class="rounded-xl border border-slate-200 bg-white p-5">
+            <BaseCard padding="none" class="p-5">
                 <h2 class="text-base font-semibold text-slate-900">By Field Office</h2>
                 <table v-if="byFieldOffice.length" class="mt-3 w-full text-sm">
                     <tbody class="divide-y divide-slate-100">
@@ -127,9 +128,9 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
                     </tbody>
                 </table>
                 <p v-else class="mt-3 text-sm text-slate-400">No data for the selected filters.</p>
-            </div>
+            </BaseCard>
 
-            <div class="rounded-xl border border-slate-200 bg-white p-5">
+            <BaseCard padding="none" class="p-5">
                 <h2 class="text-base font-semibold text-slate-900">By Gender</h2>
                 <table v-if="byGender.length" class="mt-3 w-full text-sm">
                     <tbody class="divide-y divide-slate-100">
@@ -140,9 +141,9 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
                     </tbody>
                 </table>
                 <p v-else class="mt-3 text-sm text-slate-400">No data for the selected filters.</p>
-            </div>
+            </BaseCard>
 
-            <div class="rounded-xl border border-slate-200 bg-white p-5">
+            <BaseCard padding="none" class="p-5">
                 <h2 class="text-base font-semibold text-slate-900">By Exam Type</h2>
                 <table v-if="byExamType.length" class="mt-3 w-full text-sm">
                     <tbody class="divide-y divide-slate-100">
@@ -153,9 +154,9 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
                     </tbody>
                 </table>
                 <p v-else class="mt-3 text-sm text-slate-400">No data for the selected filters.</p>
-            </div>
+            </BaseCard>
 
-            <div class="rounded-xl border border-slate-200 bg-white p-5">
+            <BaseCard padding="none" class="p-5">
                 <h2 class="text-base font-semibold text-slate-900">By Year</h2>
                 <table v-if="byYear.length" class="mt-3 w-full text-sm">
                     <tbody class="divide-y divide-slate-100">
@@ -166,11 +167,11 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
                     </tbody>
                 </table>
                 <p v-else class="mt-3 text-sm text-slate-400">No data for the selected filters.</p>
-            </div>
+            </BaseCard>
         </div>
 
         <!-- Training attendance stats -->
-        <div class="mt-8 rounded-xl border border-slate-200 bg-white p-5">
+        <BaseCard padding="none" class="mt-8 p-5">
             <h2 class="text-base font-semibold text-slate-900">Training Attendance</h2>
             <div class="mt-3 grid gap-4 sm:grid-cols-3">
                 <StatCard label="Total Participants" :value="trainingStats.total_participants" :bordered="false" />
@@ -181,10 +182,10 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
                     :bordered="false"
                 />
             </div>
-        </div>
+        </BaseCard>
 
         <!-- Venue readiness -->
-        <div class="mt-8 rounded-xl border border-slate-200 bg-white p-5">
+        <BaseCard padding="none" class="mt-8 p-5">
             <h2 class="text-base font-semibold text-slate-900">Venue Staffing Readiness</h2>
             <p class="mt-1 text-xs text-slate-500">Rooms with at least one staff member assigned, vs total rooms, per venue.</p>
             <div v-if="venueReadiness.length" class="overflow-x-auto">
@@ -218,6 +219,6 @@ const attendanceRate = (total, attended) => (total > 0 ? Math.round((attended / 
             </table>
             </div>
             <p v-else class="mt-3 text-sm text-slate-400">No venues for the selected filters.</p>
-        </div>
+        </BaseCard>
     </DashboardLayout>
 </template>

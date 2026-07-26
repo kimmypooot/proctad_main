@@ -4,15 +4,16 @@ import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import BasePagination from '@/Components/BasePagination.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
-import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextInput from '@/Components/TextInput.vue';
 
 const props = defineProps({
@@ -26,6 +27,15 @@ const props = defineProps({
 });
 
 const currentUserId = computed(() => usePage().props.auth.user.id);
+
+/*
+ * Region-wide reach comes from the role, never from leaving this blank — the
+ * placeholder used to read "Region-wide / none", which invited the opposite
+ * reading. Blank on a Field Office role is the harmful case: their jurisdiction
+ * is derived entirely from the office, so they end up seeing nothing.
+ */
+const fieldOfficeHint = 'Required for Field Office roles — without one they see no records. '
+    + 'Regional roles are region-wide through the role itself and may have none.';
 
 const search = ref(props.filters.search ?? '');
 const role = ref(props.filters.role ?? '');
@@ -139,7 +149,7 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
         </div>
 
         <!-- Filters -->
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <TextInput v-model="search" label="Search" placeholder="Name, email, or username" />
             <SelectInput
                 v-model="role"
@@ -162,14 +172,14 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
                     { value: 'unlinked', label: 'Awaiting registration' },
                 ]"
             />
-        </div>
+        </BaseCard>
 
         <!-- Mobile (below md): a card per user so the edit/reset/register actions stay on screen. -->
         <div v-if="users.data.length" class="mt-6 space-y-3 md:hidden" :class="{ 'opacity-50': loading }">
-            <div
+            <BaseCard
                 v-for="user in users.data"
                 :key="`m-${user.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
             >
                 <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
@@ -199,25 +209,25 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
                     <IconButton icon="pencil" label="Edit" @click="openEdit(user)" />
                     <IconButton icon="key" label="Reset Password" :disabled="resetForm.processing" @click="resettingUser = user" />
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
         <!-- Results -->
-        <div v-if="loading || users.data.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Name</th>
-                        <th class="px-3 py-2">Role</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Field Office</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Last Login</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <TableSkeleton v-if="loading" :columns="6" />
-                    <tr v-for="user in loading ? [] : users.data" :key="user.id" class="transition-colors hover:bg-brand-50/40">
+        <BaseTable
+            v-if="loading || users.data.length"
+            class="mt-6 hidden md:block"
+            :loading="loading"
+            :skeleton-columns="6"
+            :columns="[
+                { label: 'Name' },
+                { label: 'Role' },
+                { label: 'Field Office', class: 'hidden xl:table-cell' },
+                { label: 'Last Login', class: 'hidden md:table-cell' },
+                { label: 'Status' },
+                { label: 'Actions', align: 'center' },
+            ]"
+        >
+                    <tr v-for="user in users.data" :key="user.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="max-w-[12rem] px-3 py-2 sm:max-w-[14rem]">
                             <p class="truncate font-medium text-slate-900" :title="user.name">{{ user.name }}</p>
                             <p class="truncate text-xs text-slate-500" :title="user.email">{{ user.email }}</p>
@@ -253,9 +263,7 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState icon="user-group" title="No users found" description="No accounts match your search or filters." />
@@ -300,9 +308,10 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
                     v-model="createForm.field_office_id"
                     label="Field Office"
                     optional
-                    placeholder="Region-wide / none"
+                    placeholder="None"
                     :options="assignableFieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
                     :error="createForm.errors.field_office_id"
+                    :hint="fieldOfficeHint"
                 />
             </form>
             <template #footer>
@@ -332,9 +341,10 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
                     v-model="editForm.field_office_id"
                     label="Field Office"
                     optional
-                    placeholder="Region-wide / none"
+                    placeholder="None"
                     :options="assignableFieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
                     :error="editForm.errors.field_office_id"
+                    :hint="fieldOfficeHint"
                 />
                 <CheckboxInput v-model="editForm.is_active" :disabled="editing?.id === currentUserId">
                     Active

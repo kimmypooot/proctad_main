@@ -4,6 +4,7 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BarChart from '@/Components/Charts/BarChart.vue';
 import LineAreaChart from '@/Components/Charts/LineAreaChart.vue';
 import StatusBreakdownBar from '@/Components/Charts/StatusBreakdownBar.vue';
@@ -23,7 +24,9 @@ const actionAccents = ['brand', 'emerald', 'amber', 'accent'];
 const props = defineProps({
     role: { type: String, required: true },
     roleLabel: { type: String, required: true },
-    fieldOffice: { type: Object, default: null },
+    // Field office for staff, testing center for test administrators — see
+    // DashboardController::scopeBadge().
+    scopeBadge: { type: Object, default: null },
     stats: { type: Array, required: true },
     memberSummary: { type: Object, default: null },
     analytics: { type: Object, default: null },
@@ -112,9 +115,9 @@ const applyFeedFilter = () => {
         <DashboardPageHeader :title="`Welcome back, ${firstName}`" subtitle="Here's an overview of your PROCTAD workspace.">
             <template #actions>
                 <BaseBadge variant="brand">{{ roleLabel }}</BaseBadge>
-                <BaseBadge v-if="fieldOffice" variant="neutral">
-                    <AppIcon name="building-office" class="h-3.5 w-3.5" />
-                    {{ fieldOffice.name }}
+                <BaseBadge v-if="scopeBadge" variant="neutral">
+                    <AppIcon :name="scopeBadge.icon" class="h-3.5 w-3.5" />
+                    {{ scopeBadge.label }}
                 </BaseBadge>
             </template>
         </DashboardPageHeader>
@@ -161,7 +164,7 @@ const applyFeedFilter = () => {
 
             <div class="mt-4 grid gap-4 xl:grid-cols-3">
                 <!-- Upcoming examinations with assignment-confirmation progress -->
-                <div class="xl:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
+                <BaseCard padding="none" class="xl:col-span-2 p-5">
                     <h3 class="text-sm font-semibold text-slate-900">Upcoming Examinations</h3>
                     <div v-if="!analytics.upcomingExaminations.length" class="mt-4">
                         <EmptyState icon="calendar" title="No upcoming examinations" description="Scheduled exams will appear here." />
@@ -179,7 +182,7 @@ const applyFeedFilter = () => {
                             </BaseBadge>
                         </li>
                     </ul>
-                </div>
+                </BaseCard>
                 <StatusBreakdownBar
                     title="Performance Ratings"
                     :segments="analytics.performanceRatingBreakdown"
@@ -192,7 +195,7 @@ const applyFeedFilter = () => {
             </div>
 
             <!-- Recent registrations -->
-            <div class="mt-4 rounded-xl border border-slate-200 bg-white p-5">
+            <BaseCard padding="none" class="mt-4 p-5">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <h3 class="text-sm font-semibold text-slate-900">Recent Registrations</h3>
                     <div v-if="analytics.fieldOffices" class="w-56">
@@ -240,7 +243,7 @@ const applyFeedFilter = () => {
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </BaseCard>
         </template>
 
         <!-- Role-specific panel -->
@@ -351,7 +354,7 @@ const applyFeedFilter = () => {
                         </Link>
 
                         <!-- Latest activity -->
-                        <div class="rounded-xl border border-slate-200 bg-white p-5">
+                        <BaseCard padding="none" class="p-5">
                             <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Latest Activity</p>
                             <template v-if="memberSummary.latest_certificate || memberSummary.latest_service">
                                 <Link
@@ -373,7 +376,7 @@ const applyFeedFilter = () => {
                                 </Link>
                             </template>
                             <p v-else class="mt-1.5 text-sm text-slate-400">No activity yet.</p>
-                        </div>
+                        </BaseCard>
                     </div>
                 </div>
             </section>

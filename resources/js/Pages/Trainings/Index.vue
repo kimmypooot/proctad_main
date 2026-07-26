@@ -4,9 +4,13 @@ import { Head, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
+import FormErrorSummary from '@/Components/FormErrorSummary.vue';
+import { useFormErrors } from '@/Composables/useFormErrors';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -31,6 +35,8 @@ const form = useForm({
     venue: '',
     exam_id: '',
 });
+
+useFormErrors(form);
 
 const openCreate = () => {
     editing.value = null;
@@ -78,10 +84,10 @@ const submit = () => {
 
         <!-- Mobile (below md): a card per training. Tap to view; edit stays a button. -->
         <div v-if="trainings.length" class="mt-6 space-y-3 md:hidden">
-            <div
+            <BaseCard
                 v-for="training in trainings"
                 :key="`m-${training.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
                 @click="viewing = training"
             >
                 <div class="flex items-start justify-between gap-2">
@@ -100,28 +106,27 @@ const submit = () => {
                     <div v-if="training.exam?.title" class="col-span-2"><dt class="font-medium text-slate-400">Connected Exam</dt><dd class="text-slate-600">{{ training.exam.title }}</dd></div>
                     <div v-if="training.venue" class="col-span-2"><dt class="font-medium text-slate-400">Venue</dt><dd class="text-slate-600">{{ training.venue }}</dd></div>
                 </dl>
-                <div v-if="can.manage && !training.completed" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                <div v-if="can.manage && !training.completed" class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
                     <IconButton icon="pencil" label="Edit" @click.stop="openEdit(training)" />
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
-        <div v-if="trainings.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Training</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Type</th>
-                        <th class="hidden px-3 py-2 lg:table-cell">Field Office</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Connected Exam</th>
-                        <th class="px-3 py-2">Date</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Venue</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Participants</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="w-10 px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
+        <BaseTable
+            v-if="trainings.length"
+            class="mt-6 hidden md:block"
+            :columns="[
+                { label: 'Training' },
+                { label: 'Type', class: 'hidden sm:table-cell' },
+                { label: 'Field Office', class: 'hidden lg:table-cell' },
+                { label: 'Connected Exam', class: 'hidden xl:table-cell' },
+                { label: 'Date' },
+                { label: 'Venue', class: 'hidden xl:table-cell' },
+                { label: 'Participants', class: 'hidden md:table-cell' },
+                { label: 'Status' },
+                { label: 'Actions', class: 'w-10', align: 'center' },
+            ]"
+        >
                     <tr v-for="training in trainings" :key="training.id" class="cursor-pointer transition-colors hover:bg-brand-50/40" @click="viewing = training">
                         <td class="px-3 py-2">
                             <span class="font-medium text-slate-900 hover:underline">{{ training.title }}</span>
@@ -142,9 +147,7 @@ const submit = () => {
                             <IconButton v-if="can.manage && !training.completed" icon="pencil" label="Edit" @click.stop="openEdit(training)" />
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState
@@ -158,12 +161,13 @@ const submit = () => {
 
         <BaseModal :show="showForm" :title="editing ? 'Edit Training' : 'Add Training'" @close="showForm = false">
             <form id="training-form" class="space-y-4" novalidate @submit.prevent="submit">
-                <TextInput v-model="form.title" label="Title" required placeholder="e.g. PROCTAD Orientation" :error="form.errors.title" />
-                <SelectInput v-model="form.type" label="Type" required :options="types" :error="form.errors.type" />
-                <TextInput v-model="form.training_date" label="Training Date" type="date" required :error="form.errors.training_date" />
-                <TextInput v-model="form.end_date" label="End Date" type="date" optional :error="form.errors.end_date" />
-                <TextInput v-model="form.venue" label="Venue" optional :error="form.errors.venue" />
-                <SelectInput v-model="form.exam_id" label="Connected Exam" required placeholder="Select an exam" :options="exams" :error="form.errors.exam_id" />
+                <FormErrorSummary :errors="form.errors" :labels="{ exam_id: 'Connected Exam' }" />
+                <TextInput v-model="form.title" name="title" label="Title" required placeholder="e.g. PROCTAD Orientation" :error="form.errors.title" />
+                <SelectInput v-model="form.type" name="type" label="Type" required :options="types" :error="form.errors.type" />
+                <TextInput v-model="form.training_date" name="training_date" label="Training Date" type="date" required :error="form.errors.training_date" />
+                <TextInput v-model="form.end_date" name="end_date" label="End Date" type="date" optional :error="form.errors.end_date" />
+                <TextInput v-model="form.venue" name="venue" label="Venue" optional :error="form.errors.venue" />
+                <SelectInput v-model="form.exam_id" name="exam_id" label="Connected Exam" required placeholder="Select an exam" :options="exams" :error="form.errors.exam_id" />
             </form>
             <template #footer>
                 <BaseButton variant="outline" size="sm" @click="showForm = false">Cancel</BaseButton>

@@ -4,7 +4,9 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
@@ -212,10 +214,10 @@ const submit = () => {
 
         <!-- Mobile (below md): a card per examination so the manage/edit/hide actions stay on screen. -->
         <div v-if="filteredExaminations.length" class="mt-4 space-y-3 md:hidden">
-            <div
+            <BaseCard
                 v-for="exam in filteredExaminations"
                 :key="`m-${exam.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
                 :class="{ 'opacity-60': !exam.is_active }"
             >
                 <div class="flex items-start justify-between gap-2">
@@ -245,27 +247,26 @@ const submit = () => {
                         </dd>
                     </div>
                 </dl>
-                <div class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                <div class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
                     <IconButton :href="`/examinations/${exam.id}`" icon="eye" label="Manage" />
                     <IconButton v-if="can.manage" icon="pencil" label="Edit" @click="openEdit(exam)" />
                     <IconButton v-if="can.manage" :icon="exam.is_active ? 'eye-slash' : 'eye'" :label="exam.is_active ? 'Hide from dropdowns' : 'Show in dropdowns'" @click="router.patch(`/examinations/${exam.id}/toggle-visibility`)" />
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
-        <div v-if="filteredExaminations.length" class="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Examination</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="px-3 py-2">Date</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Venues / Rooms</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Staffing</th>
-                        <th class="w-24 px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
+        <BaseTable
+            v-if="filteredExaminations.length"
+            class="mt-4 hidden md:block"
+            :columns="[
+                { label: 'Examination' },
+                { label: 'Status' },
+                { label: 'Date' },
+                { label: 'Venues / Rooms', class: 'hidden xl:table-cell' },
+                { label: 'Staffing', class: 'hidden md:table-cell' },
+                { label: 'Actions', class: 'w-24', align: 'center' },
+            ]"
+        >
                     <tr v-for="exam in filteredExaminations" :key="exam.id" class="transition-colors hover:bg-brand-50/40" :class="{ 'opacity-50': !exam.is_active }">
                         <td class="px-3 py-2">
                             <div class="flex items-center gap-1.5">
@@ -315,9 +316,7 @@ const submit = () => {
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-4">
             <EmptyState

@@ -4,6 +4,8 @@ import { useId } from 'vue';
 const model = defineModel({ type: Boolean, default: false });
 
 defineProps({
+    /** The form field key — see the note on TextInput's `name`. */
+    name: { type: String, default: null },
     error: { type: String, default: null },
     disabled: { type: Boolean, default: false },
 });
@@ -17,6 +19,7 @@ const id = useId();
             <input
                 :id="id"
                 v-model="model"
+                :name="name ?? undefined"
                 type="checkbox"
                 :disabled="disabled"
                 :aria-invalid="!!error || undefined"

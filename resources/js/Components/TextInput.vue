@@ -7,6 +7,13 @@ const model = defineModel({ type: [String, Number], default: '' });
 
 const props = defineProps({
     label: { type: String, required: true },
+    /**
+     * The form field key (e.g. `first_name`). The `id` is a generated `useId()`
+     * and so can't be targeted from outside, which is what FormErrorSummary and
+     * `focusFirstError()` need to move focus to a field the server rejected.
+     * Also lets the browser's autofill recognise the field.
+     */
+    name: { type: String, default: null },
     type: { type: String, default: 'text' },
     error: { type: String, default: null },
     hint: { type: String, default: null },
@@ -65,6 +72,7 @@ const describedBy = computed(() => {
             <input
                 :id="id"
                 v-model="model"
+                :name="name ?? undefined"
                 :type="inputType"
                 :required="required"
                 :disabled="disabled"

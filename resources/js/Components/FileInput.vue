@@ -6,6 +6,8 @@ const model = defineModel({ type: File, default: null });
 
 const props = defineProps({
     label: { type: String, required: true },
+    /** The form field key — see the note on TextInput's `name`. */
+    name: { type: String, default: null },
     accept: { type: String, default: null },
     error: { type: String, default: null },
     hint: { type: String, default: null },
@@ -45,6 +47,7 @@ const onChange = async (event) => {
         </label>
         <input
             :id="id"
+            :name="name ?? undefined"
             type="file"
             :accept="accept"
             class="block w-full cursor-pointer rounded-lg border border-slate-300 bg-white text-sm text-slate-600 file:mr-4 file:cursor-pointer file:rounded-l-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100"

@@ -102,24 +102,36 @@ onBeforeUnmount(() => {
             leave-active-class="transition-opacity duration-150 ease-in"
             leave-to-class="opacity-0"
         >
-            <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div v-if="show" class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
                 <div class="fixed inset-0 bg-slate-900/60" aria-hidden="true" @click="emit('close')" />
 
+                <!--
+                    The panel is a flex column with a capped height: header and footer stay
+                    pinned (`shrink-0`) while only the body scrolls. Without this a form
+                    taller than the viewport bleeds off both edges and its footer — where
+                    Save lives — becomes unreachable, because opening the modal also locks
+                    body scroll. `dvh` rather than `vh` so collapsing mobile browser chrome
+                    doesn't push the footer under the address bar.
+
+                    Below `sm` it docks to the bottom as a sheet: the actions land under the
+                    thumb, which is where they need to be for a form filled on a phone at a
+                    testing venue.
+                -->
                 <div
                     ref="panel"
                     role="dialog"
                     aria-modal="true"
                     :aria-label="title ?? 'Dialog'"
                     tabindex="-1"
-                    class="relative w-full rounded-xl bg-white shadow-xl animate-fade-up"
+                    class="relative flex max-h-[92dvh] w-full flex-col rounded-t-xl bg-white shadow-xl animate-fade-up sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl"
                     :class="widths[maxWidth]"
                 >
-                    <div v-if="title" class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                    <div v-if="title" class="flex shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4">
                         <h2 class="text-base font-semibold text-slate-900">{{ title }}</h2>
                         <Tooltip text="Close" position="bottom">
                             <button
                                 type="button"
-                                class="rounded-md p-1 text-slate-400 transition-colors hover:text-slate-600"
+                                class="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 transition-colors hover:text-slate-600 sm:h-8 sm:w-8"
                                 aria-label="Close dialog"
                                 @click="emit('close')"
                             >
@@ -127,10 +139,13 @@ onBeforeUnmount(() => {
                             </button>
                         </Tooltip>
                     </div>
-                    <div class="px-6 py-5">
+                    <div class="flex-1 overflow-y-auto overscroll-contain px-6 py-5">
                         <slot />
                     </div>
-                    <div v-if="$slots.footer" class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                    <div
+                        v-if="$slots.footer"
+                        class="flex shrink-0 justify-end gap-3 border-t border-slate-200 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4"
+                    >
                         <slot name="footer" />
                     </div>
                 </div>

@@ -36,6 +36,20 @@ const show = () => {
 const hide = () => {
     visible.value = false;
 };
+
+// Only surface the tooltip for *keyboard* focus. A mouse click also focuses the
+// trigger, which otherwise pinned the tooltip open until you clicked elsewhere —
+// the annoyance this guards against. `:focus-visible` is exactly "focus that
+// should show a focus affordance", so keyboard users keep their tooltip while
+// clicks don't trigger one. Falls back to showing if the browser can't evaluate
+// the selector, so accessibility never silently regresses.
+const onFocusIn = (event) => {
+    try {
+        if (event.target?.matches(':focus-visible')) show();
+    } catch {
+        show();
+    }
+};
 </script>
 
 <template>
@@ -45,7 +59,7 @@ const hide = () => {
         v-bind="$attrs"
         @mouseenter="show"
         @mouseleave="hide"
-        @focusin="show"
+        @focusin="onFocusIn"
         @focusout="hide"
     >
         <slot />

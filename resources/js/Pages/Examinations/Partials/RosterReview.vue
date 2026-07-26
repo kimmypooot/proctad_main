@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 
 const props = defineProps({
@@ -9,6 +11,15 @@ const props = defineProps({
     assignments: { type: Array, required: true },
     can: { type: Object, required: true },
 });
+
+const groupColumns = [
+    { label: 'Role Group' },
+    { label: 'Total' },
+    { label: 'Confirmed' },
+    { label: 'Pending' },
+    { label: 'Declined' },
+    { label: 'No Venue Yet' },
+];
 
 const groups = computed(() => {
     const byGroup = new Map();
@@ -43,7 +54,7 @@ const totals = computed(() => props.assignments.reduce(
 </script>
 
 <template>
-    <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <BaseCard padding="none" class="p-5">
         <h2 class="text-base font-semibold text-slate-900">Step 4 · Review Roster</h2>
         <p class="mt-1 text-sm text-slate-500">
             Read-only summary of who is assigned to this examination and their confirmation status.
@@ -71,40 +82,26 @@ const totals = computed(() => props.assignments.reduce(
             </div>
 
             <!-- Breakdown by role group -->
-            <div class="overflow-x-auto rounded-lg border border-slate-200">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <tr>
-                            <th class="px-3 py-2">Role Group</th>
-                            <th class="px-3 py-2">Total</th>
-                            <th class="px-3 py-2">Confirmed</th>
-                            <th class="px-3 py-2">Pending</th>
-                            <th class="px-3 py-2">Declined</th>
-                            <th class="px-3 py-2">No Venue Yet</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        <tr v-for="group in groups" :key="group.label" class="transition-colors hover:bg-brand-50/40">
-                            <td class="px-3 py-2 font-medium text-slate-900">{{ group.label }}</td>
-                            <td class="px-3 py-2 text-slate-600">{{ group.total }}</td>
-                            <td class="px-3 py-2">
-                                <BaseBadge variant="success">{{ group.confirmed }}</BaseBadge>
-                            </td>
-                            <td class="px-3 py-2">
-                                <BaseBadge variant="warning">{{ group.pending }}</BaseBadge>
-                            </td>
-                            <td class="px-3 py-2">
-                                <BaseBadge :variant="group.declined ? 'accent' : 'neutral'">{{ group.declined }}</BaseBadge>
-                            </td>
-                            <td class="px-3 py-2 text-slate-600">
-                                <span :class="group.unassignedVenue ? 'text-amber-600' : 'text-slate-400'">
-                                    {{ group.unassignedVenue }}
-                                </span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <BaseTable :columns="groupColumns">
+                <tr v-for="group in groups" :key="group.label" class="transition-colors hover:bg-brand-50/40">
+                    <td class="px-3 py-2 font-medium text-slate-900">{{ group.label }}</td>
+                    <td class="px-3 py-2 text-slate-600">{{ group.total }}</td>
+                    <td class="px-3 py-2">
+                        <BaseBadge variant="success">{{ group.confirmed }}</BaseBadge>
+                    </td>
+                    <td class="px-3 py-2">
+                        <BaseBadge variant="warning">{{ group.pending }}</BaseBadge>
+                    </td>
+                    <td class="px-3 py-2">
+                        <BaseBadge :variant="group.declined ? 'accent' : 'neutral'">{{ group.declined }}</BaseBadge>
+                    </td>
+                    <td class="px-3 py-2 text-slate-600">
+                        <span :class="group.unassignedVenue ? 'text-amber-600' : 'text-slate-400'">
+                            {{ group.unassignedVenue }}
+                        </span>
+                    </td>
+                </tr>
+            </BaseTable>
 
             <p v-if="totals.notYetAttended > 0" class="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-600">
                 {{ totals.notYetAttended }} assignment{{ totals.notYetAttended === 1 ? '' : 's' }} not yet marked present on exam day.
@@ -124,5 +121,5 @@ const totals = computed(() => props.assignments.reduce(
             title="No one assigned yet"
             description="Go back to Step 2 to assign PROCTAD members before reviewing the roster."
         />
-    </div>
+    </BaseCard>
 </template>

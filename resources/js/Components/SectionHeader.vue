@@ -9,7 +9,7 @@ defineProps({
 
 <template>
     <div class="reveal max-w-3xl" :class="align === 'center' ? 'mx-auto text-center' : 'text-left'">
-        <p v-if="eyebrow" class="mb-3 text-sm font-semibold uppercase tracking-widest text-accent-500">
+        <p v-if="eyebrow" class="mb-3 text-sm font-semibold uppercase tracking-widest text-accent-600">
             {{ eyebrow }}
         </p>
         <h2 class="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">

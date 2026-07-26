@@ -4,7 +4,9 @@ import { Link, useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
@@ -321,10 +323,10 @@ const submitBulkConfirm = () => {
             <p v-if="group.label" class="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {{ group.label }} <span class="font-normal normal-case text-slate-400">({{ group.rows.length }})</span>
             </p>
-            <div
+            <BaseCard
                 v-for="assignment in group.rows"
                 :key="`m-${assignment.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
             >
                 <div class="flex items-start gap-3">
                     <input
@@ -332,6 +334,7 @@ const submitBulkConfirm = () => {
                         v-model="selectedForRevoke"
                         type="checkbox"
                         :value="assignment.id"
+                        :aria-label="`Select ${assignment.member.name} for revocation`"
                         class="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-accent-600 accent-accent-600"
                     >
                     <div class="min-w-0 flex-1">
@@ -423,13 +426,12 @@ const submitBulkConfirm = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </BaseCard>
         </template>
     </div>
 
-    <div v-if="filteredAssignments.length" class="mt-3 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <BaseTable v-if="filteredAssignments.length" class="mt-3 hidden md:block">
+        <template #head>
                 <tr>
                     <th v-if="can.assign || can.bulkRevoke" class="w-8 px-3 py-2"><span class="sr-only">Select</span></th>
                     <th class="px-3 py-2">Member</th>
@@ -441,8 +443,7 @@ const submitBulkConfirm = () => {
                     <th class="hidden px-3 py-2 xl:table-cell">Rating</th>
                     <th class="px-3 py-2 text-center">Actions</th>
                 </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
+        </template>
                 <template v-for="group in groupedAssignments" :key="group.key">
                     <tr v-if="group.label" class="bg-slate-50">
                         <td :colspan="(can.assign || can.bulkRevoke) ? 9 : 8" class="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -455,6 +456,7 @@ const submitBulkConfirm = () => {
                             v-model="selectedForRevoke"
                             type="checkbox"
                             :value="assignment.id"
+                            :aria-label="`Select ${assignment.member.name} for revocation`"
                             class="h-4 w-4 rounded border-slate-300 text-accent-600 accent-accent-600"
                         >
                     </td>
@@ -582,9 +584,7 @@ const submitBulkConfirm = () => {
                     </td>
                     </tr>
                 </template>
-            </tbody>
-        </table>
-    </div>
+    </BaseTable>
 
     <div v-else-if="assignments.length" class="mt-6">
         <EmptyState

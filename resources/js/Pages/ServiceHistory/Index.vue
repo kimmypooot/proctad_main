@@ -3,12 +3,14 @@ import { ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BasePagination from '@/Components/BasePagination.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
-import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import ViewServiceHistoryModal from './Partials/ViewServiceHistoryModal.vue';
 
@@ -84,7 +86,7 @@ const viewMember = (id) => {
         </div>
 
         <!-- Filters -->
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <SelectInput
                 v-if="fieldOffices"
                 v-model="fieldOfficeId"
@@ -99,24 +101,24 @@ const viewMember = (id) => {
                 :options="[{ value: '', label: 'All designations' }, ...roles]"
             />
             <TextInput v-model="search" label="Search" placeholder="Name or PROCTAD ID" />
-        </div>
+        </BaseCard>
 
         <!-- Results -->
-        <div v-if="loading || members.data.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Test Administrator</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
-                        <th class="px-3 py-2">Designations Served</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Most Recent Assignment</th>
-                        <th class="px-3 py-2 text-center">Total Served</th>
-                        <th class="px-3 py-2">Action</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <TableSkeleton v-if="loading" :columns="6" />
-                    <tr v-for="member in loading ? [] : members.data" :key="member.id" class="transition-colors hover:bg-brand-50/40">
+        <BaseTable
+            v-if="loading || members.data.length"
+            class="mt-6"
+            :loading="loading"
+            :skeleton-columns="6"
+            :columns="[
+                { label: 'Test Administrator' },
+                { label: 'Field Office', class: 'hidden sm:table-cell' },
+                { label: 'Designations Served' },
+                { label: 'Most Recent Assignment', class: 'hidden md:table-cell' },
+                { label: 'Total Served', align: 'center' },
+                { label: 'Action' },
+            ]"
+        >
+                    <tr v-for="member in members.data" :key="member.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="px-3 py-2">
                             <p class="font-medium text-slate-900">{{ member.name }}</p>
                             <p class="font-mono text-xs text-brand-700">{{ member.proctad_id }}</p>
@@ -138,14 +140,10 @@ const viewMember = (id) => {
                         </td>
                         <td class="px-3 py-2 text-center font-semibold text-slate-800">{{ member.total_served }}</td>
                         <td class="px-3 py-2">
-                            <button type="button" class="text-sm font-medium text-brand-700 hover:underline" @click="viewMember(member.id)">
-                                View
-                            </button>
+                            <BaseButton variant="link" size="sm" @click="viewMember(member.id)">View</BaseButton>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState
