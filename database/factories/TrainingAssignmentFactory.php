@@ -16,8 +16,9 @@ class TrainingAssignmentFactory extends Factory
         return [
             'training_id' => Training::factory(),
             'member_id' => Member::factory(),
-            'field_office_id' => fn (array $attributes) => Member::find($attributes['member_id'])?->field_office_id
-                ?? \App\Models\FieldOffice::factory(),
+            // Both copied from the member — see ExamAssignmentFactory.
+            'field_office_id' => fn (array $attributes) => Member::find($attributes['member_id'])?->field_office_id,
+            'testing_center_id' => fn (array $attributes) => Member::find($attributes['member_id'])?->testing_center_id,
         ];
     }
 }

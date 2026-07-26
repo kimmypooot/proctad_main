@@ -68,12 +68,30 @@ class SharedJurisdictionTest extends TestCase
         return User::factory()->create(['role' => $role, 'field_office_id' => $office?->id]);
     }
 
-    private function memberAt(FieldOffice $office, ?TestingCenter $center): Member
+    private function memberAt(?FieldOffice $office, ?TestingCenter $center): Member
+    {
+        return Member::factory()->create([
+            'field_office_id' => $office?->id,
+            'testing_center_id' => $center?->id,
+            'status' => MemberStatus::Active,
+        ]);
+    }
+
+    /**
+     * An accredited member who is also a CSC employee. Serving region-wide is
+     * read from the staff account, since external test administrators have no
+     * field office at all.
+     */
+    private function employeeMemberAt(FieldOffice $office, ?TestingCenter $center = null): Member
     {
         return Member::factory()->create([
             'field_office_id' => $office->id,
             'testing_center_id' => $center?->id,
             'status' => MemberStatus::Active,
+            'user_id' => User::factory()->create([
+                'role' => $office->is_regional ? UserRole::EsdAdmin : UserRole::FoAdmin,
+                'field_office_id' => $office->id,
+            ])->id,
         ]);
     }
 
@@ -118,7 +136,7 @@ class SharedJurisdictionTest extends TestCase
     /** Requirement 4: RO8 members are assignable region-wide, so every office sees them. */
     public function test_a_regional_office_member_is_visible_to_every_field_office(): void
     {
-        $regionalMember = $this->memberAt($this->regional, null);
+        $regionalMember = $this->employeeMemberAt($this->regional);
 
         foreach ([$this->leyteOne, $this->leyteTwo, $this->samar] as $office) {
             $this->assertTrue(
@@ -128,10 +146,45 @@ class SharedJurisdictionTest extends TestCase
         }
     }
 
+    /**
+     * Region-wide staff are recorded two different ways and both must count.
+     * ESD Admins and the directors hold no field office at all — their role is
+     * already region-wide, so none was ever needed — while other regional
+     * office employees are placed there by office. Reading only the office
+     * silently stripped the first group of their region-wide reach.
+     */
+    public function test_region_wide_reach_covers_staff_with_no_office_of_their_own(): void
+    {
+        $byOffice = $this->employeeMemberAt($this->regional);
+
+        $byRole = Member::factory()->create([
+            'field_office_id' => null,
+            'testing_center_id' => null,
+            'user_id' => User::factory()->create([
+                'role' => UserRole::DirectorIv,
+                'field_office_id' => null,
+            ])->id,
+        ]);
+
+        $this->assertTrue($byOffice->isRegionWide());
+        $this->assertTrue($byRole->isRegionWide());
+
+        // The SQL form must agree with the PHP one, or the candidate pool and
+        // the guard that rejects a pick would disagree about the same member.
+        $this->assertEqualsCanonicalizing(
+            [$byOffice->id, $byRole->id],
+            Member::query()->servingRegionWide()->pluck('id')->all(),
+        );
+
+        $confined = $this->memberAt($this->leyteOne, $this->tacloban);
+        $this->assertFalse($confined->isRegionWide());
+        $this->assertContains($confined->id, Member::query()->notServingRegionWide()->pluck('id')->all());
+    }
+
     /** Visible to all, owned by none — no field office may edit their record. */
     public function test_a_regional_office_member_cannot_be_edited_by_field_office_staff(): void
     {
-        $regionalMember = $this->memberAt($this->regional, null);
+        $regionalMember = $this->employeeMemberAt($this->regional);
 
         $this->assertFalse($this->staff(UserRole::FoAdmin, $this->leyteOne)->can('update', $regionalMember));
         $this->assertFalse($this->staff(UserRole::FieldDirector, $this->leyteOne)->can('update', $regionalMember));
@@ -152,7 +205,7 @@ class SharedJurisdictionTest extends TestCase
             'school_id' => School::factory()->create(['testing_center_id' => $this->catbalogan->id])->id,
         ]);
 
-        $regionalMember = $this->memberAt($this->regional, null);
+        $regionalMember = $this->employeeMemberAt($this->regional);
         $taclobanMember = $this->memberAt($this->leyteOne, $this->tacloban);
         $admin = $this->staff(UserRole::EsdAdmin, null);
 
@@ -219,7 +272,7 @@ class SharedJurisdictionTest extends TestCase
     {
         $unplaced = $this->memberAt($this->samar, null);
         $placed = $this->memberAt($this->samar, $this->catbalogan);
-        $regionalMember = $this->memberAt($this->regional, null);
+        $regionalMember = $this->employeeMemberAt($this->regional);
 
         $this->actingAs($this->staff(UserRole::EsdAdmin, null))
             ->get('/members')

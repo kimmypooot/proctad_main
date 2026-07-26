@@ -30,6 +30,6 @@ class ExamAssignmentPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && in_array($assignment->field_office_id, $user->scopedFieldOfficeIds(), true);
+            && in_array($assignment->testing_center_id, $user->scopedTestingCenterIds(), true);
     }
 }

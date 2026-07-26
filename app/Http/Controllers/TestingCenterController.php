@@ -74,19 +74,20 @@ class TestingCenterController extends Controller
     }
 
     /**
-     * Hand intake for a shared center to one of its handling offices, which is
-     * how a hosting rotation is recorded. Only meaningful where a center is
-     * shared, but accepted for any center so the flag is never left unset.
+     * Hand administration of a center to one of its handling offices. That
+     * office's signatory signs the ID cards and certificates of the members who
+     * serve there, so it moves when administration does. Only contested where a
+     * center is shared, but accepted for any center so the flag is never unset.
      */
-    public function designatePrimary(Request $request, TestingCenter $testingCenter): RedirectResponse
+    public function designateAdministering(Request $request, TestingCenter $testingCenter): RedirectResponse
     {
-        Gate::authorize('designatePrimary', $testingCenter);
+        Gate::authorize('designateAdministering', $testingCenter);
 
         $validated = $request->validate([
             'field_office_id' => [
                 'required', 'integer',
-                // Must already handle this center — intake cannot be handed to
-                // an office that does not serve it.
+                // Must already handle this center — administration cannot be
+                // handed to an office that does not serve it.
                 Rule::exists('field_office_testing_center', 'field_office_id')
                     ->where('testing_center_id', $testingCenter->id),
             ],
@@ -94,13 +95,13 @@ class TestingCenterController extends Controller
             'field_office_id.exists' => 'That field office does not handle this testing center.',
         ]);
 
-        $testingCenter->designatePrimaryFieldOffice((int) $validated['field_office_id']);
+        $testingCenter->designateAdministeringFieldOffice((int) $validated['field_office_id']);
 
         $office = FieldOffice::find($validated['field_office_id']);
 
         return back()->with(
             'success',
-            "New registrations at {$testingCenter->name} now go to {$office->name}.",
+            "{$office->name} now administers {$testingCenter->name}.",
         );
     }
 

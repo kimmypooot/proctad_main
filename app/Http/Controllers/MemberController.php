@@ -40,7 +40,7 @@ class MemberController extends Controller
         $regionWide = $user->role->isRegionWide();
 
         $members = Member::query()
-            ->with('fieldOffice:id,name,code,is_regional', 'testingCenter:id,name')
+            ->with('fieldOffice:id,name,code', 'testingCenter:id,name', 'user.fieldOffice:id,is_regional')
             ->with(['assignments' => fn ($q) => $q
                 ->whereNotNull('attendance_confirmed_at')
                 ->with('examination:id,title,exam_date')])

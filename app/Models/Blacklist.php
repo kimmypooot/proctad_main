@@ -4,19 +4,20 @@ namespace App\Models;
 
 use App\Enums\BlacklistStatus;
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\ScopedByTestingCenter;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'member_id', 'field_office_id', 'reason', 'status',
+    'member_id', 'field_office_id', 'testing_center_id', 'reason', 'status',
     'blacklisted_by', 'blacklisted_at', 'lifted_by', 'lifted_at', 'lift_reason',
 ])]
 class Blacklist extends Model
 {
     /** @use HasFactory<\Database\Factories\BlacklistFactory> */
-    use Auditable, HasFactory;
+    use Auditable, HasFactory, ScopedByTestingCenter;
 
     protected function casts(): array
     {

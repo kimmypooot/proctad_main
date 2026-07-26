@@ -22,21 +22,27 @@ class BlacklistPolicy
      */
     public function create(User $user, Member $member): bool
     {
-        return $this->manage($user, $member->field_office_id);
+        return $this->manage($user, $member->testing_center_id);
     }
 
     public function lift(User $user, Blacklist $blacklist): bool
     {
-        return $this->manage($user, $blacklist->field_office_id);
+        return $this->manage($user, $blacklist->testing_center_id);
     }
 
-    private function manage(User $user, int $fieldOfficeId): bool
+    /**
+     * Nullable: a member who is CSC staff has no testing center, and a record
+     * with none is outside every field office's jurisdiction rather than inside
+     * all of them.
+     */
+    private function manage(User $user, ?int $testingCenterId): bool
     {
         if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
             return true;
         }
 
         return $user->role->isFieldOfficeScoped()
-            && in_array($fieldOfficeId, $user->scopedFieldOfficeIds(), true);
+            && $testingCenterId !== null
+            && in_array($testingCenterId, $user->scopedTestingCenterIds(), true);
     }
 }

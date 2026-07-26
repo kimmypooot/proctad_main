@@ -54,6 +54,31 @@ class UserManagementTest extends TestCase
         Notification::assertSentTo($user, ResetPassword::class);
     }
 
+    /**
+     * Blank means "no office", never "region-wide" — and a Field Office role
+     * with no office derives no jurisdiction at all, so it is rejected.
+     */
+    public function test_field_office_is_required_for_field_office_roles_only(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+
+        $this->actingAs($admin)->post('/users', [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'email' => 'juan@csc.gov.ph',
+            'role' => 'fo_admin',
+        ])->assertSessionHasErrors('field_office_id');
+
+        $this->actingAs($admin)->post('/users', [
+            'first_name' => 'Maria',
+            'last_name' => 'Santos',
+            'email' => 'maria@csc.gov.ph',
+            'role' => 'director_iv',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNull(User::where('email', 'maria@csc.gov.ph')->value('field_office_id'));
+    }
+
     public function test_duplicate_email_is_rejected(): void
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);

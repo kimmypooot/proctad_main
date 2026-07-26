@@ -2,6 +2,7 @@
 import { watch } from 'vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import LoadingSpinner from '@/Components/LoadingSpinner.vue';
 import OepIdCard from '@/Components/OepIdCard.vue';
@@ -48,7 +49,7 @@ watch(() => props.show, (open) => {
                 </div>
 
                 <div class="grid gap-6 sm:grid-cols-2">
-                    <div class="rounded-xl border border-slate-200 bg-white p-5">
+                    <BaseCard padding="none" class="p-5">
                         <h4 class="text-base font-semibold text-slate-900">Details</h4>
                         <dl class="mt-4 space-y-3 text-sm">
                             <div>
@@ -56,8 +57,14 @@ watch(() => props.show, (open) => {
                                 <dd class="mt-0.5 text-slate-700">{{ oep().personnel_type_label }}</dd>
                             </div>
                             <div>
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</dt>
+                                <dd class="mt-0.5 text-slate-700">
+                                    {{ oep().testing_center?.name ?? (oep().is_region_wide ? 'Region-wide' : 'Not placed') }}
+                                </dd>
+                            </div>
+                            <div>
                                 <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</dt>
-                                <dd class="mt-0.5 text-slate-700">{{ oep().field_office?.name ?? 'Region-wide' }}</dd>
+                                <dd class="mt-0.5 text-slate-700">{{ oep().field_office?.name ?? '—' }}</dd>
                             </div>
                             <div>
                                 <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Sex</dt>
@@ -84,7 +91,7 @@ watch(() => props.show, (open) => {
                                 <dd class="mt-0.5 text-slate-700">{{ oep().created_at }}</dd>
                             </div>
                         </dl>
-                    </div>
+                    </BaseCard>
 
                     <div class="flex flex-col items-center gap-4">
                         <OepIdCard v-if="idCard()" :card="idCard()" />

@@ -43,9 +43,9 @@ class ExaminationController extends Controller
         $foScoped = $user->role->isFieldOfficeScoped();
 
         $examinations = Examination::withCount([
-            'assignments' => fn ($q) => $q->when($foScoped, fn ($q2) => $q2->whereIn('field_office_id', $user->scopedFieldOfficeIds())),
+            'assignments' => fn ($q) => $q->when($foScoped, fn ($q2) => $q2->inJurisdictionOf($user)),
             'assignments as confirmed_assignments_count' => fn ($q) => $q->where('status', 'confirmed')
-                ->when($foScoped, fn ($q2) => $q2->whereIn('field_office_id', $user->scopedFieldOfficeIds())),
+                ->when($foScoped, fn ($q2) => $q2->inJurisdictionOf($user)),
         ])
             ->with(['venues' => function ($query) use ($foScoped, $user) {
                 $query->with('rooms:id,examination_school_id')
@@ -129,7 +129,7 @@ class ExaminationController extends Controller
                 'coveringFor.member:id,first_name,middle_name,last_name,suffix',
                 'coveredBy.member:id,first_name,middle_name,last_name,suffix',
             )
-            ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+            ->when($foScoped, fn ($q) => $q->inJurisdictionOf($user))
             ->get();
 
         $computedRatings = $ratingCalculator->computeForMany($assignmentModels);
@@ -214,7 +214,7 @@ class ExaminationController extends Controller
                 ->whereDoesntHave('assignments', fn ($q) => $q->where('examination_id', $examination->id))
                 ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
                 // For confined_to_center_id below — one query, not one per row.
-                ->with('user:id,role,field_office_id', 'fieldOffice:id,is_regional')
+                ->with('user:id,role,field_office_id', 'user.fieldOffice:id,is_regional')
                 ->orderBy('last_name')
                 ->get(['id', 'user_id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'field_office_id', 'testing_center_id'])
                 ->map(fn (Member $member) => [

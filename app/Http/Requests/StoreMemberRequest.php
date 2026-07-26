@@ -26,13 +26,15 @@ class StoreMemberRequest extends FormRequest
             'mobile_number' => ['required', 'string', 'regex:/^(\+639|09)\d{9}$/'],
             'agency' => ['required', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],
-            'field_office_id' => ['required', 'exists:field_offices,id', $this->fieldOfficeScopeRule()],
+            // Optional, and only for the minority of members who are also CSC
+            // employees. A field office says who someone works for; an external
+            // test administrator works for their own agency, recorded in
+            // `agency` above.
+            'field_office_id' => ['nullable', 'exists:field_offices,id', $this->fieldOfficeScopeRule()],
+            // Required for everyone: the center is what decides who can see and
+            // manage a member.
             'testing_center_id' => [
-                // Regional-office members serve region-wide and sit in no
-                // center; everyone else must have one, since the center is what
-                // decides who can see and manage them.
-                Rule::requiredIf(fn () => ! $this->chosenOfficeIsRegional()),
-                'nullable',
+                'required',
                 'exists:testing_centers,id',
                 $this->testingCenterScopeRule(),
             ],
@@ -61,6 +63,10 @@ class StoreMemberRequest extends FormRequest
     protected function fieldOfficeScopeRule(): \Closure
     {
         return function (string $attribute, mixed $value, \Closure $fail) {
+            if ($value === null || $value === '') {
+                return;
+            }
+
             $user = $this->user();
 
             if ($user->role->isFieldOfficeScoped()
@@ -71,9 +77,10 @@ class StoreMemberRequest extends FormRequest
     }
 
     /**
-     * The center must be one the chosen office actually handles — otherwise the
-     * member would be filed under staff who do not serve them — and, for
-     * FO-scoped staff, one inside their own jurisdiction.
+     * FO-scoped staff can only place a member in a center they themselves
+     * serve. Where an office is also given — the member is CSC staff — the two
+     * must agree, or the record would be filed under an office that does not
+     * serve that city.
      */
     protected function testingCenterScopeRule(): \Closure
     {
@@ -92,10 +99,14 @@ class StoreMemberRequest extends FormRequest
                 return;
             }
 
-            $officeId = (int) $this->input('field_office_id');
+            $officeId = $this->input('field_office_id');
+
+            if ($officeId === null || $officeId === '') {
+                return;
+            }
 
             $handled = DB::table('field_office_testing_center')
-                ->where('field_office_id', $officeId)
+                ->where('field_office_id', (int) $officeId)
                 ->where('testing_center_id', $centerId)
                 ->exists();
 
@@ -103,14 +114,5 @@ class StoreMemberRequest extends FormRequest
                 $fail('That Testing Center is not handled by the selected Field Office.');
             }
         };
-    }
-
-    /** Whether the submitted field office is the regional office. */
-    protected function chosenOfficeIsRegional(): bool
-    {
-        $officeId = $this->input('field_office_id');
-
-        return $officeId !== null
-            && DB::table('field_offices')->where('id', $officeId)->value('is_regional') == true;
     }
 }

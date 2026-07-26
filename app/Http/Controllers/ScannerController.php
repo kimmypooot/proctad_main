@@ -68,10 +68,10 @@ class ScannerController extends Controller
         $venues = [];
 
         if ($raw['type'] === 'oep') {
-            $oep = OtherExaminationPersonnel::with('fieldOffice:id,name,code')
+            $oep = OtherExaminationPersonnel::with(['fieldOffice:id,name,code', 'testingCenter:id,name'])
                 ->where('oep_id', $raw['code'])
                 ->when($user->role->isFieldOfficeScoped(),
-                    fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                    fn ($q) => $q->withinJurisdictionOf($user))
                 ->first();
 
             $oepResult = $oep ? [
@@ -80,6 +80,7 @@ class ScannerController extends Controller
                 'name' => $oep->name,
                 'personnel_type_label' => $oep->personnel_type->label(),
                 'field_office' => $oep->fieldOffice?->name,
+                'testing_center' => $oep->testingCenter?->name,
                 'is_active' => $oep->is_active,
             ] : null;
             $notFound = $oep === null;
@@ -98,7 +99,7 @@ class ScannerController extends Controller
                 ->where('proctad_id', $raw['code'])
                 // FO Admins can only look up members of their own Field Office.
                 ->when($user->role->isFieldOfficeScoped(),
-                    fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                    fn ($q) => $q->withinJurisdictionOf($user))
                 ->first();
 
             // Public sessions get identity only — enough to confirm the right
@@ -352,7 +353,7 @@ class ScannerController extends Controller
             $assignments = $query
                 ->whereIn('member_id', $memberIds)
                 ->whereNull('attendance_confirmed_at')
-                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
                 ->get();
 
             foreach ($assignments as $assignment) {
@@ -404,7 +405,7 @@ class ScannerController extends Controller
                 [$assignmentId, $schoolId] = array_map('intval', explode(':', $pair, 2));
 
                 $assignment = ExamAssignment::where('id', $assignmentId)
-                    ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                    ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
                     ->first();
 
                 if (! $assignment) {
@@ -506,7 +507,7 @@ class ScannerController extends Controller
         if ($trainingId) {
             $assignments = TrainingAssignment::with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
                 ->where('training_id', $trainingId)
-                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
                 ->get();
         } elseif ($examinationId) {
             $assignments = ExamAssignment::with([
@@ -515,7 +516,7 @@ class ScannerController extends Controller
                 'room',
             ])
                 ->where('examination_id', $examinationId)
-                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
                 ->get();
         } else {
             return null;
@@ -594,7 +595,7 @@ class ScannerController extends Controller
             $coverageAssignments = ExamAssignment::where('examination_id', $examinationId)
                 ->whereHas('coveredSchools', fn ($q) => $q->where('examination_school.id', $venueId))
                 ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
-                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
                 ->get();
             $coverageAttendance = ExamAssignmentAttendance::where('examination_school_id', $venueId)
                 ->whereIn('exam_assignment_id', $coverageAssignments->pluck('id'))
@@ -677,7 +678,7 @@ class ScannerController extends Controller
                 ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value,
             ])
             ->whereIn('status', [AssignmentStatus::Pending->value, AssignmentStatus::Confirmed->value])
-            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
             ->with('member:id,first_name,middle_name,last_name,suffix')
             ->get();
 
@@ -739,7 +740,7 @@ class ScannerController extends Controller
         $assignments = ExamAssignment::query()
             ->where('examination_id', $examinationId)
             ->where('examination_school_id', $venueId)
-            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
             ->with([
                 'member:id,proctad_id,first_name,middle_name,last_name,suffix',
                 'room:id,room_number,designation',
@@ -929,7 +930,10 @@ class ScannerController extends Controller
     {
         $assignment = TrainingAssignment::firstOrCreate(
             ['training_id' => $trainingId, 'member_id' => $member->id],
-            ['field_office_id' => $member->field_office_id],
+            [
+                'field_office_id' => $member->field_office_id,
+                'testing_center_id' => $member->testing_center_id,
+            ],
         );
 
         if ($assignment->attendance_confirmed_at) {

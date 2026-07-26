@@ -54,10 +54,11 @@ class LocationController extends Controller
             ->map(fn (TestingCenter $center) => [
                 ...$center->only('id', 'name', 'is_active'),
                 'field_office_ids' => $center->fieldOffices->pluck('id'),
-                // The office new registrants at this center are filed under.
-                // Only contested where a center is shared (Tacloban City), but
-                // shown everywhere so the routing is never a mystery.
-                'primary_field_office_id' => $center->fieldOffices
+                // The office administering this center, whose signatory signs
+                // for the members serving there. Only contested where a center
+                // is shared (Tacloban City), but shown everywhere so it is
+                // never a mystery whose signature appears.
+                'administering_field_office_id' => $center->fieldOffices
                     ->firstWhere(fn ($office) => (bool) $office->pivot->is_primary)?->id,
                 'handling_offices' => $center->fieldOffices
                     ->map(fn ($office) => $office->only('id', 'name'))
@@ -65,7 +66,7 @@ class LocationController extends Controller
                 'schools_count' => $center->schools_count,
                 'users_count' => $center->users_count,
                 'can_manage' => $user->can('update', $center),
-                'can_designate_primary' => $user->can('designatePrimary', $center),
+                'can_designate_administering' => $user->can('designateAdministering', $center),
             ]);
 
         $schools = School::query()

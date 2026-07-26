@@ -6,19 +6,22 @@ use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\Signatory;
 use App\Models\TestingCenter;
 use App\Models\User;
+use App\Support\MemberIdCard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * Hosting rotates between the two Leyte offices, so which of them receives new
- * registrations at Tacloban City has to be changeable without touching the
- * database. Registration asks applicants for a city and resolves the office
- * from this flag, so exactly one office must hold it at any time.
+ * Test administrators belong to a testing center, not a field office, so their
+ * ID cards and certificates are signed by whichever office administers that
+ * center. Tacloban City is served by both Leyte offices, so one of them holds
+ * it — and which one must be changeable without touching the database, since
+ * administration rotates.
  */
-class IntakeOfficeTest extends TestCase
+class AdministeringOfficeTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -42,13 +45,13 @@ class IntakeOfficeTest extends TestCase
 
     private function primaryId(): ?int
     {
-        return $this->tacloban->fresh()->primaryFieldOfficeId();
+        return $this->tacloban->fresh()->administeringFieldOfficeId();
     }
 
-    public function test_a_region_wide_admin_hands_intake_to_the_other_office(): void
+    public function test_a_region_wide_admin_hands_administration_to_the_other_office(): void
     {
         $this->actingAs(User::factory()->create(['role' => UserRole::EsdAdmin]))
-            ->patch("/testing-centers/{$this->tacloban->id}/primary-office", [
+            ->patch("/testing-centers/{$this->tacloban->id}/administering-office", [
                 'field_office_id' => $this->leyteTwo->id,
             ])
             ->assertRedirect();
@@ -56,11 +59,11 @@ class IntakeOfficeTest extends TestCase
         $this->assertSame($this->leyteTwo->id, $this->primaryId());
     }
 
-    /** Exactly one office may hold intake, or registration resolves ambiguously. */
+    /** Exactly one office may hold it, or the signatory is ambiguous. */
     public function test_designating_an_office_clears_the_previous_one(): void
     {
         $this->actingAs(User::factory()->create(['role' => UserRole::SuperAdmin]))
-            ->patch("/testing-centers/{$this->tacloban->id}/primary-office", [
+            ->patch("/testing-centers/{$this->tacloban->id}/administering-office", [
                 'field_office_id' => $this->leyteTwo->id,
             ]);
 
@@ -71,17 +74,40 @@ class IntakeOfficeTest extends TestCase
         $this->assertSame([$this->leyteTwo->id], $primaries->all());
     }
 
-    /** The point of the whole feature: the next registrant lands elsewhere. */
-    public function test_flipping_intake_redirects_the_next_registration(): void
+    /**
+     * The point of the whole feature. An external test administrator has no
+     * field office of their own, so the signature on their ID card follows the
+     * office administering their center — and moves when that does.
+     */
+    public function test_the_administering_offices_signatory_signs_for_the_center(): void
     {
+        $member = Member::factory()->create([
+            'field_office_id' => null,
+            'testing_center_id' => $this->tacloban->id,
+        ]);
+
+        Signatory::create([
+            'field_office_id' => $this->leyteOne->id,
+            'name' => 'DIR. ALPHA', 'position' => 'Director II', 'is_active' => true,
+        ]);
+        Signatory::create([
+            'field_office_id' => $this->leyteTwo->id,
+            'name' => 'DIR. BRAVO', 'position' => 'Director II', 'is_active' => true,
+        ]);
+
+        $this->assertSame('DIR. ALPHA', MemberIdCard::data($member)['signatory']['name']);
+
         $this->actingAs(User::factory()->create(['role' => UserRole::EsdAdmin]))
-            ->patch("/testing-centers/{$this->tacloban->id}/primary-office", [
+            ->patch("/testing-centers/{$this->tacloban->id}/administering-office", [
                 'field_office_id' => $this->leyteTwo->id,
             ]);
 
-        // Registration is a guest flow — drop the admin session first.
-        $this->post('/logout');
+        $this->assertSame('DIR. BRAVO', MemberIdCard::data($member->fresh())['signatory']['name']);
+    }
 
+    /** Registration files nobody under a field office — the column is for staff. */
+    public function test_registration_leaves_the_field_office_empty(): void
+    {
         $this->withSession(['google_pending_registration' => [
             'google_id' => 'g-1', 'email' => 'juan@example.test',
             'first_name' => 'Juan', 'last_name' => 'Dela Cruz', 'avatar' => null,
@@ -92,24 +118,25 @@ class IntakeOfficeTest extends TestCase
             'testing_center_id' => $this->tacloban->id, 'terms' => true,
         ])->assertRedirect(route('dashboard'));
 
-        $this->assertSame(
-            $this->leyteTwo->id,
-            Member::where('email', 'juan@example.test')->value('field_office_id'),
-        );
+        $member = Member::where('email', 'juan@example.test')->firstOrFail();
+
+        $this->assertNull($member->field_office_id);
+        $this->assertNull($member->user->field_office_id);
+        $this->assertSame($this->tacloban->id, $member->testing_center_id);
     }
 
     /**
-     * The two offices are peers, so neither may take the other's registrants.
-     * Top management decides who hosts.
+     * The two offices are peers, so neither may claim the center and put its
+     * own signature on the other's members' certificates.
      */
-    public function test_field_office_staff_cannot_change_the_intake_office(): void
+    public function test_field_office_staff_cannot_change_the_administering_office(): void
     {
         foreach ([UserRole::FoAdmin, UserRole::FieldDirector] as $role) {
             $this->actingAs(User::factory()->create([
                 'role' => $role,
                 'field_office_id' => $this->leyteTwo->id,
             ]))
-                ->patch("/testing-centers/{$this->tacloban->id}/primary-office", [
+                ->patch("/testing-centers/{$this->tacloban->id}/administering-office", [
                     'field_office_id' => $this->leyteTwo->id,
                 ])
                 ->assertForbidden();
@@ -118,13 +145,13 @@ class IntakeOfficeTest extends TestCase
         $this->assertSame($this->leyteOne->id, $this->primaryId());
     }
 
-    /** Intake cannot be handed to an office that does not serve the center. */
+    /** Administration cannot be handed to an office that does not serve the center. */
     public function test_an_office_that_does_not_handle_the_center_is_rejected(): void
     {
         $samar = FieldOffice::factory()->create(['name' => 'CSC Field Office - Samar']);
 
         $this->actingAs(User::factory()->create(['role' => UserRole::EsdAdmin]))
-            ->patch("/testing-centers/{$this->tacloban->id}/primary-office", [
+            ->patch("/testing-centers/{$this->tacloban->id}/administering-office", [
                 'field_office_id' => $samar->id,
             ])
             ->assertSessionHasErrors('field_office_id');
@@ -132,13 +159,13 @@ class IntakeOfficeTest extends TestCase
         $this->assertSame($this->leyteOne->id, $this->primaryId());
     }
 
-    /** Who receives registrations is exactly what the audit trail is for. */
+    /** Whose signature appears on a certificate is what the audit trail is for. */
     public function test_the_change_is_audited(): void
     {
         $admin = User::factory()->create(['role' => UserRole::EsdAdmin]);
 
         $this->actingAs($admin)
-            ->patch("/testing-centers/{$this->tacloban->id}/primary-office", [
+            ->patch("/testing-centers/{$this->tacloban->id}/administering-office", [
                 'field_office_id' => $this->leyteTwo->id,
             ]);
 
@@ -149,15 +176,15 @@ class IntakeOfficeTest extends TestCase
             ->firstOrFail();
 
         $this->assertSame($admin->id, $log->user_id);
-        $this->assertSame($this->leyteOne->id, $log->changes['old']['primary_field_office_id']);
-        $this->assertSame($this->leyteTwo->id, $log->changes['new']['primary_field_office_id']);
+        $this->assertSame($this->leyteOne->id, $log->changes['old']['administering_field_office_id']);
+        $this->assertSame($this->leyteTwo->id, $log->changes['new']['administering_field_office_id']);
     }
 
-    /** Re-designating the office that already holds intake is a no-op, not an audit entry. */
+    /** Re-designating the office that already holds it is a no-op, not an audit entry. */
     public function test_redesignating_the_same_office_records_nothing(): void
     {
         $this->actingAs(User::factory()->create(['role' => UserRole::EsdAdmin]))
-            ->patch("/testing-centers/{$this->tacloban->id}/primary-office", [
+            ->patch("/testing-centers/{$this->tacloban->id}/administering-office", [
                 'field_office_id' => $this->leyteOne->id,
             ])
             ->assertRedirect();
@@ -169,14 +196,14 @@ class IntakeOfficeTest extends TestCase
             ->count());
     }
 
-    /** The Locations page exposes intake and gates the control by role. */
-    public function test_the_locations_page_exposes_intake_and_gates_the_control(): void
+    /** The Locations page exposes the administering office and gates the control. */
+    public function test_the_locations_page_exposes_the_administering_office(): void
     {
         $this->actingAs(User::factory()->create(['role' => UserRole::EsdAdmin]))
             ->get('/locations')
             ->assertInertia(fn (Assert $page) => $page
-                ->where('testingCenters.0.primary_field_office_id', $this->leyteOne->id)
-                ->where('testingCenters.0.can_designate_primary', true)
+                ->where('testingCenters.0.administering_field_office_id', $this->leyteOne->id)
+                ->where('testingCenters.0.can_designate_administering', true)
                 ->count('testingCenters.0.handling_offices', 2));
 
         $this->actingAs(User::factory()->create([
@@ -186,7 +213,7 @@ class IntakeOfficeTest extends TestCase
             ->get('/locations')
             ->assertInertia(fn (Assert $page) => $page
                 // Visible, so staff know where registrants go — but not editable.
-                ->where('testingCenters.0.primary_field_office_id', $this->leyteOne->id)
-                ->where('testingCenters.0.can_designate_primary', false));
+                ->where('testingCenters.0.administering_field_office_id', $this->leyteOne->id)
+                ->where('testingCenters.0.can_designate_administering', false));
     }
 }

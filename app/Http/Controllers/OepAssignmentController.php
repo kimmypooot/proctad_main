@@ -38,7 +38,7 @@ class OepAssignmentController extends Controller
 
         abort_if(
             $user->role->isFieldOfficeScoped()
-                && ! in_array($oep->field_office_id, $user->scopedFieldOfficeIds(), true),
+                && ! $oep->isWithinJurisdictionOf($user),
             403,
         );
 

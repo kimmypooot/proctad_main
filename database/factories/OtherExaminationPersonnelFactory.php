@@ -25,6 +25,22 @@ class OtherExaminationPersonnelFactory extends Factory
             'position' => fake()->optional()->jobTitle(),
             'personnel_type' => fake()->randomElement(PersonnelType::cases()),
             'field_office_id' => FieldOffice::factory(),
+            // Jurisdiction is decided by testing center, so personnel without
+            // one are invisible to the very staff who serve them — never what a
+            // test setting only `field_office_id` intends. Resolved inline (not
+            // in afterCreating) so the row is inserted once, and declared after
+            // the office so it is already a resolved id here. Mirrors
+            // MemberFactory, which faces exactly the same problem.
+            'testing_center_id' => function (array $attributes) {
+                $office = FieldOffice::find($attributes['field_office_id']);
+
+                if ($office === null || $office->is_regional) {
+                    return null;
+                }
+
+                return $office->testingCenters()->value('testing_centers.id')
+                    ?? TestingCenterFactory::new()->forFieldOffice($office)->create()->id;
+            },
             'is_active' => true,
         ];
     }

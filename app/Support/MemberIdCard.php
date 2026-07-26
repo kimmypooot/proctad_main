@@ -13,8 +13,8 @@ class MemberIdCard
      */
     public static function data(Member $member): array
     {
-        $member->loadMissing('fieldOffice:id,name,code', 'user:id,google_avatar');
-        $signatory = Signatory::currentFor($member->field_office_id);
+        $member->loadMissing('fieldOffice:id,name,code', 'testingCenter:id,name', 'user:id,google_avatar');
+        $signatory = Signatory::currentFor($member->administeringFieldOfficeId());
 
         return [
             'proctad_id' => $member->proctad_id,

@@ -47,6 +47,7 @@ class TrainingAssignmentController extends Controller
         $training->assignments()->create([
             'member_id' => $member->id,
             'field_office_id' => $member->field_office_id,
+            'testing_center_id' => $member->testing_center_id,
         ]);
 
         return back()->with('success', "{$member->name} assigned to {$training->title}.");

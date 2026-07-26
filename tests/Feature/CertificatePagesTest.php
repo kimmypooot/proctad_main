@@ -8,6 +8,8 @@ use App\Enums\UserRole;
 use App\Models\Certificate;
 use App\Models\ExamAssignment;
 use App\Models\FieldOffice;
+use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -17,16 +19,28 @@ class CertificatePagesTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * A certificate belonging to the given office's jurisdiction. Staff see
+     * certificates by testing center now, so "belongs to this office" means its
+     * member serves a center that office handles — the office id itself is only
+     * set for members who are CSC staff, which these are not.
+     */
     private function certificate(CertificateType $type, CertificateStatus $status, ?int $fieldOfficeId = null): Certificate
     {
-        $assignment = ExamAssignment::factory()->create(
-            $fieldOfficeId ? ['field_office_id' => $fieldOfficeId] : [],
-        );
+        $member = $fieldOfficeId
+            ? Member::factory()->create([
+                'field_office_id' => null,
+                'testing_center_id' => TestingCenter::factory()->forFieldOffice($fieldOfficeId)->create()->id,
+            ])
+            : Member::factory()->create(['field_office_id' => null]);
+
+        $assignment = ExamAssignment::factory()->create(['member_id' => $member->id]);
 
         return Certificate::create([
             'type' => $type,
             'member_id' => $assignment->member_id,
             'field_office_id' => $assignment->field_office_id,
+            'testing_center_id' => $assignment->testing_center_id,
             'certifiable_type' => ExamAssignment::class,
             'certifiable_id' => $assignment->id,
             'status' => $status,

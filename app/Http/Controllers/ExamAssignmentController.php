@@ -30,8 +30,8 @@ class ExamAssignmentController extends Controller
 {
     // Proctor/Room Examiner/Supervising Examiner physically staff one specific
     // school, so (unlike REC, which monitors region-wide) they must always be
-    // drawn from that venue's own field office. LEC is field-office-bound too,
-    // but at the coverage level — see coveredSchoolJurisdictionRule.
+    // drawn from that venue's own testing center. LEC is center-bound too, but
+    // at the coverage level — see coveredSchoolJurisdictionRule.
     private const ROOM_ROLES = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
 
     // Exactly one Proctor and one Room Examiner per room (Supervising Examiner
@@ -92,15 +92,16 @@ class ExamAssignmentController extends Controller
                 return;
             }
 
-            // Members serve the testing center they were registered at, so the
-            // comparison is center to center — a member of either Leyte office
-            // may staff a Tacloban City room. Regional-office members are exempt:
-            // they serve region-wide and may be placed at any venue.
+            // Members serve the testing center they registered at, so the
+            // comparison is center to center — a member registered at Tacloban
+            // City may staff a room there whichever Leyte office administers it.
+            // Exempt are members who are also region-wide CSC staff, who may be
+            // placed at any venue (see Member::isRegionWide).
             $outOfJurisdiction = Member::whereIn('id', array_filter($memberIds))
                 ->where(fn ($q) => $q
                     ->where('testing_center_id', '!=', $centerId)
                     ->orWhereNull('testing_center_id'))
-                ->whereDoesntHave('fieldOffice', fn ($q) => $q->where('is_regional', true))
+                ->notServingRegionWide()
                 ->exists();
 
             if ($outOfJurisdiction) {
@@ -187,7 +188,7 @@ class ExamAssignmentController extends Controller
     }
 
     /**
-     * Confines field-office-scoped staff to their own field office.
+     * Confines field-office-scoped staff to the testing centers they serve.
      *
      * A Field Office Staff or Field Director who is also an accredited member
      * serves where they work — unlike the regional roles (Super Admin, ESD
@@ -324,6 +325,7 @@ class ExamAssignmentController extends Controller
             'member_id' => $member->id,
             'role' => $validated['role'],
             'field_office_id' => $member->field_office_id,
+            'testing_center_id' => $member->testing_center_id,
             'examination_school_id' => $validated['examination_school_id'] ?? null,
             'exam_room_id' => $validated['exam_room_id'] ?? null,
         ]);
@@ -399,6 +401,7 @@ class ExamAssignmentController extends Controller
                 'member_id' => $member->id,
                 'role' => $validated['role'],
                 'field_office_id' => $member->field_office_id,
+            'testing_center_id' => $member->testing_center_id,
                 'examination_school_id' => $validated['examination_school_id'] ?? null,
             ]);
             $this->syncCoveredSchools($assignment, $validated['covered_school_ids'] ?? []);
@@ -442,7 +445,7 @@ class ExamAssignmentController extends Controller
             ->all();
 
         $skippedMembers = Member::whereIn('id', $skippedIds)
-            ->with('fieldOffice:id,is_regional')
+            ->with('user.fieldOffice:id,is_regional')
             ->get(['id', 'first_name', 'middle_name', 'last_name', 'suffix', 'status', 'field_office_id', 'testing_center_id'])
             ->keyBy('id');
 
@@ -490,7 +493,7 @@ class ExamAssignmentController extends Controller
 
         $assignments = ExamAssignment::whereIn('id', $validated['assignment_ids'])
             ->where('status', AssignmentStatus::Pending)
-            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->inJurisdictionOf($user))
             ->get();
 
         foreach ($assignments as $assignment) {
@@ -576,7 +579,7 @@ class ExamAssignmentController extends Controller
                 fn (string $attribute, mixed $value, \Closure $fail) => $this
                     ->reservedSeatRule(is_string($value) ? $value : null)($attribute, $assignment->member_id, $fail),
                 // Also re-checked on edit: the venue can be moved out of a
-                // field-office-scoped member's own field office here just as
+                // field-office-scoped member's own testing centers here just as
                 // easily as it can be set wrongly at creation.
                 $this->staffJurisdictionRule($request, [$assignment->member_id]),
             ],
@@ -639,7 +642,7 @@ class ExamAssignmentController extends Controller
         // Room staffing is a venue-level action (same boundary as the Rooms
         // page and the staffing randomizer), not an assignment-record edit —
         // deliberately NOT gated by ExamAssignmentPolicy::manage(), which
-        // checks the assignee's own field office. That normally matches the
+        // checks the assignee's own testing center. That normally matches the
         // venue's via venueJurisdictionRule, but isn't guaranteed for every
         // row (e.g. legacy data), and a venue's FO admin must always be able
         // to room-assign whoever the venue's own unassigned pool shows them.
@@ -692,7 +695,7 @@ class ExamAssignmentController extends Controller
 
         abort_if(
             $user->role->isFieldOfficeScoped()
-                && ! in_array($assignment->field_office_id, $user->scopedFieldOfficeIds(), true),
+                && ! in_array($assignment->testing_center_id, $user->scopedTestingCenterIds(), true),
             403,
         );
 

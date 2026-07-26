@@ -147,18 +147,56 @@ class Member extends Model
     }
 
     /**
-     * Whether this member serves region-wide rather than out of one testing
-     * center — true for members of the regional office (RO8), who may be
-     * assigned to any venue in the region.
+     * The office administering this member for signing purposes — whose
+     * signatory appears on their ID card and certificates.
      *
-     * Prefers an already-loaded relation: this is called per row while building
-     * assignment candidate pools, so the common path must not add a query.
+     * CSC staff are administered by the office they work for. External test
+     * administrators have no office of their own, so it comes from the office
+     * that administers their testing center.
+     */
+    public function administeringFieldOfficeId(): ?int
+    {
+        return $this->field_office_id
+            ?? $this->testingCenter?->administeringFieldOfficeId();
+    }
+
+    /**
+     * Whether this member may be assigned to any venue in the region rather
+     * than only their own testing center.
+     *
+     * Read from their staff account, not from the member record: a field office
+     * describes who someone works for, which is a fact about CSC employees.
+     * External test administrators work for their own agency and have none.
+     *
+     * Two ways to qualify, because region-wide staff are recorded both ways.
+     * ESD Admins and the directors hold no field office at all — their role is
+     * already region-wide, so none was ever needed — while other regional
+     * office employees are placed there by office.
      */
     public function isRegionWide(): bool
     {
-        return (bool) ($this->relationLoaded('fieldOffice')
-            ? $this->fieldOffice?->is_regional
-            : $this->fieldOffice()->value('is_regional'));
+        return $this->user !== null
+            && ($this->user->role->isRegionWide() || (bool) $this->user->fieldOffice?->is_regional);
+    }
+
+    /** The SQL form of isRegionWide(), for use inside a query. */
+    private static function regionWideConstraint(): \Closure
+    {
+        return fn (Builder $query) => $query->whereHas('user', fn (Builder $u) => $u
+            ->whereIn('role', UserRole::regionWideValues())
+            ->orWhereHas('fieldOffice', fn (Builder $o) => $o->where('is_regional', true)));
+    }
+
+    /** Members whose staff account gives them region-wide reach. */
+    public function scopeServingRegionWide(Builder $query): Builder
+    {
+        return $query->where(self::regionWideConstraint());
+    }
+
+    /** The complement: members confined to the testing center they serve. */
+    public function scopeNotServingRegionWide(Builder $query): Builder
+    {
+        return $query->whereNot(self::regionWideConstraint());
     }
 
     /**
@@ -174,7 +212,7 @@ class Member extends Model
     {
         return $query->where(fn (Builder $q) => $q
             ->whereIn('testing_center_id', $user->scopedTestingCenterIds())
-            ->orWhereHas('fieldOffice', fn (Builder $o) => $o->where('is_regional', true)));
+            ->orWhere(self::regionWideConstraint()));
     }
 
     /**

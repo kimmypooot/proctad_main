@@ -6,6 +6,7 @@ use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
 use App\Enums\UserRole;
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\ScopedByTestingCenter;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 #[Fillable([
-    'certificate_no', 'type', 'member_id', 'field_office_id',
+    'certificate_no', 'type', 'member_id', 'field_office_id', 'testing_center_id',
     'certifiable_type', 'certifiable_id', 'status', 'requested_by',
     'approved_by', 'approved_at', 'disapproval_remarks',
     'signatory_name', 'signatory_position', 'signatory_signature_path',
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 ])]
 class Certificate extends Model
 {
-    use Auditable;
+    use Auditable, ScopedByTestingCenter;
 
     protected function casts(): array
     {
@@ -132,7 +133,7 @@ class Certificate extends Model
             ->whereIn('type', $types)
             ->when(
                 ! $user->role->isRegionWide(),
-                fn (Builder $q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()),
+                fn (Builder $q) => $q->inJurisdictionOf($user),
             );
     }
 }

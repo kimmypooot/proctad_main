@@ -150,33 +150,32 @@ const submitCenter = () => {
     })).post('/testing-centers', { ...opts, onFinish: () => centerForm.transform((d) => d) });
 };
 
-/* --- Intake (hosting rotation) modal ---
-   Which office a shared center's new registrants are filed under. Registration
-   asks applicants for a city, not an office — Leyte I and Leyte II both serve
-   Tacloban City and an applicant cannot know which they belong to — so one
-   office has to own intake, and this is how that hand-over is recorded when
-   hosting rotates. --- */
-const intakeForm = useForm({ field_office_id: null });
-const showIntakeForm = ref(false);
-const intakeCenter = ref(null);
+/* --- Administering office modal ---
+   Test administrators belong to a testing center, not a field office, so their
+   ID cards and certificates are signed by whichever office administers that
+   center. Where a center is shared — Leyte I and Leyte II both serve Tacloban
+   City — one of them holds it, and this records the hand-over. --- */
+const adminOfficeForm = useForm({ field_office_id: null });
+const showAdminOfficeForm = ref(false);
+const adminOfficeCenter = ref(null);
 
 const officeName = (center, officeId) =>
     center.handling_offices?.find((o) => o.id === officeId)?.name ?? null;
 
-const primaryOfficeName = (center) => officeName(center, center.primary_field_office_id);
+const administeringOfficeName = (center) => officeName(center, center.administering_field_office_id);
 
-const openIntakeForm = (center) => {
-    intakeForm.clearErrors();
-    intakeCenter.value = center;
-    intakeForm.field_office_id = center.primary_field_office_id;
-    showIntakeForm.value = true;
+const openAdminOfficeForm = (center) => {
+    adminOfficeForm.clearErrors();
+    adminOfficeCenter.value = center;
+    adminOfficeForm.field_office_id = center.administering_field_office_id;
+    showAdminOfficeForm.value = true;
 };
 
-const submitIntake = () => {
-    intakeForm.patch(`/testing-centers/${intakeCenter.value.id}/primary-office`, {
+const submitAdminOffice = () => {
+    adminOfficeForm.patch(`/testing-centers/${adminOfficeCenter.value.id}/administering-office`, {
         preserveScroll: true,
         preserveState: true,
-        onSuccess: () => (showIntakeForm.value = false),
+        onSuccess: () => (showAdminOfficeForm.value = false),
     });
 };
 
@@ -387,15 +386,15 @@ const statusOptions = [
                         <!-- Only ambiguous where a center is shared; showing it
                              there answers "who gets our new registrants?" -->
                         <template v-if="center.field_office_ids.length > 1">
-                            · Intake:
-                            <span class="font-medium text-slate-700">{{ primaryOfficeName(center) ?? 'not set' }}</span>
+                            · Administered by
+                            <span class="font-medium text-slate-700">{{ administeringOfficeName(center) ?? 'not set' }}</span>
                         </template>
                     </p>
                 </div>
                 <IconButton
-                    v-if="center.can_designate_primary && center.field_office_ids.length > 1"
-                    icon-only icon="arrow-path" label="Change intake office"
-                    @click.stop="openIntakeForm(center)"
+                    v-if="center.can_designate_administering && center.field_office_ids.length > 1"
+                    icon-only icon="arrow-path" label="Change administering office"
+                    @click.stop="openAdminOfficeForm(center)"
                 />
                 <template v-if="center.can_manage">
                     <IconButton icon-only icon="pencil" label="Edit" @click.stop="openCenterEdit(center)" />
@@ -503,34 +502,35 @@ const statusOptions = [
             </template>
         </BaseModal>
 
-        <!-- Intake office (hosting rotation) modal -->
-        <BaseModal :show="showIntakeForm" title="Change Intake Office" @close="showIntakeForm = false">
-            <form id="intake-form" class="space-y-4" novalidate @submit.prevent="submitIntake">
+        <!-- Administering office modal -->
+        <BaseModal :show="showAdminOfficeForm" title="Change Administering Office" @close="showAdminOfficeForm = false">
+            <form id="admin-office-form" class="space-y-4" novalidate @submit.prevent="submitAdminOffice">
                 <p class="text-xs text-slate-500">
-                    Testing Center: <span class="font-medium text-slate-700">{{ intakeCenter?.name }}</span>
+                    Testing Center: <span class="font-medium text-slate-700">{{ adminOfficeCenter?.name }}</span>
                 </p>
 
                 <SelectInput
-                    v-model="intakeForm.field_office_id"
-                    label="Receives new registrations"
+                    v-model="adminOfficeForm.field_office_id"
+                    label="Administered by"
                     required
-                    :options="(intakeCenter?.handling_offices ?? []).map((o) => ({ value: o.id, label: o.name }))"
-                    :error="intakeForm.errors.field_office_id"
+                    :options="(adminOfficeCenter?.handling_offices ?? []).map((o) => ({ value: o.id, label: o.name }))"
+                    :error="adminOfficeForm.errors.field_office_id"
                 />
 
                 <div class="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <AppIcon name="information-circle" class="mt-0.5 h-4 w-4 shrink-0" />
                     <p>
-                        Applicants choose a city, not a field office, so one office has to receive
-                        <span class="font-semibold">{{ intakeCenter?.name }}</span> registrations. Change this when
-                        hosting rotates. Existing members are not moved — both offices already see and manage
+                        Test administrators belong to a testing center, not a field office, so this decides whose
+                        signatory signs the ID cards and certificates of everyone serving
+                        <span class="font-semibold">{{ adminOfficeCenter?.name }}</span>. Already-issued certificates
+                        keep the signature they were released with, and both offices continue to see and manage
                         everyone at a shared center.
                     </p>
                 </div>
             </form>
             <template #footer>
-                <BaseButton variant="outline" size="sm" @click="showIntakeForm = false">Cancel</BaseButton>
-                <BaseButton type="submit" form="intake-form" variant="primary" size="sm" :loading="intakeForm.processing" :disabled="intakeForm.processing">
+                <BaseButton variant="outline" size="sm" @click="showAdminOfficeForm = false">Cancel</BaseButton>
+                <BaseButton type="submit" form="admin-office-form" variant="primary" size="sm" :loading="adminOfficeForm.processing" :disabled="adminOfficeForm.processing">
                     Save Changes
                 </BaseButton>
             </template>

@@ -281,9 +281,9 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::resource('testing-centers', TestingCenterController::class)->only('store', 'update', 'destroy');
         // Which office receives new registrations at a shared center — the
         // hosting rotation. Separate from update(): a different authority
-        // decides it (see TestingCenterPolicy::designatePrimary).
-        Route::patch('/testing-centers/{testingCenter}/primary-office', [TestingCenterController::class, 'designatePrimary'])
-            ->name('testing-centers.primary-office');
+        // decides it (see TestingCenterPolicy::designateAdministering).
+        Route::patch('/testing-centers/{testingCenter}/administering-office', [TestingCenterController::class, 'designateAdministering'])
+            ->name('testing-centers.administering-office');
 
         Route::resource('other-examination-personnel', OtherExaminationPersonnelController::class);
         Route::get('/other-examination-personnel/{otherExaminationPersonnel}/details', [OtherExaminationPersonnelController::class, 'details'])

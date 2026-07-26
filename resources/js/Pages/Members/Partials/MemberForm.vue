@@ -25,33 +25,27 @@ const sexOptions = [
 ];
 
 /*
- * A member's testing center must be one their field office handles, so the list
- * narrows as soon as an office is chosen — the same rule StoreMemberRequest
- * enforces, surfaced early rather than as a rejection after submitting.
+ * Field office is only for members who are also CSC staff, and it has to be an
+ * office that handles their center — the same rule StoreMemberRequest enforces,
+ * surfaced as a shorter list rather than a rejection after submitting.
  */
-const centersForSelectedOffice = computed(() => {
-    const officeId = Number(props.form.field_office_id);
+const officesForSelectedCenter = computed(() => {
+    const centerId = Number(props.form.testing_center_id);
 
-    if (!officeId) return props.testingCenters;
+    if (!centerId) return props.fieldOffices;
 
-    return props.testingCenters.filter(
-        (tc) => (tc.field_office_ids ?? []).map(Number).includes(officeId),
-    );
+    const handling = props.testingCenters
+        .find((tc) => tc.id === centerId)?.field_office_ids ?? [];
+
+    return props.fieldOffices.filter((fo) => handling.map(Number).includes(fo.id));
 });
 
-/* The regional office serves region-wide and sits in no single center. */
-const regionalOfficeSelected = computed(() => {
-    const officeId = Number(props.form.field_office_id);
-
-    return Boolean(officeId) && centersForSelectedOffice.value.length === 0;
-});
-
-// Switching office can strip the chosen center out of the list; clear it rather
-// than submitting a value the server will reject.
-watch(centersForSelectedOffice, (centers) => {
-    if (props.form.testing_center_id
-        && !centers.some((tc) => tc.id === Number(props.form.testing_center_id))) {
-        props.form.testing_center_id = '';
+// Changing the center can strip the chosen office out of the list; clear it
+// rather than submitting a value the server will reject.
+watch(officesForSelectedCenter, (offices) => {
+    if (props.form.field_office_id
+        && !offices.some((fo) => fo.id === Number(props.form.field_office_id))) {
+        props.form.field_office_id = '';
     }
 });
 
@@ -164,24 +158,25 @@ const maxDateOfBirth = (() => {
 
         <div class="grid gap-5 sm:grid-cols-2">
             <SelectInput
-                v-model="form.field_office_id"
-                name="field_office_id"
-                label="Field Office"
-                required
-                :options="fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))"
-                :error="form.errors.field_office_id"
-                hint="Who administers this member's record."
-            />
-
-            <SelectInput
                 v-model="form.testing_center_id"
                 name="testing_center_id"
                 label="Testing Center"
-                :required="!regionalOfficeSelected"
-                :placeholder="regionalOfficeSelected ? 'Serves region-wide — no center' : 'Select a Testing Center'"
-                :options="centersForSelectedOffice.map((tc) => ({ value: tc.id, label: tc.name }))"
+                required
+                placeholder="Select a Testing Center"
+                :options="testingCenters.map((tc) => ({ value: tc.id, label: tc.name }))"
                 :error="form.errors.testing_center_id"
                 hint="The city the member serves — this decides which staff can see and manage them."
+            />
+
+            <SelectInput
+                v-model="form.field_office_id"
+                name="field_office_id"
+                label="Field Office"
+                optional
+                placeholder="Not a CSC employee"
+                :options="officesForSelectedCenter.map((fo) => ({ value: fo.id, label: fo.name }))"
+                :error="form.errors.field_office_id"
+                hint="Only for members who are also CSC staff. Leave blank for external test administrators."
             />
         </div>
 

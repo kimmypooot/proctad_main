@@ -29,13 +29,12 @@ class TestingCenterPolicy
     }
 
     /**
-     * Choose which office receives new registrations at this center — the
-     * hosting rotation. Region-wide roles only: the two offices sharing a
-     * center are peers, so letting either reassign intake would let one take
-     * the other's registrants unilaterally. Top management decides who hosts,
-     * including when the same office hosts consecutive cycles.
+     * Choose which office administers this center, and so whose signatory signs
+     * for the members serving there. Region-wide roles only: the offices
+     * sharing a center are peers, and letting either claim it would let one
+     * put its own signature on the other's members' certificates.
      */
-    public function designatePrimary(User $user, TestingCenter $testingCenter): bool
+    public function designateAdministering(User $user, TestingCenter $testingCenter): bool
     {
         return $user->role->isRegionWide();
     }

@@ -78,7 +78,7 @@ class DashboardController extends Controller
 
         $base = Certificate::where('status', CertificateStatus::Pending)
             ->whereIn('type', $types)
-            ->when(! $role->isRegionWide(), fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()));
+            ->when(! $role->isRegionWide(), fn ($q) => $q->inJurisdictionOf($user));
 
         return [
             'total' => (clone $base)->count(),
@@ -390,7 +390,7 @@ class DashboardController extends Controller
     private function statsFor(UserRole $role, User $user, ?Member $member): array
     {
         $activeMembers = fn () => Member::where('status', MemberStatus::Active);
-        $foMembers = fn () => $activeMembers()->whereIn('field_office_id', $user->scopedFieldOfficeIds());
+        $foMembers = fn () => $activeMembers()->withinJurisdictionOf($user);
 
         return match ($role) {
             UserRole::SuperAdmin, UserRole::EsdAdmin => [
@@ -423,16 +423,16 @@ class DashboardController extends Controller
                     'Pending Approvals',
                     Certificate::where('status', CertificateStatus::Pending)
                         ->whereIn('type', [CertificateType::Appearance, CertificateType::DesignationOrder])
-                        ->whereIn('field_office_id', $user->scopedFieldOfficeIds())->count(),
+                        ->inJurisdictionOf($user)->count(),
                     'clipboard-check',
                     'Appearance & Designation Orders',
                     '/approvals',
                 ),
                 $this->stat('Active Members in Field Office', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
-                $this->stat('Service Records', ExamAssignment::whereIn('field_office_id', $user->scopedFieldOfficeIds())->count(), 'document-text', 'Exam assignments in your FO'),
+                $this->stat('Service Records', ExamAssignment::inJurisdictionOf($user)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Approved This Month',
-                    Certificate::whereIn('field_office_id', $user->scopedFieldOfficeIds())
+                    Certificate::inJurisdictionOf($user)
                         ->whereIn('type', [CertificateType::Appearance, CertificateType::DesignationOrder])
                         ->whereNotNull('approved_at')
                         ->whereMonth('approved_at', now()->month)
@@ -445,11 +445,11 @@ class DashboardController extends Controller
             ],
             UserRole::FoAdmin => [
                 $this->stat('Active Members in Field Office', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
-                $this->stat('Service Records', ExamAssignment::whereIn('field_office_id', $user->scopedFieldOfficeIds())->count(), 'document-text', 'Exam assignments in your FO'),
+                $this->stat('Service Records', ExamAssignment::inJurisdictionOf($user)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Issuance Requests',
                     Certificate::where('status', CertificateStatus::Pending)
-                        ->whereIn('field_office_id', $user->scopedFieldOfficeIds())->count(),
+                        ->inJurisdictionOf($user)->count(),
                     'paper-airplane',
                     'Awaiting approval',
                     '/certificates',

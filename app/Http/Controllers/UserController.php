@@ -73,7 +73,7 @@ class UserController extends Controller
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
             'username' => ['nullable', 'string', 'max:64', 'unique:users,username'],
             'role' => ['required', Rule::enum(UserRole::class)],
-            'field_office_id' => ['nullable', 'exists:field_offices,id'],
+            'field_office_id' => $this->fieldOfficeRules($request),
         ]);
 
         $user = User::create([
@@ -98,7 +98,7 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'role' => ['required', Rule::enum(UserRole::class)],
-            'field_office_id' => ['nullable', 'exists:field_offices,id'],
+            'field_office_id' => $this->fieldOfficeRules($request),
             'is_active' => ['required', 'boolean'],
         ]);
 
@@ -111,6 +111,26 @@ class UserController extends Controller
         $user->update($validated);
 
         return back()->with('success', "{$user->name} updated.");
+    }
+
+    /**
+     * The office is optional in general but required for Field Office roles:
+     * their whole jurisdiction is derived from it (User::scopedTestingCenterIds
+     * returns nothing without one), so an FO Admin saved with no office can see
+     * no records at all. Region-wide roles get their reach from the role itself
+     * and may legitimately have none.
+     *
+     * @return list<mixed>
+     */
+    private function fieldOfficeRules(Request $request): array
+    {
+        return [
+            Rule::requiredIf(
+                fn () => UserRole::tryFrom((string) $request->input('role'))?->isFieldOfficeScoped() ?? false
+            ),
+            'nullable',
+            'exists:field_offices,id',
+        ];
     }
 
     /**

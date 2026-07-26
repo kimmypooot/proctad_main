@@ -45,6 +45,7 @@ class CertificateService
         ], [
             'member_id' => $source->member_id,
             'field_office_id' => $source->field_office_id,
+            'testing_center_id' => $source->testing_center_id,
             'status' => CertificateStatus::Pending,
             'requested_by' => $requestedBy->id,
         ]);
@@ -70,7 +71,7 @@ class CertificateService
      */
     public function release(Certificate $certificate, User $approver): Certificate
     {
-        $signatory = Signatory::currentFor($certificate->field_office_id);
+        $signatory = Signatory::currentFor($certificate->administeringFieldOfficeId());
 
         $certificate->update([
             'status' => CertificateStatus::Released,
@@ -204,7 +205,7 @@ class CertificateService
             ->where(function ($query) use ($approverRoles, $certificate) {
                 $query->whereIn('role', $approverRoles)
                     ->when(in_array(UserRole::FieldDirector, $approverRoles, true),
-                        fn ($q) => $q->where('field_office_id', $certificate->field_office_id));
+                        fn ($q) => $q->where('field_office_id', $certificate->administeringFieldOfficeId()));
             })
             ->orWhereIn('role', [UserRole::SuperAdmin, UserRole::EsdAdmin])
             ->get();
@@ -271,7 +272,7 @@ class CertificateService
         $preview->certificate_no = $preview->certificate_no ?: $this->mintNumber($certificate);
 
         if (! $preview->signatory_name) {
-            $signatory = Signatory::currentFor($certificate->field_office_id);
+            $signatory = Signatory::currentFor($certificate->administeringFieldOfficeId());
             $preview->signatory_name = $signatory?->name;
             $preview->signatory_position = $signatory?->position;
         }
@@ -559,7 +560,11 @@ class CertificateService
 
         $yIssued = max($afterBody + 14, 134.3);
         $issue = $certificate->released_at ?? now();
-        $location = $member->fieldOffice?->name ?? 'Palo, Leyte';
+        // External test administrators have no field office of their own, so the
+        // place of issue is the office administering the center they serve.
+        $location = $member->fieldOffice?->name
+            ?? $member->testingCenter?->fieldOffices()->whereKey($member->administeringFieldOfficeId())->value('name')
+            ?? 'Palo, Leyte';
         $issuedLine = 'Issued this '.$this->ordinal((int) $issue->format('j')).' day of '.$issue->format('F Y').' at '.$location.' for whatever lawful purpose this may serve.';
 
         $pdf->SetFont('Times', '', 15);

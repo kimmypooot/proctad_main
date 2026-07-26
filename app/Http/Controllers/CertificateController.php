@@ -29,7 +29,7 @@ class CertificateController extends Controller
         $foScoped = $user->role->isFieldOfficeScoped();
 
         $baseQuery = Certificate::query()
-            ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()));
+            ->when($foScoped, fn ($q) => $q->inJurisdictionOf($user));
 
         $certificates = (clone $baseQuery)
             ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix',

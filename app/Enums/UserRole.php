@@ -50,6 +50,19 @@ enum UserRole: string
             || in_array($this, [self::SuperAdmin, self::EsdAdmin], true);
     }
 
+    /**
+     * The roles isRegionWide() covers, for queries that must express it in SQL.
+     *
+     * @return list<string>
+     */
+    public static function regionWideValues(): array
+    {
+        return array_values(array_map(
+            fn (self $role) => $role->value,
+            array_filter(self::cases(), fn (self $role) => $role->isRegionWide()),
+        ));
+    }
+
     public function isFieldOfficeScoped(): bool
     {
         return in_array($this, [self::FieldDirector, self::FoAdmin], true);

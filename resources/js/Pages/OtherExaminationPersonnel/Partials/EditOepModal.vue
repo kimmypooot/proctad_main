@@ -3,8 +3,11 @@ import { ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import FormErrorSummary from '@/Components/FormErrorSummary.vue';
 import OtherExaminationPersonnelForm from './OtherExaminationPersonnelForm.vue';
 import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
+import { useFormErrors } from '@/Composables/useFormErrors';
+import { oepFieldLabels } from './oepFieldLabels';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -17,6 +20,7 @@ const loading = ref(false);
 const loaded = ref(false);
 const loadError = ref(null);
 const fieldOffices = ref([]);
+const testingCenters = ref([]);
 const personnelTypes = ref([]);
 
 const form = useForm({
@@ -31,9 +35,13 @@ const form = useForm({
     agency: '',
     position: '',
     field_office_id: '',
+    testing_center_id: '',
     is_active: true,
     photo: null,
 });
+
+// Move the user to the first rejected field on a server-side validation bounce.
+useFormErrors(form);
 
 watch(() => props.show, (open) => {
     if (open && props.oepId) {
@@ -62,10 +70,12 @@ const fetchEditData = async () => {
         form.agency = json.oep.agency ?? '';
         form.position = json.oep.position ?? '';
         form.field_office_id = json.oep.field_office_id ?? '';
+        form.testing_center_id = json.oep.testing_center_id ?? '';
         form.is_active = json.oep.is_active;
         form.photo = null;
 
         fieldOffices.value = json.fieldOffices;
+        testingCenters.value = json.testingCenters;
         personnelTypes.value = json.personnelTypes;
         loaded.value = true;
     } catch (e) {
@@ -97,9 +107,20 @@ const submit = () => {
         </div>
 
         <template v-else-if="loaded">
-            <div class="max-h-[70vh] overflow-y-auto -mx-6 -mt-5 px-6 pt-5">
+            <div>
                 <form novalidate @submit.prevent="submit">
-                    <OtherExaminationPersonnelForm :form="form" :field-offices="fieldOffices" :personnel-types="personnelTypes" editing />
+                    <FormErrorSummary
+                        :errors="form.errors"
+                        :labels="oepFieldLabels"
+                        class="mb-5"
+                    />
+                    <OtherExaminationPersonnelForm
+                        :form="form"
+                        :field-offices="fieldOffices"
+                        :testing-centers="testingCenters"
+                        :personnel-types="personnelTypes"
+                        editing
+                    />
 
                     <div class="mt-8 flex justify-end gap-3 pb-1">
                         <BaseButton variant="outline" size="sm" @click="emit('close')">Cancel</BaseButton>

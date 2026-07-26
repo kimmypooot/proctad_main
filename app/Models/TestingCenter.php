@@ -42,32 +42,36 @@ class TestingCenter extends Model
     }
 
     /**
-     * The office that currently owns intake for this center. Only matters where
-     * a center is shared (Tacloban City, handled by Leyte I and Leyte II in
-     * turn) — registration has to resolve to exactly one office, and this is it.
-     * Falls back to any handling office so a center whose primary flag was never
-     * set still accepts registrations.
+     * The office administering this center. Members are not filed under an
+     * office any more, so this no longer decides where a registrant lands — it
+     * decides whose signatory signs the ID cards and certificates of the
+     * members who serve here, and rotates when administration does.
+     *
+     * The fallback skips regional offices: they sit alongside every center for
+     * oversight, and letting one win by id order would put the regional
+     * signatory on certificates belonging to a field office's members.
      */
-    public function primaryFieldOfficeId(): ?int
+    public function administeringFieldOfficeId(): ?int
     {
         return $this->fieldOffices()->wherePivot('is_primary', true)->value('field_offices.id')
-            ?? $this->fieldOffices()->orderBy('field_offices.id')->value('field_offices.id');
+            ?? $this->fieldOffices()
+                ->where('is_regional', false)
+                ->orderBy('field_offices.id')
+                ->value('field_offices.id');
     }
 
     /**
-     * Hand intake for this center to one of its handling offices — how a
-     * hosting rotation is recorded (August 2026 Leyte I, March 2027 Leyte II,
-     * or the same office twice running when management decides so).
+     * Hand administration of this center to one of its handling offices.
      *
-     * Exactly one office may be primary, so the flag is cleared across the
-     * center and re-set in one transaction; a half-applied change would leave
-     * registrations resolving to two offices or none.
+     * Exactly one office may hold it, so the flag is cleared across the center
+     * and re-set in one transaction; a half-applied change would leave two
+     * offices claiming it or none.
      *
      * Audited by hand: the pivot is written through the query builder, which
-     * fires no model events, and who receives new registrants is exactly the
-     * kind of change the audit trail exists for.
+     * fires no model events, and whose signature appears on a member's
+     * certificate is the kind of change the audit trail exists for.
      */
-    public function designatePrimaryFieldOffice(int $fieldOfficeId): void
+    public function designateAdministeringFieldOffice(int $fieldOfficeId): void
     {
         $previousId = $this->fieldOffices()->wherePivot('is_primary', true)->value('field_offices.id');
 
@@ -87,8 +91,8 @@ class TestingCenter extends Model
         });
 
         $this->recordAudit('updated', [
-            'old' => ['primary_field_office_id' => $previousId],
-            'new' => ['primary_field_office_id' => $fieldOfficeId],
+            'old' => ['administering_field_office_id' => $previousId],
+            'new' => ['administering_field_office_id' => $fieldOfficeId],
         ]);
     }
 

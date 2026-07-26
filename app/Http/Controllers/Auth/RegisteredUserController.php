@@ -84,19 +84,6 @@ class RegisteredUserController extends Controller
             'terms.accepted' => 'You must accept the Terms and Conditions to register.',
         ]);
 
-        // The applicant chose a city; the administrative office follows from it.
-        // A center with no handling office cannot take registrations — that is a
-        // configuration gap, not something the applicant can fix, so fail loudly.
-        $testingCenter = TestingCenter::findOrFail($validated['testing_center_id']);
-        $fieldOfficeId = $testingCenter->primaryFieldOfficeId();
-
-        if ($fieldOfficeId === null) {
-            throw ValidationException::withMessages([
-                'testing_center_id' => 'That Testing Center has no Field Office assigned yet. '
-                    .'Please contact CSC Regional Office VIII.',
-            ]);
-        }
-
         $email = $googlePending['email'];
 
         // The email was already unique when the Google identity was captured,
@@ -156,7 +143,7 @@ class RegisteredUserController extends Controller
             ]);
         }
 
-        $member = DB::transaction(function () use ($validated, $googlePending, $email, $fieldOfficeId) {
+        $member = DB::transaction(function () use ($validated, $googlePending, $email) {
             $user = User::create([
                 'name' => trim(collect([
                     $validated['first_name'],
@@ -170,7 +157,9 @@ class RegisteredUserController extends Controller
                 'suffix' => $validated['suffix'] ?? null,
                 'email' => $email,
                 'mobile_number' => $validated['mobile_number'],
-                'field_office_id' => $fieldOfficeId,
+                // No field office: this account belongs to an external test
+                // administrator, not a CSC employee. The office column says who
+                // someone works for, and they work for their own agency.
                 // Google-registered accounts sign in via Google only — this random
                 // value just satisfies the required, non-nullable column.
                 'password' => Str::random(40),
@@ -193,7 +182,6 @@ class RegisteredUserController extends Controller
                 'mobile_number' => $validated['mobile_number'],
                 'agency' => $validated['agency'],
                 'position' => $validated['position'] ?? null,
-                'field_office_id' => $fieldOfficeId,
                 'testing_center_id' => $validated['testing_center_id'],
                 'user_id' => $user->id,
             ];
