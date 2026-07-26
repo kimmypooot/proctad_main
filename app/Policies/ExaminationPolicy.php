@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\Examination;
 use App\Models\User;
 
@@ -10,7 +10,7 @@ class ExaminationPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role !== UserRole::Member;
+        return $user->hasPermission(Permission::ExaminationsView);
     }
 
     public function view(User $user, Examination $examination): bool
@@ -20,7 +20,7 @@ class ExaminationPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin);
+        return $user->hasPermission(Permission::ExaminationsManage);
     }
 
     public function update(User $user, Examination $examination): bool

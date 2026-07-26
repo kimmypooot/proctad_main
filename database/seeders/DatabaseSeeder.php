@@ -12,21 +12,26 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      */
+    /**
+     * Only the real CSC RO VIII baseline plus the staff accounts needed to log
+     * in — no members, examinations, trainings or certificates. Those are
+     * entered through the app.
+     *
+     * The demo seeders (MemberSeeder, ExaminationSeeder, TrainingSeeder,
+     * OtherExaminationPersonnelSeeder, CertificateSeeder, DashboardDemoDataSeeder)
+     * still exist and generate faked content for screenshots and manual testing;
+     * run them by hand with `php artisan db:seed --class=MemberSeeder`. They are
+     * kept out of the default run so `migrate:fresh --seed` always yields a
+     * clean system rather than one that looks like it has history.
+     */
     public function run(): void
     {
         $this->call([
-            FieldOfficeSeeder::class,
+            InitialDataSeeder::class,
             UserSeeder::class,
-            MemberSeeder::class,
-            SignatorySeeder::class,
-            ExamTypeSeeder::class,
-            SchoolSeeder::class,
-            ExaminationSeeder::class,
-            TrainingSeeder::class,
-            OtherExaminationPersonnelSeeder::class,
-            CertificateSeeder::class,
             EmailTemplateSeeder::class,
             SettingSeeder::class,
+            FeeScheduleSeeder::class,
         ]);
     }
 }

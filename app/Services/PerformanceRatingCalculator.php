@@ -71,7 +71,7 @@ class PerformanceRatingCalculator
 
     private function isEligible(ExamAssignment $assignment): bool
     {
-        return in_array($assignment->role, [ExamRole::Proctor, ExamRole::RoomExaminer], true);
+        return $assignment->role->isAnyOf([ExamRole::Proctor, ExamRole::RoomExaminer]);
     }
 
     /** @return Collection<int, array> */

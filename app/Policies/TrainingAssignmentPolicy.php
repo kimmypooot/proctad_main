@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\TrainingAssignment;
 use App\Models\User;
 
@@ -10,7 +10,7 @@ class TrainingAssignmentPolicy
 {
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::TrainingAssignmentsManage);
     }
 
     public function update(User $user, TrainingAssignment $assignment): bool
@@ -25,11 +25,11 @@ class TrainingAssignmentPolicy
 
     private function manage(User $user, TrainingAssignment $assignment): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
-            return true;
+        if (! $user->hasPermission(Permission::TrainingAssignmentsManage)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && in_array($assignment->testing_center_id, $user->scopedTestingCenterIds(), true);
+        return $user->role->isRegionWide()
+            || in_array($assignment->testing_center_id, $user->scopedTestingCenterIds(), true);
     }
 }

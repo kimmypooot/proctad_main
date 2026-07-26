@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\School;
 use App\Models\User;
 
@@ -10,12 +10,12 @@ class SchoolPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role !== UserRole::Member;
+        return $user->hasPermission(Permission::SchoolsView);
     }
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::SchoolsManage);
     }
 
     public function update(User $user, School $school): bool
@@ -30,11 +30,11 @@ class SchoolPolicy
 
     private function manage(User $user, School $school): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
-            return true;
+        if (! $user->hasPermission(Permission::SchoolsManage)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && $school->handledByOffice($user->field_office_id);
+        return $user->role->isRegionWide()
+            || $school->handledByOffice($user->field_office_id);
     }
 }

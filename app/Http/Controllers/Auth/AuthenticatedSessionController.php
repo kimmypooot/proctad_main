@@ -55,23 +55,14 @@ class AuthenticatedSessionController extends Controller
         $field = filter_var($request->string('login'), FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
         $user = User::where($field, $request->string('login'))->first();
 
+        // A locked account must be refused before the password is checked —
+        // otherwise the lockout does nothing, since the attacker is guessing
+        // passwords, not waiting to be told. Deliberately vague about when it
+        // lifts: the exact minute is a timing oracle, and a member who needs it
+        // can ask their Field Office.
         if ($user !== null && $user->locked_until?->isFuture()) {
             throw ValidationException::withMessages([
-                'login' => __('This account is temporarily locked. Try again after :time.', [
-                    'time' => $user->locked_until->format('g:i A'),
-                ]),
-            ]);
-        }
-
-        if ($user !== null && ! $user->is_active) {
-            throw ValidationException::withMessages([
-                'login' => __('This account has been deactivated. Please contact your administrator.'),
-            ]);
-        }
-
-        if ($user !== null && $user->member?->blacklists()->where('status', BlacklistStatus::Active)->exists()) {
-            throw ValidationException::withMessages([
-                'login' => __('This account has been blacklisted. Please contact your administrator.'),
+                'login' => __('This account is temporarily locked. Please try again later or contact your Field Office.'),
             ]);
         }
 
@@ -86,9 +77,29 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
-        RateLimiter::clear($throttleKey);
-
+        // Deactivation and blacklisting are checked only now, after the
+        // password has been verified. Both used to answer before it, which
+        // meant anyone could confirm an address had an account — and, worse,
+        // learn that a named member had been blacklisted, an adverse
+        // administrative fact, without any credential at all.
+        //
+        // One message covers both: whoever reaches this point already holds the
+        // password, so the distinction tells an attacker something and the
+        // legitimate user nothing they can act on alone.
         $user = $request->user();
+
+        if (! $user->is_active
+            || $user->member?->blacklists()->where('status', BlacklistStatus::Active)->exists()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw ValidationException::withMessages([
+                'login' => __('This account cannot sign in at the moment. Please contact your administrator.'),
+            ]);
+        }
+
+        RateLimiter::clear($throttleKey);
         $user->forceFill([
             'failed_login_attempts' => 0,
             'locked_until' => null,

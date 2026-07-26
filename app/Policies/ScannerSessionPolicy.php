@@ -2,30 +2,24 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\ScannerSession;
 use App\Models\User;
 
-/**
- * Issuing a scanner link hands out the ability to confirm attendance without
- * logging in, so it follows the same authority as running the scanner itself
- * (routes/web.php) — and FO-scoped roles may only issue links that stay inside
- * their own Field Office.
- */
 class ScannerSessionPolicy
 {
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::ScannerSessionsCreate);
     }
 
     public function revoke(User $user, ScannerSession $session): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
-            return true;
+        if (! $user->hasPermission(Permission::ScannerSessionsRevoke)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && in_array($session->field_office_id, $user->scopedFieldOfficeIds(), true);
+        return $user->role->isRegionWide()
+            || in_array($session->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Certificate;
 use App\Models\Setting;
+use App\Support\RoleLabelRegistry;
 use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -49,6 +50,11 @@ class HandleInertiaRequests extends Middleware
                         ?? ($user->member?->photo_path ? route('members.photo', $user->member) : null),
                 ] : null,
             ],
+            // Role display names, resolved server-side so a rename made at
+            // Administration → Roles reaches the sidebar and any other client
+            // code that shows a role, rather than only the pages that happen to
+            // receive a label in their own props.
+            'roleLabels' => fn () => $user ? RoleLabelRegistry::all() : [],
             // Which hat the user is wearing, and whether they have a second one
             // to switch to. Drives navigation and the dashboard only — never
             // access. See App\Support\Workspace.

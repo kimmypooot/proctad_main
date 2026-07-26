@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Support\DesignationRegistry;
+
 /**
  * Canonical PROCTAD examination duty roles, ported from the legacy ProctadRoles class.
  * Grouped as REGIONAL (REC), TESTING_CENTER (LEC), SPECIAL, and SCHOOL.
@@ -33,7 +35,18 @@ enum ExamRole: string
     case RoomSchoolInspector = 'room_school_inspector';
     case AlternateExaminer = 'alternate_examiner';
 
+    /**
+     * The designation's display name, which an administrator may have renamed
+     * at Administration → Designations. Every caller resolves through here so a
+     * rename reaches assignment lists, payroll and service records at once.
+     */
     public function label(): string
+    {
+        return DesignationRegistry::label(PayeeType::ExamRole, $this->value);
+    }
+
+    /** The built-in name, used when the designation has not been renamed. */
+    public function defaultLabel(): string
     {
         return match ($this) {
             self::RecChair => 'REC Chair',

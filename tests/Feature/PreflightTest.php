@@ -26,7 +26,34 @@ class PreflightTest extends TestCase
             'app.url' => 'https://proctad.cscro8.test',
             'mail.default' => 'smtp',
             'queue.default' => 'database',
+            // Transport settings whose absence looks like nothing at all: the
+            // site works either way, and the session cookie travels in the
+            // clear. The preflight fails a host without them, so a ready host
+            // has to declare them here too.
+            'session.secure' => true,
+            'session.encrypt' => true,
+            'security.trusted_hosts' => ['proctad.cscro8.test'],
+            'security.trusted_proxies' => ['10.0.0.0/8'],
+            'security.csp_report_only' => false,
+            // Not the key that was published in .env.example.
+            'app.key' => 'base64:'.base64_encode(str_repeat('k', 32)),
+            // The development checkout still holds the legacy dumps this check
+            // exists to catch, so point it somewhere empty; the check itself is
+            // exercised by test_it_fails_when_a_database_dump_is_present.
+            'security.dump_scan_paths' => [$this->emptyScanPath()],
         ]);
+    }
+
+    /** A directory guaranteed to contain no .sql files. */
+    private function emptyScanPath(): string
+    {
+        $path = storage_path('framework/testing/preflight-scan');
+
+        if (! is_dir($path)) {
+            mkdir($path, 0755, true);
+        }
+
+        return $path;
     }
 
     public function test_it_fails_when_debug_is_enabled(): void
@@ -125,6 +152,91 @@ class PreflightTest extends TestCase
         $this->productionLikeConfig();
 
         $this->artisan('proctad:preflight')->assertExitCode(0);
+    }
+
+    /**
+     * The session cookie is the credential for the whole console. Without the
+     * Secure flag it is sent over plain HTTP on any downgrade — a stray link, a
+     * captive portal, an SSL-stripping proxy on venue wifi.
+     */
+    public function test_it_fails_when_the_session_cookie_is_not_secure(): void
+    {
+        $this->productionLikeConfig();
+        config(['session.secure' => false]);
+
+        $this->artisan('proctad:preflight')
+            ->expectsOutputToContain('SESSION_SECURE_COOKIE')
+            ->assertExitCode(1);
+    }
+
+    /**
+     * An unchecked Host header lets an attacker have a password reset link for
+     * someone else's account delivered to a domain they control.
+     */
+    public function test_it_fails_when_no_trusted_hosts_are_configured(): void
+    {
+        $this->productionLikeConfig();
+        config(['security.trusted_hosts' => []]);
+
+        $this->artisan('proctad:preflight')
+            ->expectsOutputToContain('TRUSTED_HOSTS')
+            ->assertExitCode(1);
+    }
+
+    /**
+     * The key published in .env.example is known to anyone who has ever cloned
+     * the repository, and it signs every signed URL and encrypts members' dates
+     * of birth.
+     */
+    public function test_it_fails_on_the_app_key_that_was_committed(): void
+    {
+        $this->productionLikeConfig();
+        config(['app.key' => 'base64:gd0SfSBxVCRazK+ffmGw4JVxmeLK0GDx/ucxYUvh/0s=']);
+
+        $this->artisan('proctad:preflight')
+            ->expectsOutputToContain('APP_KEY')
+            ->assertExitCode(1);
+    }
+
+    /**
+     * The legacy import shared one password across every account, and its
+     * hashes were committed. An account carried across that has not since set a
+     * new password is holding a credential an attacker can derive offline.
+     */
+    public function test_it_fails_when_legacy_accounts_still_hold_their_old_password(): void
+    {
+        $this->productionLikeConfig();
+
+        User::factory()->create([
+            'email' => 'legacy@csc.gov.ph',
+            'username' => 'legacy',
+            'must_change_password' => false,
+        ]);
+
+        $this->artisan('proctad:preflight')
+            ->expectsOutputToContain('Legacy credentials')
+            ->assertExitCode(1);
+    }
+
+    /**
+     * A dump on the live host is the whole registry in one downloadable file if
+     * the document root is ever misconfigured — and the legacy one carried
+     * password hashes.
+     */
+    public function test_it_fails_when_a_database_dump_is_present(): void
+    {
+        $this->productionLikeConfig();
+
+        $path = $this->emptyScanPath().DIRECTORY_SEPARATOR.'stray-dump.sql';
+        file_put_contents($path, '-- dump');
+
+        try {
+            $this->artisan('proctad:preflight')
+                ->expectsOutputToContain('Database dumps')
+                ->assertExitCode(1);
+        } finally {
+            @unlink($path);
+        }
     }
 
     /** Read-only: a check that mutates the host it is inspecting is not a check. */

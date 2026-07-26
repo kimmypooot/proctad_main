@@ -34,7 +34,7 @@ class AlternateActivator
      */
     public function cannotActivate(ExamAssignment $alternate, ExamAssignment $vacant): ?string
     {
-        if ($alternate->role !== ExamRole::AlternateExaminer) {
+        if (! $alternate->role->is(ExamRole::AlternateExaminer)) {
             return 'Only an Alternate Examiner can be called in to cover a seat.';
         }
 

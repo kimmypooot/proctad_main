@@ -62,7 +62,7 @@ class EvaluationMonitoringController extends Controller
                 ],
                 'field_office' => $assignment->fieldOffice?->only('id', 'name', 'code'),
                 'role' => $assignment->role->value,
-                'role_label' => $assignment->role === ExamRole::Proctor ? 'Room Proctor' : $assignment->role->label(),
+                'role_label' => $assignment->role->is(ExamRole::Proctor) ? 'Room Proctor' : $assignment->role->label(),
                 'venue' => $assignment->examinationSchool?->school?->name,
                 'room' => $assignment->room?->room_number,
                 'has_submitted' => (bool) $assignment->has_submitted,

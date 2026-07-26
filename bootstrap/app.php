@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveScannerSession;
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -21,6 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            // First, so the headers reach the 503 maintenance notice and the
+            // error pages as well as normal responses — those are the ones an
+            // attacker probes, and the ones a later position would miss.
+            SecurityHeaders::class,
             // Before Inertia's share, so a closed site doesn't do the work of
             // assembling shared props it will never render.
             CheckMaintenanceMode::class,
@@ -32,6 +37,17 @@ return Application::configure(basePath: dirname(__DIR__))
             'password.changed' => EnsurePasswordIsChanged::class,
             'scanner.session' => ResolveScannerSession::class,
         ]);
+
+        // Absolute URLs — password reset links above all — are built from the
+        // Host header, so an unchecked host lets an attacker have the reset
+        // link for someone else's account delivered to a domain they control.
+        //
+        // Passed as a closure because this callback runs on afterResolving()
+        // for the HTTP kernel, which is *before* the configuration is loaded;
+        // TrustHosts::at() accepts a callable precisely so the lookup can be
+        // deferred to request time, when config() works. Trusted proxies have
+        // no such affordance and are set in AppServiceProvider::boot() instead.
+        $middleware->trustHosts(at: fn () => config('security.trusted_hosts', []));
 
         $middleware->redirectGuestsTo('/login');
         $middleware->redirectUsersTo('/dashboard');

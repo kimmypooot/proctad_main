@@ -66,10 +66,7 @@ class UserController extends Controller
         Gate::authorize('create', User::class);
 
         $validated = $request->validate([
-            'first_name' => ['required', 'string', 'max:100'],
-            'middle_name' => ['nullable', 'string', 'max:100'],
-            'last_name' => ['required', 'string', 'max:100'],
-            'suffix' => ['nullable', 'string', 'max:20'],
+            ...$this->nameRules(),
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
             'username' => ['nullable', 'string', 'max:64', 'unique:users,username'],
             'role' => ['required', Rule::enum(UserRole::class)],
@@ -78,10 +75,7 @@ class UserController extends Controller
 
         $user = User::create([
             ...$validated,
-            'name' => trim(collect([
-                $validated['first_name'], $validated['middle_name'] ?? null,
-                $validated['last_name'], $validated['suffix'] ?? null,
-            ])->filter()->implode(' ')),
+            'name' => $this->displayName($validated),
             'password' => Str::password(32),
             'must_change_password' => true,
             'is_active' => true,
@@ -97,6 +91,7 @@ class UserController extends Controller
         Gate::authorize('update', $user);
 
         $validated = $request->validate([
+            ...$this->nameRules(),
             'role' => ['required', Rule::enum(UserRole::class)],
             'field_office_id' => $this->fieldOfficeRules($request),
             'is_active' => ['required', 'boolean'],
@@ -108,9 +103,38 @@ class UserController extends Controller
             'You cannot deactivate your own account.',
         );
 
-        $user->update($validated);
+        // The display name is derived, never edited directly, so that the one
+        // shown in listings can never drift from the parts it is built from.
+        $user->update([...$validated, 'name' => $this->displayName($validated)]);
 
         return back()->with('success', "{$user->name} updated.");
+    }
+
+    /**
+     * Email and username are deliberately not editable here. Both are login
+     * identifiers, and the email is also the password-reset destination and the
+     * key that links a member account to its PROCTAD registry record — changing
+     * one in passing is how an account quietly becomes unreachable.
+     *
+     * @return array<string, list<string>>
+     */
+    private function nameRules(): array
+    {
+        return [
+            'first_name' => ['required', 'string', 'max:100'],
+            'middle_name' => ['nullable', 'string', 'max:100'],
+            'last_name' => ['required', 'string', 'max:100'],
+            'suffix' => ['nullable', 'string', 'max:20'],
+        ];
+    }
+
+    /** @param  array<string, mixed>  $parts */
+    private function displayName(array $parts): string
+    {
+        return trim(collect([
+            $parts['first_name'], $parts['middle_name'] ?? null,
+            $parts['last_name'], $parts['suffix'] ?? null,
+        ])->filter()->implode(' '));
     }
 
     /**
@@ -168,6 +192,10 @@ class UserController extends Controller
         return [
             'id' => $user->id,
             'name' => $user->name,
+            'first_name' => $user->first_name,
+            'middle_name' => $user->middle_name,
+            'last_name' => $user->last_name,
+            'suffix' => $user->suffix,
             'email' => $user->email,
             'username' => $user->username,
             'role' => $user->role->value,

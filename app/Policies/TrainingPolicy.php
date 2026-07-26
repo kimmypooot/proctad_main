@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\Training;
 use App\Models\User;
 
@@ -10,7 +10,7 @@ class TrainingPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role !== UserRole::Member;
+        return $user->hasPermission(Permission::TrainingsView);
     }
 
     public function view(User $user, Training $training): bool
@@ -20,31 +20,35 @@ class TrainingPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::TrainingsManage);
     }
 
     public function update(User $user, Training $training): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
-            return true;
-        }
-
-        return $user->role->isFieldOfficeScoped()
-            && in_array($training->field_office_id, $user->scopedFieldOfficeIds(), true);
+        return $this->manage($user, $training);
     }
 
+    /**
+     * Deleting is held apart from editing: a training carries the assignment
+     * and attendance history behind members' service records.
+     */
     public function delete(User $user, Training $training): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin);
+        return $user->hasPermission(Permission::TrainingsDelete);
     }
 
     public function complete(User $user, Training $training): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
-            return true;
+        return $this->manage($user, $training);
+    }
+
+    private function manage(User $user, Training $training): bool
+    {
+        if (! $user->hasPermission(Permission::TrainingsManage)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && in_array($training->field_office_id, $user->scopedFieldOfficeIds(), true);
+        return $user->role->isRegionWide()
+            || in_array($training->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 }

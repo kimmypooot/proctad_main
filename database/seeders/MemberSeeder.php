@@ -60,7 +60,7 @@ class MemberSeeder extends Seeder
         }
 
         Member::where('status', MemberStatus::Active)
-            ->whereHas('fieldOffice', fn ($q) => $q->where('code', 'LEY'))
+            ->whereHas('fieldOffice', fn ($q) => $q->where('code', 'FOLI-TAC'))
             ->first()
             ?->update(['user_id' => $memberAccount->id]);
     }

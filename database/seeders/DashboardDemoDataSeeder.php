@@ -31,7 +31,7 @@ class DashboardDemoDataSeeder extends Seeder
         $offices = FieldOffice::where('code', '!=', 'RO8')->get();
 
         if ($offices->isEmpty()) {
-            $this->command?->warn('No field offices found — run FieldOfficeSeeder first.');
+            $this->command?->warn('No field offices found — run InitialDataSeeder first.');
 
             return;
         }

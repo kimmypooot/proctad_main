@@ -460,9 +460,12 @@ class MigrateLegacyData extends Command
 
     private function importExamAssignments(): void
     {
+        // defaultLabel(), not label(): this maps the legacy system's own role
+        // names onto ours. Renaming a designation in PROCTAD must not change
+        // how a legacy export is interpreted.
         $roleByLabel = [];
         foreach (ExamRole::cases() as $role) {
-            $roleByLabel[$role->label()] = $role->value;
+            $roleByLabel[$role->defaultLabel()] = $role->value;
         }
 
         // Room assignments come from the legacy school_assignments twin table.

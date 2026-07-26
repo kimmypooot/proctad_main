@@ -11,7 +11,7 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        $leyte = FieldOffice::where('code', 'LEY')->first();
+        $leyte = FieldOffice::where('code', 'FOLI-TAC')->first();
 
         $accounts = [
             ['role' => UserRole::SuperAdmin, 'first_name' => 'Super', 'last_name' => 'Administrator', 'email' => 'superadmin@proctad.test', 'field_office_id' => null],

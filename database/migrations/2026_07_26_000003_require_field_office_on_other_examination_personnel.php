@@ -34,7 +34,7 @@ return new class extends Migration
             if ($regionalOfficeId === null) {
                 throw new RuntimeException(
                     "Cannot backfill {$orphans} other examination personnel with no field office: "
-                    .'no regional office exists. Run `php artisan db:seed --class=FieldOfficeSeeder` first.'
+                    .'no regional office exists. Run `php artisan db:seed --class=InitialDataSeeder` first.'
                 );
             }
 

@@ -1,4 +1,11 @@
 *.log
+# Database dumps. A legacy export of this system carried staff names, csc.gov.ph
+# addresses and password hashes; once committed it stays in the history even
+# after deletion. Migration source data belongs out of band, not in the repo —
+# config/database.php defines a read-only `legacy` connection for that.
+*.sql
+*.sql.gz
+*.dump
 .DS_Store
 .env
 .env.backup

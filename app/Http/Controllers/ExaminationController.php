@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\AssignmentStatus;
 use App\Enums\BlacklistStatus;
 use App\Enums\ExamRole;
+use App\Enums\PayeeType;
 use App\Enums\PerformanceRating;
 use App\Enums\UserRole;
 use App\Exports\RoomAssignmentsExport;
@@ -21,6 +22,8 @@ use App\Models\ScannerSession;
 use App\Models\School;
 use App\Services\PerformanceRatingCalculator;
 use App\Services\RoomStaffingCalculator;
+use App\Support\DesignationRegistry;
+use App\Support\DesignationValue;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -149,8 +152,8 @@ class ExaminationController extends Controller
                     'field_office' => $assignment->fieldOffice?->only('id', 'name', 'code'),
                     'role' => $assignment->role->value,
                     'role_label' => $assignment->role->label(),
-                    'role_group' => $assignment->role->group()->value,
-                    'role_group_label' => $assignment->role->group()->label(),
+                    'role_group' => $assignment->role->categoryKey(),
+                    'role_group_label' => $assignment->role->categoryLabel(),
                     'status' => $assignment->status->value,
                     'status_label' => $assignment->status->label(),
                     'status_variant' => $assignment->status->badgeVariant(),
@@ -176,7 +179,7 @@ class ExaminationController extends Controller
                     'absent' => $assignment->isAbsent(),
                     'marked_absent_at' => $assignment->marked_absent_at?->format('M d, Y H:i'),
                     'marked_absent_by' => $assignment->markedAbsentBy?->name,
-                    'is_alternate' => $assignment->role === ExamRole::AlternateExaminer,
+                    'is_alternate' => $assignment->role->is(ExamRole::AlternateExaminer),
                     // Only room-floor seats (Supervising Examiner, Room Examiner,
                     // Proctor) can be marked absent and covered by an alternate;
                     // REC/LEC committee seats are staffed from a different pool.
@@ -232,7 +235,9 @@ class ExaminationController extends Controller
                 ])
             : [];
 
-        $roomRoles = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
+        // Whichever designations carry a room slot, so a custom one is pooled and
+        // placed here exactly like the built-in three.
+        $roomRoles = array_column(DesignationRegistry::roomDesignations(), "key");
 
         // Room-role assignments for the venue breakdown/staffing below are
         // intentionally NOT filtered by the assignment's own field_office_id
@@ -293,9 +298,9 @@ class ExaminationController extends Controller
                     ]),
                     'rooms_count' => $venue->rooms->count(),
                     'total_capacity' => $venue->rooms->sum('capacity'),
-                    'room_breakdown' => $this->roomStaffing->breakdown($venue->rooms, $normalizedAssignments),
+                    'room_breakdown' => $this->roomStaffing->breakdown($venue->rooms, $normalizedAssignments, $venue->roomsPerSupervisor()),
                     'unassigned_pool' => $unassignedPool,
-                    'staffing' => $this->roomStaffing->stats($venue->rooms, $normalizedAssignments),
+                    'staffing' => $this->roomStaffing->stats($venue->rooms, $normalizedAssignments, $venue->roomsPerSupervisor()),
                     'oep_assignments' => $venue->oepAssignments->map(fn ($assignment) => [
                         'id' => $assignment->id,
                         'name' => $assignment->personnel?->name,
@@ -359,17 +364,21 @@ class ExaminationController extends Controller
             // Director III) instead of leaving an admin to pick the right
             // person from the pool and be rejected. Null when the post is
             // vacant or its holder is not enrolled — see Member::holdingOffice.
-            'roles' => collect(ExamRole::cases())
-                ->map(fn ($role) => [
+            'roles' => collect(DesignationRegistry::forSection(PayeeType::ExamRole))
+                ->map(fn (array $row) => new DesignationValue($row['key']))
+                ->map(fn (DesignationValue $role) => [
                     'value' => $role->value,
                     'label' => $role->label(),
-                    'group' => $role->group()->value,
-                    'group_label' => $role->group()->label(),
+                    'group' => $role->categoryKey(),
+                    'group_label' => $role->categoryLabel(),
                     'is_coverage' => $role->isCoverageRole(),
                     'reserved_member_id' => ($office = $role->reservedForRole()) !== null
                         ? Member::holdingOffice($office)?->id
                         : null,
                 ])->all(),
+            // The room grid's columns, driven by which designations carry a room
+            // slot rather than by a hardcoded list of three.
+            'roomRoleFields' => DesignationRegistry::roomDesignations(),
             'ratings' => collect(PerformanceRating::cases())
                 ->map(fn ($rating) => ['value' => $rating->value, 'label' => $rating->label()])->all(),
         ]);
@@ -389,7 +398,9 @@ class ExaminationController extends Controller
         ]);
         $status = $validated['status'] ?? 'all';
 
-        $roomRoles = [ExamRole::Proctor->value, ExamRole::RoomExaminer->value, ExamRole::SupervisingExaminer->value];
+        // Whichever designations carry a room slot, so a custom one is pooled and
+        // placed here exactly like the built-in three.
+        $roomRoles = array_column(DesignationRegistry::roomDesignations(), "key");
 
         $venues = $examination->venues()
             ->with('school:id,name', 'rooms')

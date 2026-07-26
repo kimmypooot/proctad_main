@@ -83,9 +83,19 @@ watch(mobileOpen, (open) => {
                 </li>
             </ul>
 
-            <!-- Desktop auth actions -->
+            <!--
+                Desktop auth actions.
+
+                Login points at the member page, not /login. Visitors arriving
+                from the public site are overwhelmingly PROCTAD members, who
+                sign in with Google and never set a password — /login leads with
+                a username and password form they cannot use. Staff are not cut
+                off: /member/login links straight to it, and every framework
+                redirect (expired session, `auth` middleware, the maintenance
+                notice) still goes to /login, which stays the `login` route.
+            -->
             <div class="hidden items-center gap-3 lg:flex">
-                <BaseButton href="/login" variant="ghost" size="sm">Login</BaseButton>
+                <BaseButton href="/member/login" variant="ghost" size="sm">Login</BaseButton>
                 <BaseButton href="/register" variant="primary" size="sm">Register</BaseButton>
             </div>
 
@@ -143,7 +153,8 @@ watch(mobileOpen, (open) => {
                     </li>
                 </ul>
                 <div class="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 sm:px-6">
-                    <BaseButton href="/login" variant="outline" block>Login</BaseButton>
+                    <!-- Same destination as the desktop button above. -->
+                    <BaseButton href="/member/login" variant="outline" block>Login</BaseButton>
                     <BaseButton href="/register" variant="primary" block>Register</BaseButton>
                 </div>
             </div>

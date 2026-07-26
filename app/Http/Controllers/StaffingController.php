@@ -21,14 +21,27 @@ class StaffingController extends Controller
 
         $validated = $request->validate([
             'scope' => ['required', Rule::in(['all', 'unfilled'])],
-            'rooms_per_supervisor' => ['nullable', 'integer', 'min:1', 'max:20'],
+            // A Supervising Examiner covers between 3 and 8 rooms, as the field
+            // office decides for the venue.
+            'rooms_per_supervisor' => [
+                'nullable', 'integer',
+                'min:'.ExaminationSchool::MIN_ROOMS_PER_SUPERVISOR,
+                'max:'.ExaminationSchool::MAX_ROOMS_PER_SUPERVISOR,
+            ],
         ]);
 
         if ($venue->rooms()->doesntExist()) {
             return back()->with('error', 'No rooms found for this venue. Add rooms first.');
         }
 
-        $summary = $randomizer->randomize($venue, $validated['scope'], $validated['rooms_per_supervisor'] ?? 5);
+        $roomsPerSupervisor = $validated['rooms_per_supervisor'] ?? $venue->roomsPerSupervisor();
+
+        // Persisted before staffing, so the grid groups rooms exactly the way
+        // the randomizer is about to. Leaving it unsaved is what let the two
+        // disagree in the first place.
+        $venue->update(['rooms_per_supervisor' => $roomsPerSupervisor]);
+
+        $summary = $randomizer->randomize($venue, $validated['scope'], $roomsPerSupervisor);
         $total = array_sum($summary);
 
         return back()->with('success', $total > 0

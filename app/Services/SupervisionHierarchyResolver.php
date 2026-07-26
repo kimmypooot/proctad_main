@@ -28,7 +28,7 @@ class SupervisionHierarchyResolver
     /** @return Collection<int, ExamAssignment> Room Examiner/Proctor assignments supervised by $supervisor. */
     public function subordinatesFor(ExamAssignment $supervisor): Collection
     {
-        if ($supervisor->role !== ExamRole::SupervisingExaminer || ! $supervisor->exam_room_id) {
+        if (! $supervisor->role->is(ExamRole::SupervisingExaminer) || ! $supervisor->exam_room_id) {
             return collect();
         }
 

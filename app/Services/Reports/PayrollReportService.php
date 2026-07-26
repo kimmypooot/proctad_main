@@ -167,9 +167,14 @@ class PayrollReportService
             return $cents;
         };
 
-        $page2Assignments = $assignments->where('role', ExamRole::RoomExaminer);
-        $page3Assignments = $assignments->where('role', ExamRole::Proctor);
-        $page1Assignments = $assignments->whereNotIn('role', [ExamRole::RoomExaminer, ExamRole::Proctor]);
+        // Filtered by hand rather than with Collection::where: the designation is
+        // a DesignationValue now, so comparing the attribute to an enum case
+        // would silently match nothing and empty pages 2 and 3.
+        $page2Assignments = $assignments->filter(fn (ExamAssignment $a) => $a->role->is(ExamRole::RoomExaminer));
+        $page3Assignments = $assignments->filter(fn (ExamAssignment $a) => $a->role->is(ExamRole::Proctor));
+        $page1Assignments = $assignments->reject(
+            fn (ExamAssignment $a) => $a->role->isAnyOf([ExamRole::RoomExaminer, ExamRole::Proctor]),
+        );
 
         $page1 = collect();
         $running = 0;

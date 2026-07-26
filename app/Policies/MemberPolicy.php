@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\Member;
 use App\Models\User;
 
@@ -10,7 +10,7 @@ class MemberPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role !== UserRole::Member;
+        return $user->hasPermission(Permission::MembersView);
     }
 
     /**
@@ -28,12 +28,12 @@ class MemberPolicy
             return true;
         }
 
-        if ($user->role->isRegionWide()) {
-            return true;
+        if (! $user->hasPermission(Permission::MembersView)) {
+            return false;
         }
 
-        if (! $user->role->isFieldOfficeScoped()) {
-            return false;
+        if ($user->role->isRegionWide()) {
+            return true;
         }
 
         return $member->isRegionWide() || $this->sharesJurisdiction($user, $member);
@@ -41,7 +41,7 @@ class MemberPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::MembersManage);
     }
 
     public function update(User $user, Member $member): bool
@@ -61,13 +61,15 @@ class MemberPolicy
      */
     private function manage(User $user, Member $member): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
+        if (! $user->hasPermission(Permission::MembersManage)) {
+            return false;
+        }
+
+        if ($user->role->isRegionWide()) {
             return true;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && ! $member->isRegionWide()
-            && $this->sharesJurisdiction($user, $member);
+        return ! $member->isRegionWide() && $this->sharesJurisdiction($user, $member);
     }
 
     /**

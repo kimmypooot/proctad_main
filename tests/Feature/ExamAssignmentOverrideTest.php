@@ -43,7 +43,7 @@ class ExamAssignmentOverrideTest extends TestCase
         ])->assertRedirect();
 
         $assignment->refresh();
-        $this->assertSame(ExamRole::RoomExaminer, $assignment->role);
+        $this->assertTrue($assignment->role->is(ExamRole::RoomExaminer));
         $this->assertSame($newVenue->id, $assignment->examination_school_id);
         $this->assertNull($assignment->exam_room_id);
         $this->assertSame(AssignmentStatus::Confirmed, $assignment->status);

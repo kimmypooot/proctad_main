@@ -38,6 +38,7 @@ class Preflight extends Command
     public function handle(): int
     {
         $this->configuration();
+        $this->exposedFiles();
         $this->scheduler();
         $this->queueWorker();
         $this->seededAccounts();
@@ -108,6 +109,49 @@ class Preflight extends Command
         config('app.key')
             ? $this->recordPass('APP_KEY', 'Set')
             : $this->recordFail('APP_KEY', 'Missing — encrypted columns (including date_of_birth) cannot be read.');
+
+        // Published in .env.example before it was sanitised, so it is in the
+        // git history and must be treated as known to anyone with the repo.
+        config('app.key') === 'base64:gd0SfSBxVCRazK+ffmGw4JVxmeLK0GDx/ucxYUvh/0s='
+            ? $this->recordFail('APP_KEY', 'This is the key that was committed to .env.example. Anyone with the repository can forge signed URLs and decrypt PII. Rotate it.')
+            : $this->recordPass('APP_KEY origin', 'Not the previously committed value');
+
+        $this->transportSecurity();
+    }
+
+    /**
+     * The settings whose absence looks like nothing at all: the site works, the
+     * pages load, and the session cookie is travelling in the clear.
+     */
+    private function transportSecurity(): void
+    {
+        config('session.secure')
+            ? $this->recordPass('SESSION_SECURE_COOKIE', 'Enabled')
+            : $this->recordFail('SESSION_SECURE_COOKIE', 'Not set — the session cookie will be sent over plain HTTP on any downgrade.');
+
+        config('session.encrypt')
+            ? $this->recordPass('SESSION_ENCRYPT', 'Enabled')
+            : $this->recordWarn('SESSION_ENCRYPT', 'Disabled — session payloads are stored unencrypted.');
+
+        // Not merely a hardening nicety: without trusted proxies behind a load
+        // balancer, request()->ip() is the proxy for everyone, so the login
+        // throttle and every other limiter share one bucket, and audit_logs
+        // records the proxy address for every event.
+        config('security.trusted_proxies')
+            ? $this->recordPass('TRUSTED_PROXIES', implode(', ', (array) config('security.trusted_proxies')))
+            : $this->recordWarn('TRUSTED_PROXIES', 'Not set. If the app is behind a proxy, rate limiting and audited IPs are both wrong, and Secure cookies are suppressed.');
+
+        config('security.trusted_hosts')
+            ? $this->recordPass('TRUSTED_HOSTS', implode(', ', (array) config('security.trusted_hosts')))
+            : $this->recordFail('TRUSTED_HOSTS', 'Not set — an attacker can set the Host header and have password reset links delivered to a domain they control.');
+
+        str_starts_with((string) config('app.url'), 'https://')
+            ? $this->recordPass('HTTPS', 'APP_URL is https')
+            : $this->recordFail('HTTPS', 'APP_URL is not https — emailed links and OAuth redirects will be generated as plain HTTP.');
+
+        config('security.csp_report_only')
+            ? $this->recordWarn('Content-Security-Policy', 'Report-only. Enforce it once one exam cycle has passed with no violations.')
+            : $this->recordPass('Content-Security-Policy', 'Enforcing');
     }
 
     private function scheduler(): void
@@ -185,6 +229,42 @@ class Preflight extends Command
         $seeded->isEmpty()
             ? $this->recordPass('Seeded test accounts', 'None present')
             : $this->recordFail('Seeded test accounts', $seeded->count().' found — delete before go-live: '.$seeded->take(3)->implode(', ').($seeded->count() > 3 ? ' …' : ''));
+
+        // The legacy estate shared one password across every account, and its
+        // hashes were committed to the repository. Any account carried across
+        // that has not since set a new password is holding a credential an
+        // attacker can derive offline.
+        $unreset = User::whereNotNull('username')
+            ->whereNull('google_id')
+            ->where('must_change_password', false)
+            ->count();
+
+        $unreset === 0
+            ? $this->recordPass('Legacy credentials', 'No un-reset legacy accounts')
+            : $this->recordFail('Legacy credentials', "{$unreset} legacy account(s) still hold a pre-migration password. Run: php artisan proctad:force-password-reset --legacy");
+    }
+
+    /**
+     * Files that must never have been in the repository, checked on the host in
+     * case a deployment copied the working tree wholesale.
+     */
+    private function exposedFiles(): void
+    {
+        $dumps = [];
+
+        foreach ((array) config('security.dump_scan_paths', []) as $path) {
+            $dumps = array_merge($dumps, glob(rtrim($path, '\\/').DIRECTORY_SEPARATOR.'*.sql') ?: []);
+        }
+
+        $dumps === []
+            ? $this->recordPass('Database dumps', 'None in the project root or storage/')
+            : $this->recordFail('Database dumps', count($dumps).' found — remove from the host: '.implode(', ', array_map('basename', $dumps)));
+
+        // Only reachable if the document root is the project root rather than
+        // public/, which would also expose .env. Worth saying plainly.
+        file_exists(public_path('.env'))
+            ? $this->recordFail('Environment file', '.env is inside public/ — it is downloadable.')
+            : $this->recordPass('Environment file', 'Not web-accessible from public/');
     }
 
     private function storageAndDatabase(): void

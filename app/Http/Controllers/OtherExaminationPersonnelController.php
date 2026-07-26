@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PayeeType;
 use App\Enums\PersonnelType;
 use App\Enums\UserRole;
 use App\Http\Requests\StoreOtherExaminationPersonnelRequest;
@@ -11,6 +12,7 @@ use App\Models\OtherExaminationPersonnel;
 use App\Models\TestingCenter;
 use App\Models\User;
 use App\Services\IdCardPdfService;
+use App\Support\DesignationRegistry;
 use App\Support\OepIdCard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -189,7 +191,12 @@ class OtherExaminationPersonnelController extends Controller
             404,
         );
 
-        return Storage::disk('local')->response($otherExaminationPersonnel->photo_path);
+        // Same reasoning as MemberController::photo — an inline, same-origin
+        // response for a file somebody else uploaded.
+        return Storage::disk('local')->response(
+            $otherExaminationPersonnel->photo_path,
+            headers: MemberController::FILE_HEADERS,
+        );
     }
 
     public function downloadIdCard(OtherExaminationPersonnel $otherExaminationPersonnel, IdCardPdfService $service): HttpResponse
@@ -239,8 +246,10 @@ class OtherExaminationPersonnelController extends Controller
 
     private function personnelTypeOptions(): array
     {
-        return collect(PersonnelType::cases())
-            ->map(fn ($type) => ['value' => $type->value, 'label' => $type->label()])
+        // Only those still in use, so a deactivated type stops being offered on
+        // new records without disturbing the personnel already filed under it.
+        return collect(DesignationRegistry::forSection(PayeeType::PersonnelType))
+            ->map(fn (array $row) => ['value' => $row['key'], 'label' => $row['label']])
             ->all();
     }
 

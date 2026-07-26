@@ -22,7 +22,20 @@ class RoomStaffingCalculatorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->calculator = new RoomStaffingCalculator;
+
+        // Passed in rather than read from the registry, which keeps these cases
+        // free of the database and the framework. These are the three the
+        // migration seeds, so the arithmetic under test is the real one.
+        $this->calculator = new RoomStaffingCalculator([
+            ['key' => 'proctor', 'label' => 'Proctor', 'rooms_per_slot' => 1, 'is_anchored' => false],
+            ['key' => 'room_examiner', 'label' => 'Room Examiner', 'rooms_per_slot' => 1, 'is_anchored' => false],
+            [
+                'key' => 'supervising_examiner',
+                'label' => 'Supervising Examiner',
+                'rooms_per_slot' => RoomStaffingCalculator::ROOMS_PER_SUPERVISOR,
+                'is_anchored' => true,
+            ],
+        ]);
     }
 
     private function rooms(int $count, int $capacity = 25): Collection

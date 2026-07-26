@@ -114,10 +114,10 @@ class AlternateExaminerTest extends TestCase
 
         $alternate->refresh();
 
-        $this->assertSame(ExamRole::Proctor, $alternate->role);
+        $this->assertTrue($alternate->role->is(ExamRole::Proctor));
         $this->assertSame($this->room->id, $alternate->exam_room_id);
         $this->assertSame($proctor->id, $alternate->covering_for_assignment_id);
-        $this->assertSame(ExamRole::AlternateExaminer, $alternate->original_role);
+        $this->assertTrue($alternate->original_role->is(ExamRole::AlternateExaminer));
         // Stepping in is itself the report-in — otherwise the room reads as
         // unstaffed for the whole examination.
         $this->assertNotNull($alternate->attendance_confirmed_at);
@@ -231,7 +231,7 @@ class AlternateExaminerTest extends TestCase
 
         $alternate->refresh();
 
-        $this->assertSame(ExamRole::AlternateExaminer, $alternate->role);
+        $this->assertTrue($alternate->role->is(ExamRole::AlternateExaminer));
         $this->assertNull($alternate->covering_for_assignment_id);
         $this->assertNull($alternate->exam_room_id);
     }

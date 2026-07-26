@@ -1,12 +1,18 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { useForm } from '@inertiajs/vue3';
+import { useForm, usePage } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseCard from '@/Components/BaseCard.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
 import Tooltip from '@/Components/Tooltip.vue';
 import { useVenueOptions } from '@/Composables/useVenueOptions';
+
+// Named from the shared role labels so a rename at Administration → Roles is
+// reflected here rather than leaving the old name in the hint below.
+const foAdminLabel = computed(
+    () => usePage().props.roleLabels?.fo_admin ?? 'Field Office Staff',
+);
 
 const props = defineProps({
     examination: { type: Object, required: true },
@@ -218,7 +224,7 @@ const assign = () => assignForm
                     <p class="text-xs font-medium uppercase tracking-wide text-slate-400">
                         {{ filteredMembers.length }} eligible member{{ filteredMembers.length === 1 ? '' : 's' }}
                         <span v-if="confinedOutCount" class="normal-case tracking-normal text-slate-400">
-                            · {{ confinedOutCount }} hidden — Field Office Staff serve only at their own center
+                            · {{ confinedOutCount }} hidden — {{ foAdminLabel }} serve only at their own center
                         </span>
                     </p>
                     <button type="button" class="text-xs font-semibold text-brand-700 hover:underline" @click="selectAllFiltered">

@@ -111,6 +111,8 @@ class UserManagementTest extends TestCase
         $target = User::factory()->create(['role' => UserRole::Member]);
 
         $this->actingAs($admin)->put("/users/{$target->id}", [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
             'role' => 'fo_admin',
             'field_office_id' => $fo->id,
             'is_active' => false,
@@ -120,6 +122,71 @@ class UserManagementTest extends TestCase
         $this->assertSame(UserRole::FoAdmin, $target->role);
         $this->assertSame($fo->id, $target->field_office_id);
         $this->assertFalse($target->is_active);
+    }
+
+    public function test_admin_can_correct_a_users_name(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $target = User::factory()->create([
+            'role' => UserRole::FoAdmin,
+            'field_office_id' => FieldOffice::factory()->create()->id,
+            'first_name' => 'Maria',
+            'last_name' => 'Santos',
+            'name' => 'Maria Santos',
+        ]);
+
+        $this->actingAs($admin)->put("/users/{$target->id}", [
+            'first_name' => 'Maria',
+            'middle_name' => 'Reyes',
+            'last_name' => 'Cruz',
+            'suffix' => 'Jr.',
+            'role' => $target->role->value,
+            'field_office_id' => $target->field_office_id,
+            'is_active' => true,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $target->refresh();
+        $this->assertSame('Cruz', $target->last_name);
+        $this->assertSame('Reyes', $target->middle_name);
+        // The display name is rebuilt from the parts rather than left stale.
+        $this->assertSame('Maria Reyes Cruz Jr.', $target->name);
+    }
+
+    public function test_updating_a_user_requires_a_name(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $target = User::factory()->create(['role' => UserRole::Member]);
+
+        $this->actingAs($admin)->put("/users/{$target->id}", [
+            'first_name' => '',
+            'last_name' => '',
+            'role' => 'member',
+            'is_active' => true,
+        ])->assertSessionHasErrors(['first_name', 'last_name']);
+    }
+
+    public function test_admin_cannot_change_a_users_email_or_username(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $target = User::factory()->create([
+            'role' => UserRole::FoAdmin,
+            'email' => 'original@csc.gov.ph',
+            'username' => 'original',
+        ]);
+
+        $this->actingAs($admin)->put("/users/{$target->id}", [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'email' => 'hijacked@example.com',
+            'username' => 'hijacked',
+            'role' => $target->role->value,
+            'field_office_id' => $target->field_office_id,
+            'is_active' => true,
+        ])->assertRedirect();
+
+        $target->refresh();
+        $this->assertSame('original@csc.gov.ph', $target->email);
+        $this->assertSame('original', $target->username);
     }
 
     public function test_creating_a_user_links_them_to_their_field_offices_testing_centers(): void
@@ -158,6 +225,8 @@ class UserManagementTest extends TestCase
 
         // Moving the user to Samar drags their center links along with the office.
         $this->actingAs($admin)->put("/users/{$target->id}", [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
             'role' => 'fo_admin',
             'field_office_id' => $samar->id,
             'is_active' => true,
@@ -167,6 +236,8 @@ class UserManagementTest extends TestCase
 
         // Promoting to a regional role with no field office clears the links.
         $this->actingAs($admin)->put("/users/{$target->id}", [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
             'role' => 'esd_admin',
             'field_office_id' => null,
             'is_active' => true,
@@ -202,6 +273,8 @@ class UserManagementTest extends TestCase
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
 
         $this->actingAs($admin)->put("/users/{$admin->id}", [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
             'role' => 'super_admin',
             'is_active' => false,
         ])->assertStatus(422);

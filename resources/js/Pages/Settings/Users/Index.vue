@@ -86,13 +86,20 @@ const submitCreate = () => createForm.post('/users', {
     onSuccess: () => (showCreate.value = false),
 });
 
-/* --- Edit role / field office / active --- */
+/* --- Edit name / role / field office / active --- */
 const editing = ref(null);
-const editForm = useForm({ role: '', field_office_id: '', is_active: true });
+const editForm = useForm({
+    first_name: '', middle_name: '', last_name: '', suffix: '',
+    role: '', field_office_id: '', is_active: true,
+});
 
 const openEdit = (user) => {
     editing.value = user;
     editForm.clearErrors();
+    editForm.first_name = user.first_name ?? '';
+    editForm.middle_name = user.middle_name ?? '';
+    editForm.last_name = user.last_name ?? '';
+    editForm.suffix = user.suffix ?? '';
     editForm.role = user.role;
     editForm.field_office_id = user.field_office?.id ?? '';
     editForm.is_active = user.is_active;
@@ -332,10 +339,16 @@ const confirmReset = () => resetForm.post(`/users/${resettingUser.value.id}/send
         <!-- Edit modal -->
         <BaseModal :show="!!editing" title="Edit User" @close="editing = null">
             <form id="user-edit-form" class="space-y-4" novalidate @submit.prevent="submitEdit">
-                <p class="text-sm text-slate-600">
-                    <strong>{{ editing?.name }}</strong>
-                    <span class="ml-1 text-xs text-slate-400">{{ editing?.email }}</span>
-                </p>
+                <!-- Email and username identify the account for login and password
+                     resets, so they stay read-only here; correcting a name must not
+                     be a chance to change who can sign in. -->
+                <p class="text-sm text-slate-400">{{ editing?.email }}</p>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <TextInput v-model="editForm.first_name" label="First Name" required :error="editForm.errors.first_name" />
+                    <TextInput v-model="editForm.last_name" label="Last Name" required :error="editForm.errors.last_name" />
+                    <TextInput v-model="editForm.middle_name" label="Middle Name" optional :error="editForm.errors.middle_name" />
+                    <TextInput v-model="editForm.suffix" label="Suffix" optional :error="editForm.errors.suffix" />
+                </div>
                 <SelectInput v-model="editForm.role" label="Role" required :options="roles" :error="editForm.errors.role" />
                 <SelectInput
                     v-model="editForm.field_office_id"

@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Support\RoleLabelRegistry;
+
 enum UserRole: string
 {
     case SuperAdmin = 'super_admin';
@@ -21,7 +23,18 @@ enum UserRole: string
     case FoAdmin = 'fo_admin';
     case Member = 'member';
 
+    /**
+     * The role's display name, which an administrator may have renamed at
+     * Administration → Roles. Every caller resolves through here so a rename
+     * shows up everywhere at once; nothing about the role's authority changes.
+     */
     public function label(): string
+    {
+        return RoleLabelRegistry::get($this);
+    }
+
+    /** The built-in name, used when the role has not been renamed. */
+    public function defaultLabel(): string
     {
         return match ($this) {
             self::SuperAdmin => 'Super Administrator',

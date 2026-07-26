@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\OepAssignment;
 use App\Models\User;
 
@@ -10,7 +10,7 @@ class OepAssignmentPolicy
 {
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::OepAssignmentsManage);
     }
 
     public function delete(User $user, OepAssignment $assignment): bool
@@ -25,13 +25,16 @@ class OepAssignmentPolicy
 
     private function manage(User $user, OepAssignment $assignment): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
+        if (! $user->hasPermission(Permission::OepAssignmentsManage)) {
+            return false;
+        }
+
+        if ($user->role->isRegionWide()) {
             return true;
         }
 
         $assignment->loadMissing('personnel');
 
-        return $user->role->isFieldOfficeScoped()
-            && (bool) $assignment->personnel?->isWithinJurisdictionOf($user);
+        return (bool) $assignment->personnel?->isWithinJurisdictionOf($user);
     }
 }

@@ -235,9 +235,13 @@ const submit = () => {
             </BaseButton>
         </form>
 
+        <!-- Registration creates a PROCTAD membership, so anyone who lands here
+             already having an account is a member: send them to the member sign-in
+             rather than the staff username/password form, which they never set up.
+             That page links on to /login for staff. -->
         <p class="mt-8 text-center text-sm text-slate-500">
             Already have an account?
-            <Link href="/login" class="font-semibold text-brand-700 transition-colors hover:text-brand-800 hover:underline">
+            <Link href="/member/login" class="font-semibold text-brand-700 transition-colors hover:text-brand-800 hover:underline">
                 Login here
             </Link>
         </p>

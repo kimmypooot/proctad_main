@@ -61,12 +61,21 @@ php artisan db:seed
 > `@proctad.test` addresses. `MemberSeeder`, `ExaminationSeeder`,
 > `CertificateSeeder` and `TrainingSeeder` create sample records.
 
-The seeders carrying genuine reference data are `FieldOfficeSeeder`,
-`ExamTypeSeeder`, `SchoolSeeder`, `EmailTemplateSeeder` and `SettingSeeder`.
-Run those individually if a fresh production database needs baseline rows:
+The genuine reference data lives in `InitialDataSeeder` (field offices, testing
+centers, schools, exam types, signatories), alongside `EmailTemplateSeeder`,
+`SettingSeeder` and `FeeScheduleSeeder`. These are exactly what `db:seed` runs by
+default, so a fresh database comes up with the real CSC RO VIII baseline and no
+sample records:
 
 ```bash
-php artisan db:seed --class=EmailTemplateSeeder
+php artisan migrate:fresh --seed
+```
+
+The sample-data seeders are kept out of that run. Invoke them by hand when you
+need something to look at:
+
+```bash
+php artisan db:seed --class=MemberSeeder
 ```
 
 Dashboard demo data is separate and opt-in:
@@ -74,6 +83,78 @@ Dashboard demo data is separate and opt-in:
 ```bash
 php artisan db:seed --class=DashboardDemoDataSeeder
 ```
+
+## Permissions
+
+Authorization is decided in three parts, and only the first is configurable:
+
+| Part | Where it lives | Configurable |
+| --- | --- | --- |
+| **Capability** — may this role do this kind of thing? | `App\Enums\Permission`, overridable per role at **Administration → Role Permissions** | Yes |
+| **Scope** — is the record in the user's testing centers or field office? | The policy classes | No |
+| **State** — is the record in a status that allows it? | The policy classes | No |
+
+So granting a permission widens *who* may act, never *which records* they reach:
+a Field Office role handed every members permission still cannot touch another
+office's roster.
+
+Roles themselves stay in code (`App\Enums\UserRole`). They can be **renamed** at
+**Administration → Roles** (Super Admin only, gated on the role rather than a
+permission so it cannot be granted away), but not added or deleted: several are
+named directly by `CertificateType::approverRoles()` and
+`ExamRole::reservedForRole()`, and each has its own hand-built sidebar. A rename
+is display text only — `users.role` is unchanged, so no authorization decision
+moves with it.
+
+**Designations** and their **committees** are data, in the `designations` and
+`designation_categories` tables, managed at **Administration → Designations**.
+Both tables are seeded from `ExamRole`, `PersonnelType` and their group enums,
+which remain the canonical list of *built-in* keys.
+
+Built-in rows are flagged and cannot be deleted, because the structural rules
+name them: the payroll workbook reserves pages for Room Examiners and Proctors,
+the evaluation form covers four, and the REC chairs are held ex officio.
+
+The per-room staffing grid is **not** one of those rules — it is driven by
+`designations.rooms_per_slot`, which is how many rooms one person covers (1 per
+room, or a group of N anchored at the group's first room). Any designation given
+a value takes part, so a custom one is staffed alongside the built-in three.
+`RoomStaffingCalculator` accepts the list via its constructor so the arithmetic
+stays unit-testable without the database.
+
+For anchored designations that number is only a **default**. The group size is
+per venue, in `examination_school.rooms_per_supervisor`, chosen by the field
+office when room staffing is generated and constrained to 3–8 (see
+`ExaminationSchool::MIN/MAX_ROOMS_PER_SUPERVISOR`). It is persisted before the
+randomizer runs, because `StaffingRandomizer` and `RoomStaffingCalculator` must
+agree on it: if they disagree, supervisors appear against the wrong rooms and
+correctly staffed rooms read as Incomplete. Pass the venue's value to
+`stats()`/`breakdown()` — never assume the designation default. Deactivating is how a built-in is
+retired — it leaves every historical assignment intact and keeps its rate for
+when it returns. Custom designations are assignable and appear on payroll's
+catch-all page, but stand outside those rules and never reach the room grid;
+they are deletable only while unused, behind a retype-the-name confirmation.
+
+A designation's `key` is what lands in `exam_assignments.role`, and is immutable
+— renaming or re-filing never rewrites history. The column is cast through
+`App\Casts\AsDesignation` to a `DesignationValue` rather than an enum, since a
+custom key is not an `ExamRole` case; compare with `->is()` / `->isAnyOf()`
+rather than `===`. Coverage follows the committee, so moving a designation into
+the REC or an LEC makes it a coverage duty. Rates live in the same
+`fee_schedules` rows the payroll reports read. There is no separate Fee
+Management page — a designation's rate is set where the designation is, and
+editing it needs `fee_schedules.manage` on top of `designations.manage`, so
+naming duties and setting what they pay stay separate permissions.
+
+Note that the administration routes sit behind `role:super_admin,esd_admin`
+middleware (`routes/web.php`). For those pages a permission can *narrow* access
+but not widen it.
+
+Defaults live in `App\Support\PermissionRegistry` and reproduce the role tiers
+the policies were originally written against, so an untouched install behaves as
+it always did. Only differences are stored, in `role_permissions`. Super
+Administrator always holds every permission and cannot be edited — that is the
+guarantee there is always a way back into the page.
 
 ## Tests
 

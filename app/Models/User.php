@@ -3,9 +3,11 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use App\Models\Concerns\Auditable;
 use App\Observers\UserObserver;
+use App\Support\PermissionRegistry;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -155,6 +157,16 @@ class User extends Authenticatable
     public function hasRole(UserRole ...$roles): bool
     {
         return in_array($this->role, $roles, true);
+    }
+
+    /**
+     * Whether this user's role holds the given capability. This is only half of
+     * an authorization decision — the policies pair it with the scope and state
+     * rules that a permission is not allowed to override. See App\Enums\Permission.
+     */
+    public function hasPermission(Permission $permission): bool
+    {
+        return PermissionRegistry::has($this->role, $permission);
     }
 
     /**

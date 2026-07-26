@@ -3,7 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\CertificateStatus;
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\Certificate;
 use App\Models\User;
 
@@ -11,16 +11,15 @@ class CertificatePolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role !== UserRole::Member;
+        return $user->hasPermission(Permission::CertificatesView);
     }
 
     /**
-     * Approve or disapprove: the certificate type's primary approver role
-     * (Field Director within their own Field Office for Appearance/
-     * Designation Order, Management region-wide for Appreciation), plus two
-     * fallback paths for when the primary approver is unavailable — Super
-     * Admin/ESD Admin region-wide for any type, and Field Director locally
-     * for any type originating in their own Field Office.
+     * Approve or disapprove. Three things must hold, and only the first is
+     * configurable: the role holds the permission, the certificate is still
+     * Pending, and the user is either a designated approver for this type
+     * (or a region-wide fallback for when that approver is unavailable) or is
+     * acting within their own testing centers.
      */
     public function decide(User $user, Certificate $certificate): bool
     {
@@ -28,42 +27,42 @@ class CertificatePolicy
             return false;
         }
 
+        if (! $user->hasPermission(Permission::CertificatesDecide)) {
+            return false;
+        }
+
         $approverRoles = $certificate->type->approverRoles();
 
+        // A type nobody is designated to approve cannot be decided at all.
         if ($approverRoles === []) {
             return false;
         }
 
-        if (in_array($user->role, $approverRoles, true)) {
-            return $user->role !== UserRole::FieldDirector
-                || in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
+        if ($user->role->isRegionWide()) {
+            return in_array($user->role, $approverRoles, true)
+                || $user->hasPermission(Permission::CertificatesDecideAnyType);
         }
 
-        if (in_array($user->role, [UserRole::SuperAdmin, UserRole::EsdAdmin], true)) {
-            return true;
-        }
-
-        return $user->role === UserRole::FieldDirector
-            && in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
+        return in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
     }
 
     /**
      * Live, non-persisted preview render — same visibility scope as the
-     * certificates list (viewAny + FO scoping), available regardless of
-     * status so staff can check a request before it's decided.
+     * certificates list, available regardless of status so staff can check a
+     * request before it's decided.
      */
     public function preview(User $user, Certificate $certificate): bool
     {
-        if ($user->role->isRegionWide()) {
-            return true;
+        if (! $user->hasPermission(Permission::CertificatesView)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
+        return $user->role->isRegionWide()
+            || in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
     }
 
     /**
-     * Download the released PDF: staff within scope, or the owning member.
+     * Download the released PDF: the owning member always, or staff in scope.
      */
     public function download(User $user, Certificate $certificate): bool
     {
@@ -75,20 +74,13 @@ class CertificatePolicy
             return true;
         }
 
-        if ($user->role->isRegionWide()) {
-            return true;
-        }
-
-        return $user->role->isFieldOfficeScoped()
-            && in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
+        return $this->preview($user, $certificate);
     }
 
     /**
      * Re-render an already-issued certificate's stored PDF (same number,
      * signatory, and release date — only the rendering is refreshed, e.g.
-     * after a letterhead or template change). Released certificates only;
-     * region-wide admins region-wide, FO-scoped staff within their own
-     * Field Office — mirroring the download scope minus the owning member.
+     * after a letterhead or template change).
      */
     public function regenerate(User $user, Certificate $certificate): bool
     {
@@ -96,11 +88,11 @@ class CertificatePolicy
             return false;
         }
 
-        if ($user->role->isRegionWide()) {
-            return true;
+        if (! $user->hasPermission(Permission::CertificatesRegenerate)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
+        return $user->role->isRegionWide()
+            || in_array($certificate->testing_center_id, $user->scopedTestingCenterIds(), true);
     }
 }

@@ -25,6 +25,7 @@ const props = defineProps({
     reportsGenerated: { type: Boolean, default: false },
     scannerSessions: { type: Array, default: () => [] },
     roles: { type: Array, required: true },
+    roomRoleFields: { type: Array, default: () => [] },
     ratings: { type: Array, required: true },
     can: { type: Object, required: true },
 });
@@ -171,6 +172,7 @@ const jumpTo = (key) => (currentStep.value = key);
             class="mt-6"
             :examination="examination"
             :venues="venues"
+            :room-role-fields="roomRoleFields"
             :can="can"
         />
 

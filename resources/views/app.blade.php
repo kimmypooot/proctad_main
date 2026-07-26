@@ -71,7 +71,10 @@
             ],
         ];
     @endphp
-    <script type="application/ld+json">{{ json_encode($orgSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</script>
+    {{-- Nonce because the Content-Security-Policy has no 'unsafe-inline' for
+         scripts; browsers apply script-src to ld+json blocks too, so without it
+         the structured data is silently dropped. See SecurityHeaders. --}}
+    <script type="application/ld+json" nonce="{{ Illuminate\Support\Facades\Vite::cspNonce() }}">{{ json_encode($orgSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</script>
 </head>
 <body class="font-sans antialiased text-slate-800 bg-white">
     @inertia

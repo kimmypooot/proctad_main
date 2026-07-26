@@ -11,7 +11,25 @@ use Illuminate\Database\Eloquent\Model;
  */
 trait Auditable
 {
-    private const AUDIT_HIDDEN = ['password', 'remember_token', 'created_at', 'updated_at'];
+    /**
+     * Dropped from the audit row entirely. Credentials, and anything that can
+     * be replayed as one: ScannerSession::$token is the sole credential for a
+     * public scanner link, so writing it here would turn read access to
+     * audit_logs into a working link into a live examination venue.
+     */
+    private const AUDIT_HIDDEN = [
+        'password', 'remember_token', 'created_at', 'updated_at',
+        'token', 'google_id',
+    ];
+
+    /**
+     * Recorded as having changed, but with the value masked. These are PII
+     * under RA 10173 — date_of_birth is deliberately encrypted at rest on the
+     * Member model, and copying its plaintext into the audit trail would undo
+     * that. The audit still answers "who changed what, and when", which is what
+     * the spec asks of it; it no longer doubles as a second copy of the record.
+     */
+    private const AUDIT_MASKED = ['date_of_birth', 'mobile_number', 'email'];
 
     public static function bootAuditable(): void
     {
@@ -53,6 +71,14 @@ trait Auditable
 
     protected function auditAttributes(array $attributes): array
     {
-        return array_diff_key($attributes, array_flip(self::AUDIT_HIDDEN));
+        $visible = array_diff_key($attributes, array_flip(self::AUDIT_HIDDEN));
+
+        foreach (self::AUDIT_MASKED as $key) {
+            if (array_key_exists($key, $visible)) {
+                $visible[$key] = '[redacted]';
+            }
+        }
+
+        return $visible;
     }
 }

@@ -47,10 +47,17 @@ class NotificationMailer
         // failed attempt records the same content a delivered one would have —
         // an admin asking "what would they have received?" gets an answer
         // whether or not it left the building.
+        //
+        // Signatures are stripped first. An assignment-confirmation body
+        // carries a live signed URL, which is a bearer credential valid for
+        // seven days: anyone who can read email_logs — a compromised admin
+        // account, a database backup, a DBA answering a support question —
+        // could otherwise confirm or decline on a member's behalf. The link
+        // still reads as a link, so the log remains useful for support.
         $content = [
             'subject' => $rendered['subject'],
-            'body_html' => $rendered['html'],
-            'body_plain' => $rendered['plain'],
+            'body_html' => $this->redactSignatures($rendered['html']),
+            'body_plain' => $this->redactSignatures($rendered['plain']),
             'email_template_id' => $template->id,
         ];
 
@@ -93,5 +100,26 @@ class NotificationMailer
                 'sent_by' => $sentBy?->id,
             ]);
         }
+    }
+
+    /**
+     * Blank out the signature and expiry of any signed URL in a body bound for
+     * the log. Applied to what is stored, never to what is sent — the recipient
+     * needs a working link; the archive does not.
+     *
+     * Matches both query separators and both entity forms, since the HTML body
+     * is escaped (see EmailTemplate::render) and carries "&amp;".
+     */
+    private function redactSignatures(?string $body): ?string
+    {
+        if ($body === null) {
+            return null;
+        }
+
+        return preg_replace(
+            '/([?&]|&amp;)(signature|expires)=[^"&\s<]+/i',
+            '$1$2=[redacted]',
+            $body,
+        );
     }
 }

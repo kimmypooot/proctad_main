@@ -116,7 +116,7 @@ class ExamAssignmentTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $assignment->refresh();
-        $this->assertSame(ExamRole::RoomExaminer, $assignment->role);
+        $this->assertTrue($assignment->role->is(ExamRole::RoomExaminer));
         $this->assertSame(PerformanceRating::Outstanding, $assignment->performance_rating);
         $this->assertNotNull($assignment->attendance_confirmed_at);
         $this->assertSame($esd->id, $assignment->attendance_confirmed_by);

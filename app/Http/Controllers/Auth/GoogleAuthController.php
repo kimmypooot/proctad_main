@@ -44,9 +44,28 @@ class GoogleAuthController extends Controller
                 ->with('error', 'Google sign-in failed. Please try again.');
         }
 
-        $user = User::where('google_id', $googleUser->getId())
-            ->orWhere('email', $googleUser->getEmail())
-            ->first();
+        // Google's own verification is the only thing that makes an email
+        // address safe to treat as an identity. Without this check, anyone able
+        // to provision a mailbox on any domain they control — a Workspace
+        // tenant costs very little — could claim the ProCTAD account holding
+        // that address, because the match below is on the address alone.
+        if (($googleUser->user['email_verified'] ?? false) !== true) {
+            Log::warning('Google sign-in rejected: unverified email', [
+                'google_id' => $googleUser->getId(),
+            ]);
+
+            return redirect()->route('member.login')
+                ->with('error', 'Your Google account email address is not verified. Please verify it with Google, then try again.');
+        }
+
+        // Provider identifier first; the email address only as a fallback, and
+        // only for an account that has never been linked. Previously a single
+        // orWhere meant an account already bound to one Google identity would
+        // still match on email and be signed into by a second one.
+        $user = User::where('google_id', $googleUser->getId())->first()
+            ?? User::where('email', $googleUser->getEmail())
+                ->whereNull('google_id')
+                ->first();
 
         // No matching account: hand off to the registration form to finish
         // creating one. The Google identity (already verified by Google) is
@@ -95,7 +114,11 @@ class GoogleAuthController extends Controller
             'changes' => ['ip' => $request->ip(), 'method' => 'google'],
         ]);
 
-        Auth::login($user, remember: true);
+        // No unconditional "remember me". The password path makes it the user's
+        // choice ($request->boolean('remember')); issuing a long-lived cookie
+        // to everyone arriving through Google widened the window on any stolen
+        // session for no reason the user asked for.
+        Auth::login($user);
         $request->session()->regenerate();
 
         return redirect()->intended(route('dashboard'));

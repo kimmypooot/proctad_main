@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\OtherExaminationPersonnel;
 use App\Models\User;
 
@@ -10,22 +10,21 @@ class OtherExaminationPersonnelPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->role !== UserRole::Member;
+        return $user->hasPermission(Permission::OepView);
     }
 
     public function view(User $user, OtherExaminationPersonnel $oep): bool
     {
-        if ($user->role->isRegionWide()) {
-            return true;
+        if (! $user->hasPermission(Permission::OepView)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && $oep->isWithinJurisdictionOf($user);
+        return $user->role->isRegionWide() || $oep->isWithinJurisdictionOf($user);
     }
 
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::OepManage);
     }
 
     public function update(User $user, OtherExaminationPersonnel $oep): bool
@@ -40,11 +39,10 @@ class OtherExaminationPersonnelPolicy
 
     private function manage(User $user, OtherExaminationPersonnel $oep): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
-            return true;
+        if (! $user->hasPermission(Permission::OepManage)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && $oep->isWithinJurisdictionOf($user);
+        return $user->role->isRegionWide() || $oep->isWithinJurisdictionOf($user);
     }
 }

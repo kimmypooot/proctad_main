@@ -24,13 +24,16 @@ const props = defineProps({
     roomBreakdown: { type: Array, required: true },
     stats: { type: Object, required: true },
     designations: { type: Array, required: true },
+    /** Staffing columns, driven by which designations carry a room slot. */
+    roomRoleFields: { type: Array, default: () => [] },
 });
 
 /** Anchor-aware lookup — a Supervising Examiner only ever links to a group's anchor room, so non-anchor rows must read the propagated value rather than doing a naive per-room match (see RoomStaffingCalculator::breakdown()). */
 const breakdownFor = (room) => props.roomBreakdown.find((b) => b.id === room.id);
 
-const ROOM_ROLES = ['proctor', 'room_examiner', 'supervising_examiner'];
-const ROOM_ROLE_LABELS = { proctor: 'Proctor', room_examiner: 'Room Examiner', supervising_examiner: 'Supervising Examiner' };
+const ROOM_ROLES = computed(() => props.roomRoleFields.map((f) => f.key));
+const slotFor = (room, key) => breakdownFor(room)?.slots?.find((slot) => slot.key === key) ?? null;
+const roleLabel = (key) => props.roomRoleFields.find((f) => f.key === key)?.label ?? key;
 const designationOptions = computed(() => props.designations);
 const DESIGNATION_HINT = 'Which exam category this room is used for. Purely descriptive — printed on room assignment reports, doesn\'t affect staffing or eligibility.';
 
@@ -276,7 +279,12 @@ const onCellChange = (room, role, event) => {
 
 const clearCell = (assignment) => persistRoom(assignment, null, `${assignment.exam_room_id}:${assignment.role}`);
 
-const randomizeForm = useForm({ scope: 'all' });
+const randomizeForm = useForm({
+    scope: 'all',
+    // Seeded from the venue's stored value so reopening the dialog shows what
+    // this venue actually uses, not a fixed default.
+    rooms_per_supervisor: props.venue.rooms_per_supervisor,
+});
 const confirmingRandomize = ref(null); // 'all' | 'unfilled' | null
 const submitRandomize = (scope) => {
     randomizeForm.scope = scope;
@@ -296,8 +304,10 @@ const submitClearStaffing = () => clearStaffingForm.post(`/venues/${props.venue.
 /* Manual Room Assignment modal — tabbed: Room Assignments (Proctor/Examiner) vs Supervising Examiners (anchor rooms only) */
 const showManualAssign = ref(false);
 const manualTab = ref('rooms');
-const roomsPerSupervisor = 5;
-const anchorRooms = computed(() => props.rooms.filter((_, index) => index % roomsPerSupervisor === 0));
+// The venue's own group size, not a fixed 5 — this must match what the
+// randomizer used, or the anchor rooms listed here are the wrong ones.
+const roomsPerSupervisor = computed(() => props.venue.rooms_per_supervisor);
+const anchorRooms = computed(() => props.rooms.filter((_, index) => index % roomsPerSupervisor.value === 0));
 
 const exportCsv = (rows, filename) => {
     const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -381,9 +391,9 @@ const exportSupervisingExaminers = () => exportCsv(
                 <div class="h-full rounded-full transition-all" :class="progressBarClass" :style="{ width: `${stats.ratio ?? 0}%` }" />
             </div>
             <div class="mt-2 flex flex-wrap gap-1.5">
-                <BaseBadge :variant="progressVariant" size="xs">{{ stats.assigned.proctor }} / {{ stats.required.proctor }} Proctor(s)</BaseBadge>
-                <BaseBadge :variant="progressVariant" size="xs">{{ stats.assigned.room_examiner }} / {{ stats.required.room_examiner }} Examiner(s)</BaseBadge>
-                <BaseBadge :variant="progressVariant" size="xs">{{ stats.assigned.supervising_examiner }} / {{ stats.required.supervising_examiner }} Supervisor(s)</BaseBadge>
+                <BaseBadge v-for="field in roomRoleFields" :key="field.key" :variant="progressVariant" size="xs">
+                    {{ stats.assigned[field.key] ?? 0 }} / {{ stats.required[field.key] ?? 0 }} {{ field.label }}
+                </BaseBadge>
             </div>
 
             <!-- Action strips -->
@@ -437,7 +447,7 @@ const exportSupervisingExaminers = () => exportCsv(
                         <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>
                                 <th class="py-2 pr-3">Room</th>
-                                <th v-for="role in ROOM_ROLES" :key="role" class="py-2 pr-3">{{ ROOM_ROLE_LABELS[role] }}</th>
+                                <th v-for="role in ROOM_ROLES" :key="role" class="py-2 pr-3">{{ roleLabel(role) }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
@@ -447,9 +457,9 @@ const exportSupervisingExaminers = () => exportCsv(
                                 </td>
                                 <td v-for="role in ROOM_ROLES" :key="role" class="py-2 pr-3">
                                     <!-- Supervising Examiner only links to its group's anchor room — non-anchor rows show the propagated value read-only (see RoomStaffingCalculator::breakdown()). -->
-                                    <template v-if="role === 'supervising_examiner' && !breakdownFor(room)?.is_supervisor_anchor">
-                                        <span v-if="breakdownFor(room)?.supervising_examiner" class="min-w-0 max-w-full truncate text-xs text-slate-500" :title="`${breakdownFor(room).supervising_examiner} (via anchor room)`">
-                                            {{ breakdownFor(room).supervising_examiner }}
+                                    <template v-if="slotFor(room, role) && !slotFor(room, role).editable">
+                                        <span v-if="slotFor(room, role).member_name" class="min-w-0 max-w-full truncate text-xs text-slate-500" :title="`${slotFor(room, role).member_name} (via anchor room)`">
+                                            {{ slotFor(room, role).member_name }}
                                         </span>
                                         <span v-else class="text-xs text-slate-300">No eligible staff</span>
                                     </template>
@@ -657,6 +667,26 @@ const exportSupervisingExaminers = () => exportCsv(
                     This only fills rooms that don't have a Proctor, Room Examiner, or Supervising Examiner yet. Rooms already
                     staffed are left untouched.
                 </p>
+                <div class="rounded-lg border border-slate-200 p-3">
+                    <label class="block text-xs font-medium text-slate-700" for="rooms-per-supervisor">
+                        Rooms per Supervising Examiner
+                    </label>
+                    <input
+                        id="rooms-per-supervisor"
+                        v-model.number="randomizeForm.rooms_per_supervisor"
+                        type="number"
+                        :min="venue.min_rooms_per_supervisor"
+                        :max="venue.max_rooms_per_supervisor"
+                        class="mt-1 w-24 rounded-md border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                    >
+                    <p class="mt-1 text-xs text-slate-500">
+                        Between {{ venue.min_rooms_per_supervisor }} and {{ venue.max_rooms_per_supervisor }}.
+                        Saved against this venue, so the staffing map groups rooms the same way.
+                    </p>
+                    <p v-if="randomizeForm.errors.rooms_per_supervisor" class="mt-1 text-xs text-rose-600">
+                        {{ randomizeForm.errors.rooms_per_supervisor }}
+                    </p>
+                </div>
                 <p>Continue?</p>
             </div>
             <template #footer>

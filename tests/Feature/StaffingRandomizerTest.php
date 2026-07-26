@@ -13,6 +13,7 @@ use App\Models\Member;
 use App\Models\School;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class StaffingRandomizerTest extends TestCase
@@ -102,6 +103,65 @@ class StaffingRandomizerTest extends TestCase
         $anchors = collect([$se1->fresh()->exam_room_id, $se2->fresh()->exam_room_id]);
         $this->assertTrue($anchors->contains($rooms[0]->id));
         $this->assertTrue($anchors->contains($rooms[5]->id));
+    }
+
+    /**
+     * The bug this guards: the chosen group size used to be a transient
+     * argument, so the randomizer would anchor supervisors every 8 rooms while
+     * the grid still grouped by 5 — supervisors shown against the wrong rooms,
+     * required counts overstated, staffed rooms reading Incomplete.
+     */
+    public function test_the_chosen_group_size_is_stored_and_drives_the_grid(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $venue = $this->venueWithRooms(16);
+        $rooms = ExamRoom::where('examination_school_id', $venue->id)->orderBy('room_number')->get();
+        $se1 = $this->roomAssignment($venue, ExamRole::SupervisingExaminer);
+        $se2 = $this->roomAssignment($venue, ExamRole::SupervisingExaminer);
+
+        $this->actingAs($admin)
+            ->post("/venues/{$venue->id}/staffing/randomize", ['scope' => 'all', 'rooms_per_supervisor' => 8])
+            ->assertRedirect();
+
+        $this->assertSame(8, $venue->fresh()->rooms_per_supervisor);
+
+        // Anchored every 8 rooms, not every 5.
+        $anchors = collect([$se1->fresh()->exam_room_id, $se2->fresh()->exam_room_id]);
+        $this->assertTrue($anchors->contains($rooms[0]->id));
+        $this->assertTrue($anchors->contains($rooms[8]->id));
+
+        // And the grid agrees: 16 rooms at 8 each needs two supervisors, and the
+        // anchor rows are the ones the randomizer actually used.
+        $this->actingAs($admin)->get("/venues/{$venue->id}/rooms")->assertInertia(
+            fn (Assert $page) => $page
+                ->where('stats.required.supervising_examiner', 2)
+                ->where('venue.rooms_per_supervisor', 8)
+                ->where('roomBreakdown', function ($breakdown) {
+                    $editable = collect($breakdown)
+                        ->filter(fn ($row) => collect($row['slots'])
+                            ->firstWhere('key', 'supervising_examiner')['editable'])
+                        ->count();
+
+                    return $editable === 2;
+                }),
+        );
+    }
+
+    public function test_a_group_size_outside_three_to_eight_is_rejected(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $venue = $this->venueWithRooms(10);
+
+        foreach ([2, 9, 20] as $invalid) {
+            $this->actingAs($admin)
+                ->post("/venues/{$venue->id}/staffing/randomize", [
+                    'scope' => 'all',
+                    'rooms_per_supervisor' => $invalid,
+                ])
+                ->assertSessionHasErrors('rooms_per_supervisor');
+        }
+
+        $this->assertNull($venue->fresh()->rooms_per_supervisor);
     }
 
     public function test_clear_removes_all_room_links_for_the_venue(): void

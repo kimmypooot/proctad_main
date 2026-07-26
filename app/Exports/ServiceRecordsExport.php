@@ -2,6 +2,8 @@
 
 namespace App\Exports;
 
+use App\Enums\PerformanceRating;
+use App\Exports\Concerns\EscapesFormulas;
 use App\Models\ExamAssignment;
 use App\Services\PerformanceRatingCalculator;
 use Illuminate\Support\Collection;
@@ -16,7 +18,9 @@ use Maatwebsite\Excel\Concerns\WithMapping;
  */
 class ServiceRecordsExport implements FromCollection, WithHeadings, WithMapping
 {
-    /** @var array<int, array{rating: \App\Enums\PerformanceRating, average: float, ratings_count: int}> */
+    use EscapesFormulas;
+
+    /** @var array<int, array{rating: PerformanceRating, average: float, ratings_count: int}> */
     private array $computedRatings = [];
 
     public function __construct(
@@ -67,7 +71,7 @@ class ServiceRecordsExport implements FromCollection, WithHeadings, WithMapping
     {
         $rating = ($this->computedRatings[$assignment->id]['rating'] ?? null) ?? $assignment->performance_rating;
 
-        return [
+        return $this->safeRow([
             $assignment->member?->proctad_id,
             $assignment->member?->name,
             $assignment->fieldOffice?->name,
@@ -77,6 +81,6 @@ class ServiceRecordsExport implements FromCollection, WithHeadings, WithMapping
             $assignment->attendanceOutcome(),
             $assignment->serviceNote(),
             $rating?->label(),
-        ];
+        ]);
     }
 }

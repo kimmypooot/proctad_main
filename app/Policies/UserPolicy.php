@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\User;
 
 class UserPolicy
@@ -24,6 +24,6 @@ class UserPolicy
 
     private function manage(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin);
+        return $user->hasPermission(Permission::UsersManage);
     }
 }

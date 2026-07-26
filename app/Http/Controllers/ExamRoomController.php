@@ -9,6 +9,7 @@ use App\Models\ExaminationSchool;
 use App\Models\ExamRoom;
 use App\Models\User;
 use App\Services\RoomStaffingCalculator;
+use App\Support\DesignationRegistry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -75,6 +76,11 @@ class ExamRoomController extends Controller
                 'municipality' => $venue->school?->testingCenter?->name,
                 'contact_person' => $venue->school?->contact_person,
                 'contact_number' => $venue->school?->contact_number,
+                // Drives both the anchor-row maths on this page and the default
+                // in the randomize dialog, so the two cannot disagree.
+                'rooms_per_supervisor' => $venue->roomsPerSupervisor(),
+                'min_rooms_per_supervisor' => ExaminationSchool::MIN_ROOMS_PER_SUPERVISOR,
+                'max_rooms_per_supervisor' => ExaminationSchool::MAX_ROOMS_PER_SUPERVISOR,
             ],
             'rooms' => fn () => $rooms->map(fn (ExamRoom $room) => [
                 'id' => $room->id,
@@ -84,8 +90,11 @@ class ExamRoomController extends Controller
                 'created_at' => $room->created_at->format('M d, Y'),
             ])->values(),
             'assignments' => $assignments,
-            'roomBreakdown' => $this->roomStaffing->breakdown($rooms, $assignments),
-            'stats' => $this->roomStaffing->stats($rooms, $assignments),
+            'roomBreakdown' => $this->roomStaffing->breakdown($rooms, $assignments, $venue->roomsPerSupervisor()),
+            'stats' => $this->roomStaffing->stats($rooms, $assignments, $venue->roomsPerSupervisor()),
+            // The grid's columns, so a designation given a room slot at
+            // Administration → Designations shows up here without a code change.
+            'roomRoleFields' => DesignationRegistry::roomDesignations(),
             'designations' => fn () => self::DESIGNATIONS,
         ]);
     }

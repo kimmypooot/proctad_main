@@ -106,7 +106,7 @@ class ScannerCoverTest extends TestCase
 
         $alternate->refresh();
 
-        $this->assertSame(ExamRole::Proctor, $alternate->role);
+        $this->assertTrue($alternate->role->is(ExamRole::Proctor));
         $this->assertSame($seat->id, $alternate->covering_for_assignment_id);
         $this->assertNotNull($alternate->attendance_confirmed_at);
     }

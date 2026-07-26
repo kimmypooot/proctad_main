@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Exports\Concerns\EscapesFormulas;
 use App\Models\TrainingAssignment;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -10,6 +11,8 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 
 class TrainingAttendanceExport implements FromCollection, WithHeadings, WithMapping
 {
+    use EscapesFormulas;
+
     public function __construct(
         private readonly ?int $fieldOfficeId = null,
         private readonly ?int $year = null,
@@ -35,13 +38,13 @@ class TrainingAttendanceExport implements FromCollection, WithHeadings, WithMapp
 
     public function map($assignment): array
     {
-        return [
+        return $this->safeRow([
             $assignment->member?->proctad_id,
             $assignment->member?->name,
             $assignment->fieldOffice?->name,
             $assignment->training?->title,
             $assignment->training?->training_date?->format('Y-m-d'),
             $assignment->attendance_confirmed_at ? 'Yes' : 'No',
-        ];
+        ]);
     }
 }

@@ -12,6 +12,7 @@ use App\Http\Controllers\BlacklistController;
 use App\Http\Controllers\CertificateApprovalController;
 use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DesignationController;
 use App\Http\Controllers\DuplicateMembersController;
 use App\Http\Controllers\EmailLogController;
 use App\Http\Controllers\EmailTemplateController;
@@ -23,7 +24,6 @@ use App\Http\Controllers\ExaminationReportController;
 use App\Http\Controllers\ExamRoomController;
 use App\Http\Controllers\ExamTypeController;
 use App\Http\Controllers\ExamVenueController;
-use App\Http\Controllers\FeeScheduleController;
 use App\Http\Controllers\FieldOfficeController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\TestingCenterController;
@@ -37,6 +37,8 @@ use App\Http\Controllers\OepAssignmentController;
 use App\Http\Controllers\OtherExaminationPersonnelController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ScannerController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\ScannerSessionController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\ServiceHistoryController;
@@ -110,9 +112,24 @@ Route::post('/assignments/{assignment}/confirm', [AssignmentConfirmationControll
 // Post-Examination Evaluation: public form, no login — respondent searches for
 // their own assignment; designation/room/hierarchy are derived server-side.
 Route::get('/evaluation', [EvaluationController::class, 'create'])->name('evaluations.create');
-Route::get('/evaluation/search', [EvaluationController::class, 'search'])->name('evaluations.search');
-Route::get('/evaluation/assignments/{assignment}', [EvaluationController::class, 'resolve'])->name('evaluations.resolve');
-Route::post('/evaluation', [EvaluationController::class, 'store'])->name('evaluations.store');
+
+// Throttled for the same reason as /verify above, and it was missed there
+// first time round: assignment ids are sequential, so an unthrottled lookup
+// lets anyone walk the range and harvest every test administrator's name,
+// designation, venue and room — that is, the staffing plan for a live
+// examination. 10/min is far above finding yourself once and far below a sweep.
+Route::middleware('throttle:evaluation-lookup')->group(function () {
+    Route::get('/evaluation/search', [EvaluationController::class, 'search'])->name('evaluations.search');
+    Route::get('/evaluation/assignments/{assignment}', [EvaluationController::class, 'resolve'])->name('evaluations.resolve');
+});
+
+// Submission is bound to an assignment the caller has actually resolved in
+// this session (or owns, when signed in) — see EvaluationController::store.
+// Without that, anyone could post ratings in a stranger's name, and those
+// ratings feed PerformanceRatingCalculator and accreditation.
+Route::post('/evaluation', [EvaluationController::class, 'store'])
+    ->middleware('throttle:10,1')
+    ->name('evaluations.store');
 
 /*
 |--------------------------------------------------------------------------
@@ -259,11 +276,16 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('members.service-history.export');
 
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
-        Route::get('/reports/export/members', [ReportController::class, 'exportMembers'])->name('reports.export.members');
-        Route::get('/reports/export/service-records', [ReportController::class, 'exportServiceRecords'])
-            ->name('reports.export.service-records');
-        Route::get('/reports/export/training-attendance', [ReportController::class, 'exportTrainingAttendance'])
-            ->name('reports.export.training-attendance');
+        // Each export hydrates the full result set into memory inside the
+        // request. A few concurrent calls exhaust the PHP-FPM pool, so they are
+        // capped well above what a person clicks and well below a script.
+        Route::middleware('throttle:exports')->group(function () {
+            Route::get('/reports/export/members', [ReportController::class, 'exportMembers'])->name('reports.export.members');
+            Route::get('/reports/export/service-records', [ReportController::class, 'exportServiceRecords'])
+                ->name('reports.export.service-records');
+            Route::get('/reports/export/training-attendance', [ReportController::class, 'exportTrainingAttendance'])
+                ->name('reports.export.training-attendance');
+        });
 
         Route::get('/evaluation-monitoring', [EvaluationMonitoringController::class, 'index'])->name('evaluation-monitoring.index');
         Route::get('/evaluation-monitoring/{evaluation}', [EvaluationMonitoringController::class, 'show'])->name('evaluation-monitoring.show');
@@ -420,8 +442,6 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::put('/field-offices/{fieldOffice}', [FieldOfficeController::class, 'update'])->name('field-offices.update');
         Route::delete('/field-offices/{fieldOffice}', [FieldOfficeController::class, 'destroy'])->name('field-offices.destroy');
 
-        Route::get('/fee-schedules', [FeeScheduleController::class, 'index'])->name('fee-schedules.index');
-        Route::put('/fee-schedules', [FeeScheduleController::class, 'update'])->name('fee-schedules.update');
 
         Route::get('/email-templates', [EmailTemplateController::class, 'index'])->name('email-templates.index');
         Route::put('/email-templates/{emailTemplate}', [EmailTemplateController::class, 'update'])->name('email-templates.update');
@@ -438,6 +458,25 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::post('/users/{user}/send-password-reset', [UserController::class, 'sendPasswordReset'])
             ->name('users.send-password-reset');
+
+        Route::get('/designations', [DesignationController::class, 'index'])->name('designations.index');
+        Route::post('/designations', [DesignationController::class, 'store'])->name('designations.store');
+        Route::put('/designations/{designation}', [DesignationController::class, 'update'])->name('designations.update');
+        Route::delete('/designations/{designation}', [DesignationController::class, 'destroy'])->name('designations.destroy');
+
+        Route::post('/designation-categories', [DesignationController::class, 'storeCategory'])
+            ->name('designation-categories.store');
+        Route::put('/designation-categories/{category}', [DesignationController::class, 'updateCategory'])
+            ->name('designation-categories.update');
+        Route::delete('/designation-categories/{category}', [DesignationController::class, 'destroyCategory'])
+            ->name('designation-categories.destroy');
+
+        Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
+        Route::put('/roles', [RoleController::class, 'update'])->name('roles.update');
+
+        Route::get('/role-permissions', [RolePermissionController::class, 'index'])->name('role-permissions.index');
+        Route::put('/role-permissions', [RolePermissionController::class, 'update'])->name('role-permissions.update');
+        Route::delete('/role-permissions', [RolePermissionController::class, 'reset'])->name('role-permissions.reset');
     });
 });
 

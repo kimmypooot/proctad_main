@@ -2,28 +2,24 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
+use App\Enums\Permission;
 use App\Models\ExaminationSchool;
 use App\Models\User;
 
-/**
- * Venue/room management follows the same authority as assigning members
- * (legacy: testing-center panel manages both schools-as-venues and rooms).
- */
 class ExaminationSchoolPolicy
 {
     public function create(User $user): bool
     {
-        return $user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin, UserRole::FoAdmin, UserRole::FieldDirector);
+        return $user->hasPermission(Permission::ExaminationSchoolsManage);
     }
 
     public function delete(User $user, ExaminationSchool $venue): bool
     {
-        if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {
-            return true;
+        if (! $user->hasPermission(Permission::ExaminationSchoolsManage)) {
+            return false;
         }
 
-        return $user->role->isFieldOfficeScoped()
-            && $venue->school?->handledByOffice($user->field_office_id);
+        return $user->role->isRegionWide()
+            || (bool) $venue->school?->handledByOffice($user->field_office_id);
     }
 }

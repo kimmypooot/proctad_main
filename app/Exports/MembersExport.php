@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Exports\Concerns\EscapesFormulas;
 use App\Models\Member;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -10,6 +11,8 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 
 class MembersExport implements FromCollection, WithHeadings, WithMapping
 {
+    use EscapesFormulas;
+
     public function __construct(private readonly ?int $fieldOfficeId = null, private readonly ?string $status = null) {}
 
     public function collection(): Collection
@@ -29,7 +32,7 @@ class MembersExport implements FromCollection, WithHeadings, WithMapping
 
     public function map($member): array
     {
-        return [
+        return $this->safeRow([
             $member->proctad_id,
             $member->name,
             ucfirst($member->sex),
@@ -40,6 +43,6 @@ class MembersExport implements FromCollection, WithHeadings, WithMapping
             $member->fieldOffice?->name,
             $member->status->label(),
             $member->created_at->format('Y-m-d'),
-        ];
+        ]);
     }
 }

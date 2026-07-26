@@ -772,7 +772,7 @@ class ScannerController extends Controller
                     'covered_by' => $a->coveredBy?->member?->name,
                 ]),
             'alternates' => $assignments
-                ->filter(fn (ExamAssignment $a) => $a->role === ExamRole::AlternateExaminer
+                ->filter(fn (ExamAssignment $a) => $a->role->is(ExamRole::AlternateExaminer)
                     && ! $a->isSubstitute()
                     && ! $a->isAbsent())
                 ->values()

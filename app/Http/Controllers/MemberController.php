@@ -32,6 +32,17 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MemberController extends Controller
 {
+    /**
+     * Headers for member-uploaded files served back inline. `sandbox` with no
+     * allowances means that even if a file were treated as a document, it gets
+     * a null origin and no script — so it cannot reach the session that
+     * requested it.
+     */
+    public const FILE_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+    ];
+
     public function index(Request $request): Response
     {
         Gate::authorize('viewAny', Member::class);
@@ -297,7 +308,13 @@ class MemberController extends Controller
 
         abort_unless($member->photo_path && Storage::disk('local')->exists($member->photo_path), 404);
 
-        return Storage::disk('local')->response($member->photo_path);
+        // Served inline from the application's own origin, so an upload that is
+        // a valid image *and* parses as HTML would run as this site if the
+        // browser sniffed it. Laravel's `image` rule already excludes SVG;
+        // these headers close the polyglot case, independently of the global
+        // SecurityHeaders middleware, because a file response is exactly where
+        // an accidental exemption would be most costly.
+        return Storage::disk('local')->response($member->photo_path, headers: self::FILE_HEADERS);
     }
 
     public function downloadIdCard(Member $member, IdCardPdfService $service): HttpResponse

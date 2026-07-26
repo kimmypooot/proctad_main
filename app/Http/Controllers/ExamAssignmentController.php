@@ -799,7 +799,7 @@ class ExamAssignmentController extends Controller
         );
 
         return back()->with('success', $certificate->wasRecentlyCreated
-            ? 'Designation Order queued for Field Director approval.'
+            ? 'Designation Order queued for '.UserRole::FieldDirector->label().' approval.'
             : 'A Designation Order request already exists for this assignment.');
     }
 

@@ -14,14 +14,16 @@ const props = defineProps({
     examination: { type: Object, required: true },
     venues: { type: Array, required: true },
     can: { type: Object, required: true },
+    /** Grid columns, driven by which designations carry a room slot. */
+    roomRoleFields: { type: Array, default: () => [] },
 });
 
-/** A Supervising Examiner covers a group of rooms anchored at the first room of the group (see StaffingRandomizer) — only the anchor row is editable. */
-const ROOM_ROLE_FIELDS = [
-    { key: 'proctor', label: 'Proctor' },
-    { key: 'room_examiner', label: 'Room Examiner' },
-    { key: 'supervising_examiner', label: 'Supervising Examiner' },
-];
+/**
+ * A designation covering several rooms is anchored at the first room of each
+ * group (see StaffingRandomizer) — only that row is editable, which the server
+ * marks per slot.
+ */
+const slotFor = (room, key) => room.slots?.find((slot) => slot.key === key) ?? null;
 
 const venuesWithRooms = computed(() => props.venues.filter((v) => v.rooms.length));
 
@@ -70,7 +72,7 @@ const exportUrl = computed(() => {
 });
 
 /* --- Inline assign / unassign directly from the breakdown table --- */
-const canEditField = (room, fieldKey) => fieldKey !== 'supervising_examiner' || room.is_supervisor_anchor;
+const canEditField = (room, fieldKey) => slotFor(room, fieldKey)?.editable ?? false;
 
 const assignRoomForm = useForm({ exam_room_id: null });
 const savingCell = ref(null);
@@ -84,7 +86,7 @@ const assignToRoom = (room, fieldKey, assignmentId) => {
 };
 
 const clearRoom = (room, fieldKey) => {
-    const assignmentId = room[`${fieldKey}_assignment_id`];
+    const assignmentId = slotFor(room, fieldKey)?.assignment_id;
     if (!assignmentId) return;
     savingCell.value = `${room.id}:${fieldKey}`;
     assignRoomForm
@@ -151,13 +153,13 @@ const clearRoom = (room, fieldKey) => {
                             <tr>
                                 <th class="px-3 py-2">Room</th>
                                 <th class="hidden px-3 py-2 sm:table-cell">Designation</th>
-                                <th v-for="field in ROOM_ROLE_FIELDS" :key="field.key" class="px-3 py-2">
+                                <th v-for="field in roomRoleFields" :key="field.key" class="px-3 py-2">
                                     <span class="inline-flex items-center gap-1">
                                         {{ field.label }}
                                         <Tooltip
-                                            v-if="field.key === 'supervising_examiner'"
+                                            v-if="field.is_anchored"
                                             wrap
-                                            text="A Supervising Examiner oversees a group of up to 5 rooms. Only the group's first ('anchor') room is editable here — the others just display the same name, read-only."
+                                            :text="`One ${field.label} covers a group of up to ${field.rooms_per_slot} rooms. Only the group's first (‘anchor’) room is editable here — the others display the same name, read-only.`"
                                         >
                                             <AppIcon name="information-circle" class="h-3.5 w-3.5 cursor-help text-slate-400 hover:text-slate-600" />
                                         </Tooltip>
@@ -166,7 +168,7 @@ const clearRoom = (room, fieldKey) => {
                                 <th class="px-3 py-2 text-center">
                                     <span class="inline-flex items-center gap-1">
                                         Status
-                                        <Tooltip wrap text="Complete means this room has all three roles filled: Proctor, Room Examiner, and its group's Supervising Examiner.">
+                                        <Tooltip wrap :text="`Complete means this room has every staffing designation filled: ${roomRoleFields.map((f) => f.label).join(', ')}.`">
                                             <AppIcon name="information-circle" class="h-3.5 w-3.5 cursor-help text-slate-400 hover:text-slate-600" />
                                         </Tooltip>
                                     </span>
@@ -183,15 +185,15 @@ const clearRoom = (room, fieldKey) => {
                                 <td class="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{{ room.room_number }}</td>
                                 <td class="hidden px-3 py-2 text-slate-500 sm:table-cell">{{ room.designation ?? '—' }}</td>
 
-                                <td v-for="field in ROOM_ROLE_FIELDS" :key="field.key" class="max-w-[10rem] px-3 py-2">
-                                    <div v-if="room[field.key]" class="flex items-center gap-1.5">
-                                        <span class="truncate text-slate-700" :title="room[field.key]">{{ room[field.key] }}</span>
+                                <td v-for="field in roomRoleFields" :key="field.key" class="max-w-[10rem] px-3 py-2">
+                                    <div v-if="slotFor(room, field.key)?.member_name" class="flex items-center gap-1.5">
+                                        <span class="truncate text-slate-700" :title="slotFor(room, field.key)?.member_name">{{ slotFor(room, field.key)?.member_name }}</span>
                                         <button
                                             v-if="can.assign && canEditField(room, field.key)"
                                             type="button"
                                             class="-my-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-accent-50 hover:text-accent-600 disabled:pointer-events-none disabled:opacity-40"
                                             :disabled="savingCell === `${room.id}:${field.key}`"
-                                            :aria-label="`Unassign ${room[field.key]} as ${field.label}`"
+                                            :aria-label="`Unassign ${slotFor(room, field.key)?.member_name} as ${field.label}`"
                                             @click="clearRoom(room, field.key)"
                                         >
                                             <AppIcon name="x-mark" class="h-3.5 w-3.5" />

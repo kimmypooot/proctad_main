@@ -54,6 +54,19 @@ class EvaluationTest extends TestCase
         return [$make(ExamRole::SupervisingExaminer), $make(ExamRole::RoomExaminer)];
     }
 
+    /**
+     * Open the form for an assignment, the way the page does before it submits.
+     *
+     * store() now requires this: submission is bound to an assignment the
+     * caller has actually looked up in this session (or owns, when signed in),
+     * because previously any existing assignment id was accepted and an
+     * evaluation could be filed in a stranger's name.
+     */
+    private function resolve(ExamAssignment $assignment): void
+    {
+        $this->getJson("/evaluation/assignments/{$assignment->id}")->assertOk();
+    }
+
     /** Sizes come from the criteria constants so the payload cannot drift from the rules. */
     private function supervisorPayload(ExamAssignment $supervisor, array $roomRating): array
     {
@@ -163,6 +176,7 @@ class EvaluationTest extends TestCase
     public function test_a_rating_is_stored_against_the_selected_assignment(): void
     {
         [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();
+        $this->resolve($supervisor);
 
         $this->post('/evaluation', $this->supervisorPayload($supervisor, [
             'exam_assignment_id' => $ratee->id,
@@ -182,6 +196,7 @@ class EvaluationTest extends TestCase
     public function test_a_rating_without_an_assignment_id_is_rejected(): void
     {
         [$supervisor] = $this->venueWithSupervisorAndRatee();
+        $this->resolve($supervisor);
 
         $this->post('/evaluation', $this->supervisorPayload($supervisor, [
             'exam_assignment_id' => null,
@@ -197,6 +212,7 @@ class EvaluationTest extends TestCase
     {
         [$supervisor] = $this->venueWithSupervisorAndRatee();
         [, $elsewhere] = $this->venueWithSupervisorAndRatee();
+        $this->resolve($supervisor);
 
         $this->post('/evaluation', $this->supervisorPayload($supervisor, [
             'exam_assignment_id' => $elsewhere->id,
@@ -205,6 +221,115 @@ class EvaluationTest extends TestCase
         ]))->assertSessionHasErrors('room_ratings.0.exam_assignment_id');
 
         $this->assertSame(0, \App\Models\Evaluation::count());
+    }
+
+    /**
+     * The form is public, but submitting is not open season. Assignment ids are
+     * sequential, so accepting any id meant anyone could file ratings in a
+     * stranger's name — and those ratings are stored under that name and feed
+     * PerformanceRatingCalculator, which feeds accreditation.
+     */
+    public function test_a_submission_for_an_assignment_never_looked_up_is_refused(): void
+    {
+        [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();
+
+        // No resolve() call: this is a bare POST at a guessed id.
+        $this->post('/evaluation', $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => $ratee->id,
+            'room_no' => '001',
+            'ratee_name' => $ratee->member->name,
+        ]))->assertForbidden();
+
+        $this->assertSame(0, \App\Models\Evaluation::count());
+    }
+
+    /** A signed-in member submits for themselves and nobody else. */
+    public function test_a_member_cannot_submit_for_someone_elses_assignment(): void
+    {
+        [$supervisor] = $this->venueWithSupervisorAndRatee();
+
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $user->id]);
+
+        // Even having looked it up, it is not theirs to answer for.
+        $this->actingAs($user);
+        $this->resolve($supervisor);
+
+        $this->post('/evaluation', $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => $supervisor->id,
+            'room_no' => '001',
+            'ratee_name' => 'Anyone',
+        ]))->assertForbidden();
+
+        $this->assertSame(0, \App\Models\Evaluation::count());
+    }
+
+    /** One respondent, one evaluation — enforced in the app and by a unique index. */
+    public function test_an_assignment_cannot_be_evaluated_twice(): void
+    {
+        [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();
+        $this->resolve($supervisor);
+
+        $payload = $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => $ratee->id,
+            'room_no' => '001',
+            'ratee_name' => $ratee->member->name,
+        ]);
+
+        $this->post('/evaluation', $payload)->assertRedirect();
+        $this->post('/evaluation', $payload)->assertStatus(409);
+
+        $this->assertSame(1, \App\Models\Evaluation::count());
+    }
+
+    /**
+     * resolve() has always required confirmed attendance and store() never did,
+     * so a submission could be filed against an assignment the form itself
+     * would refuse to open.
+     */
+    public function test_a_submission_without_confirmed_attendance_is_refused(): void
+    {
+        [$supervisor, $ratee] = $this->venueWithSupervisorAndRatee();
+        $this->resolve($supervisor);
+
+        $supervisor->forceFill(['attendance_confirmed_at' => null])->save();
+
+        $this->post('/evaluation', $this->supervisorPayload($supervisor, [
+            'exam_assignment_id' => $ratee->id,
+            'room_no' => '001',
+            'ratee_name' => $ratee->member->name,
+        ]))->assertStatus(422);
+
+        $this->assertSame(0, \App\Models\Evaluation::count());
+    }
+
+    /**
+     * A single letter used to return ten real people. The search is for
+     * confirming an identity you already hold, not discovering ones you don't.
+     *
+     * Asserted as a redirect-with-errors rather than a 422 because
+     * bootstrap/app.php scopes shouldRenderJsonWhen() to api/*, so a failed
+     * validation on this JSON endpoint redirects like a form post would.
+     */
+    public function test_the_search_refuses_a_term_short_enough_to_enumerate(): void
+    {
+        $examination = Examination::factory()->create();
+
+        $this->get("/evaluation/search?examination_id={$examination->id}&q=a")
+            ->assertSessionHasErrors('q');
+    }
+
+    /** A term long enough to be a real name still works. */
+    public function test_the_search_returns_a_match_on_a_full_term(): void
+    {
+        [$supervisor] = $this->venueWithSupervisorAndRatee();
+        $lastName = $supervisor->member->last_name;
+
+        $this->getJson(
+            "/evaluation/search?examination_id={$supervisor->examination_id}&q=".urlencode($lastName),
+        )
+            ->assertOk()
+            ->assertJsonPath('results.0.proctad_id', $supervisor->member->proctad_id);
     }
 
     public function test_guests_still_get_the_public_form_with_no_shortcut(): void

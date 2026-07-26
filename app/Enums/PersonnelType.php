@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Support\DesignationRegistry;
+
 enum PersonnelType: string
 {
     case Coordinator = 'coordinator';
@@ -13,7 +15,14 @@ enum PersonnelType: string
     case Helper = 'helper';
     case Driver = 'driver';
 
+    /** Renameable at Administration → Designations; see DesignationRegistry. */
     public function label(): string
+    {
+        return DesignationRegistry::label(PayeeType::PersonnelType, $this->value);
+    }
+
+    /** The built-in name, used when the designation has not been renamed. */
+    public function defaultLabel(): string
     {
         return match ($this) {
             self::Coordinator => 'Coordinator',

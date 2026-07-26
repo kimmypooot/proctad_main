@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\AsDesignation;
 use App\Enums\AssignmentStatus;
 use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
@@ -34,14 +35,14 @@ class ExamAssignment extends Model
     protected function casts(): array
     {
         return [
-            'role' => ExamRole::class,
+            'role' => AsDesignation::class,
             'status' => AssignmentStatus::class,
             'performance_rating' => PerformanceRating::class,
             'confirmation_sent_at' => 'datetime',
             'responded_at' => 'datetime',
             'attendance_confirmed_at' => 'datetime',
             'marked_absent_at' => 'datetime',
-            'original_role' => ExamRole::class,
+            'original_role' => AsDesignation::class,
         ];
     }
 

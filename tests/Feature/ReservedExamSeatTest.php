@@ -151,7 +151,7 @@ class ReservedExamSeatTest extends TestCase
             ])
             ->assertSessionHasErrors('role');
 
-        $this->assertSame(ExamRole::Proctor, $assignment->fresh()->role);
+        $this->assertTrue($assignment->fresh()->role->is(ExamRole::Proctor));
     }
 
     public function test_a_bulk_assignment_cannot_fill_a_reserved_seat(): void

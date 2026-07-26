@@ -8,6 +8,7 @@ use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\Member;
 use App\Services\SupervisionHierarchyResolver;
+use App\Support\DesignationValue;
 use App\Support\EvaluationCriteria;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -143,7 +144,10 @@ class EvaluationController extends Controller
     {
         $validated = $request->validate([
             'examination_id' => ['required', 'integer', 'exists:examinations,id'],
-            'q' => ['required', 'string', 'min:1', 'max:100'],
+            // Four characters, not one. A single letter returned ten real
+            // people per request, which made this endpoint a directory of the
+            // examination's staff rather than a way to find yourself in it.
+            'q' => ['required', 'string', 'min:4', 'max:100'],
         ]);
 
         $term = $validated['q'];
@@ -153,9 +157,14 @@ class EvaluationController extends Controller
             ->whereIn('role', array_column(self::DESIGNATIONS, 'value'))
             ->whereNotNull('attendance_confirmed_at')
             ->whereHas('member', function ($query) use ($term) {
-                $query->where('first_name', 'like', "%{$term}%")
-                    ->orWhere('last_name', 'like', "%{$term}%")
-                    ->orWhere('proctad_id', 'like', "%{$term}%");
+                // Anchored, not "contains": a respondent knows their own name
+                // and PROCTAD ID and types them from the start. A leading
+                // wildcard turns any common substring into a bulk query, which
+                // is the difference between confirming an identity you hold and
+                // discovering identities you don't.
+                $query->where('proctad_id', $term)
+                    ->orWhere('first_name', 'like', "{$term}%")
+                    ->orWhere('last_name', 'like', "{$term}%");
             })
             ->with(['member', 'room', 'examinationSchool.school'])
             ->limit(10)
@@ -179,16 +188,18 @@ class EvaluationController extends Controller
      * Examiner — the Room Examiners/Proctors positionally inferred as theirs
      * (see SupervisionHierarchyResolver for the caveats on that inference).
      */
-    public function resolve(ExamAssignment $assignment, SupervisionHierarchyResolver $resolver): JsonResponse
+    public function resolve(Request $request, ExamAssignment $assignment, SupervisionHierarchyResolver $resolver): JsonResponse
     {
         abort_unless(
-            in_array($assignment->role, self::DESIGNATIONS, true) && $assignment->attendance_confirmed_at !== null,
+            $assignment->role->isAnyOf(self::DESIGNATIONS) && $assignment->attendance_confirmed_at !== null,
             404,
         );
 
+        $this->rememberResolved($request, $assignment);
+
         $assignment->loadMissing('member', 'room', 'examinationSchool.school', 'fieldOffice');
 
-        $subordinates = $assignment->role === ExamRole::SupervisingExaminer
+        $subordinates = $assignment->role->is(ExamRole::SupervisingExaminer)
             ? $resolver->subordinatesFor($assignment)
             : collect();
 
@@ -234,7 +245,32 @@ class EvaluationController extends Controller
         $assignment = ExamAssignment::with('member', 'examinationSchool')
             ->findOrFail($validated['exam_assignment_id']);
 
-        abort_unless(in_array($assignment->role, self::DESIGNATIONS, true), 422, 'This assignment is not eligible for evaluation.');
+        abort_unless($assignment->role->isAnyOf(self::DESIGNATIONS), 422, 'This assignment is not eligible for evaluation.');
+
+        // The submission has to belong to the person making it. Previously any
+        // existing assignment id was accepted, so an evaluation could be filed
+        // in a stranger's name — and it is stored under their name (see
+        // respondent_name below) and consumed by PerformanceRatingCalculator,
+        // which feeds service history and accreditation.
+        $this->authorizeRespondent($request, $assignment);
+
+        // resolve() has always required this and store() never did, so a
+        // submission could be filed against an assignment the form itself
+        // would refuse to open.
+        abort_unless(
+            $assignment->attendance_confirmed_at !== null,
+            422,
+            'Attendance for this assignment has not been confirmed yet.',
+        );
+
+        // One respondent, one evaluation. The database carries a unique index
+        // as well; this is here to answer with something a person can read
+        // rather than an integrity-constraint failure.
+        abort_if(
+            Evaluation::where('exam_assignment_id', $assignment->id)->exists(),
+            409,
+            'An evaluation has already been submitted for this assignment.',
+        );
 
         $designation = $assignment->role->value;
 
@@ -287,6 +323,64 @@ class EvaluationController extends Controller
         return back()->with('success', 'Thank you — your evaluation has been submitted.');
     }
 
+    /** Session key holding the assignments this visitor has opened the form for. */
+    private const RESOLVED_SESSION_KEY = 'evaluation_resolved';
+
+    /** How many assignments one session may hold open at once. */
+    private const RESOLVED_LIMIT = 10;
+
+    /**
+     * Records that this session opened the evaluation form for an assignment.
+     *
+     * This is what store() checks for anonymous respondents. It is not proof of
+     * identity — anyone who can reach resolve() can reach store() — but it does
+     * mean a submission has to be preceded by the same lookup the UI performs,
+     * which bounds forgery to the throttled lookup rate instead of leaving it
+     * free. The real fix is an emailed signed link per assignment, the way
+     * AssignmentConfirmationSender already works; this is the step that does
+     * not require the evaluation form to change how respondents reach it.
+     */
+    private function rememberResolved(Request $request, ExamAssignment $assignment): void
+    {
+        $resolved = collect($request->session()->get(self::RESOLVED_SESSION_KEY, []))
+            ->push($assignment->id)
+            ->unique()
+            // Oldest first out: a venue's supervising examiner legitimately
+            // opens several, but not an unbounded number, and an unbounded
+            // list would let one session accumulate the whole examination.
+            ->take(-self::RESOLVED_LIMIT)
+            ->values()
+            ->all();
+
+        $request->session()->put(self::RESOLVED_SESSION_KEY, $resolved);
+    }
+
+    /**
+     * A signed-in member may only submit for their own assignment; everyone
+     * else must have opened the form for it in this session.
+     *
+     * Mirrors MyProctadController::respondToAssignment, which applies the same
+     * own-record rule to the other public-by-signed-link workflow.
+     */
+    private function authorizeRespondent(Request $request, ExamAssignment $assignment): void
+    {
+        if ($member = $request->user()?->member) {
+            abort_unless($assignment->member_id === $member->id, 403);
+
+            return;
+        }
+
+        abort_unless(
+            in_array(
+                $assignment->id,
+                $request->session()->get(self::RESOLVED_SESSION_KEY, []),
+                true,
+            ),
+            403,
+            'Please look up your assignment again before submitting this evaluation.',
+        );
+    }
+
     /**
      * Room Examiners and Proctors assigned to the same venue — the people a
      * respondent may rate.
@@ -333,9 +427,17 @@ class EvaluationController extends Controller
             ]);
     }
 
-    private function designationLabel(ExamRole $role): string
+    /**
+     * Accepts either a built-in case or a stored designation, since assignments
+     * now carry a DesignationValue that may not correspond to an ExamRole.
+     */
+    private function designationLabel(ExamRole|DesignationValue $role): string
     {
-        return $role === ExamRole::Proctor ? 'Room Proctor' : $role->label();
+        $isProctor = $role instanceof DesignationValue
+            ? $role->is(ExamRole::Proctor)
+            : $role === ExamRole::Proctor;
+
+        return $isProctor ? 'Room Proctor' : $role->label();
     }
 
     private function examinationAdministrationRules(): array

@@ -89,15 +89,12 @@ const markAllNotificationsRead = () => {
     router.post('/notifications/read-all', {}, { preserveScroll: true, preserveState: true });
 };
 
-const roleLabels = {
-    super_admin: 'Super Administrator',
-    esd_admin: 'Administrator (ESD)',
-    director_iv: 'Regional Director IV',
-    director_iii: 'Assistant Regional Director III',
-    field_director: 'Field Director / Caretaker',
-    fo_admin: 'Field Office Staff',
-    member: 'PROCTAD Member',
-};
+/*
+ * Resolved server-side (HandleInertiaRequests) rather than hardcoded here, so a
+ * role renamed at Administration → Roles shows its new name in the sidebar too.
+ * The fallbacks cover the brief window before the shared prop arrives.
+ */
+const roleLabels = computed(() => page.props.roleLabels ?? {});
 
 const navByRole = {
     member: [
@@ -342,13 +339,14 @@ const navByRole = {
             items: [
                 { label: 'Signatories', icon: 'identification', href: '/signatories' },
                 { label: 'Letterheads', icon: 'document-text', href: '/letterheads' },
-                { label: 'Fee Management', icon: 'scale', href: '/fee-schedules' },
+                { label: 'Designations', icon: 'briefcase', href: '/designations' },
             ],
         },
         {
             section: 'Administration',
             items: [
                 { label: 'User Accounts', icon: 'user-group', href: '/users' },
+                { label: 'Role Permissions', icon: 'lock-closed', href: '/role-permissions' },
                 { label: 'System Settings', icon: 'cog-6-tooth', href: '/settings' },
                 { label: 'Email Templates', icon: 'envelope', href: '/email-templates' },
             ],
@@ -399,7 +397,7 @@ navByRole.super_admin = [
         items: [
             { label: 'Signatories', icon: 'identification', href: '/signatories' },
             { label: 'Letterheads', icon: 'document-text', href: '/letterheads' },
-            { label: 'Fee Management', icon: 'scale', href: '/fee-schedules' },
+            { label: 'Designations', icon: 'briefcase', href: '/designations' },
         ],
     },
     {
@@ -427,6 +425,10 @@ navByRole.super_admin = [
         section: 'Administration',
         items: [
             { label: 'User Accounts', icon: 'user-group', href: '/users' },
+            // Renaming roles is Super Admin only, so it is absent from the ESD
+            // Admin sidebar above.
+            { label: 'Roles', icon: 'identification', href: '/roles' },
+            { label: 'Role Permissions', icon: 'lock-closed', href: '/role-permissions' },
             { label: 'System Settings', icon: 'cog-6-tooth', href: '/settings' },
             { label: 'Email Templates', icon: 'envelope', href: '/email-templates' },
         ],
@@ -460,8 +462,8 @@ const navItems = computed(() => {
 // header must say so — otherwise "Super Administrator" sits above a member-only
 // sidebar and reads as a bug.
 const roleLabel = computed(() => (inMemberWorkspace.value
-    ? roleLabels.member
-    : roleLabels[user.value?.role] ?? 'User'));
+    ? roleLabels.value.member ?? 'PROCTAD Member'
+    : roleLabels.value[user.value?.role] ?? 'User'));
 
 const switchWorkspace = (target) => {
     router.post('/workspace', { workspace: target });
@@ -472,6 +474,12 @@ const loggingOut = ref(false);
 const logout = () => {
     loggingOut.value = true;
     router.post('/logout', {}, {
+        onSuccess: () => {
+            // Exam-day phones are shared, and the service worker on an older
+            // build cached the scanner page HTML — which carries whoever was
+            // last scanned. Signing out is the point at which that has to go.
+            navigator.serviceWorker?.controller?.postMessage('purge-caches');
+        },
         onFinish: () => {
             loggingOut.value = false;
             confirmingLogout.value = false;

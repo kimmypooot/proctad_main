@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Exports\Concerns\EscapesFormulas;
 use App\Models\Examination;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -22,8 +23,10 @@ use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
  * the Assign Rooms step. Formatted for printing (title block, bold header,
  * autofilter, incomplete-row highlight, landscape print setup).
  */
-class RoomAssignmentsExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize, WithEvents
+class RoomAssignmentsExport implements FromCollection, ShouldAutoSize, WithEvents, WithHeadings, WithMapping
 {
+    use EscapesFormulas;
+
     private const LAST_COLUMN = 'H';
 
     public function __construct(
@@ -45,7 +48,7 @@ class RoomAssignmentsExport implements FromCollection, WithHeadings, WithMapping
 
     public function map($row): array
     {
-        return [
+        return $this->safeRow([
             $row['venue_name'],
             $row['room_number'],
             $row['capacity'],
@@ -54,7 +57,7 @@ class RoomAssignmentsExport implements FromCollection, WithHeadings, WithMapping
             $row['room_examiner'] ?: 'Unassigned',
             $row['supervising_examiner'] ?: 'Unassigned',
             $row['complete'] ? 'Complete' : 'Incomplete',
-        ];
+        ]);
     }
 
     public function registerEvents(): array

@@ -9,16 +9,22 @@
  * Deliberately hand-written (no Workbox/build plugin) to keep the dependency
  * surface as lean as the rest of the project. Strategy:
  *   - Hashed build assets, fonts, brand imagery ....... cache-first (immutable)
- *   - Scanner navigations (/scanner, /scan/...) ........ network-first, cached
- *     copy served offline so the shell reboots
+ *   - Scanner navigations (/scanner, /scan/...) ........ network-only, with a
+ *     prop-free offline shell served when the network is gone
  *   - Any other navigation offline ..................... /offline.html fallback
+ *
+ * What is deliberately NOT cached: the HTML of an authenticated scanner page.
+ * It embeds its Inertia props, which after a scan contain the member's name,
+ * PROCTAD ID, agency, membership status and — during an examination — their
+ * whole service history. Caching that put one operator's last scan on a shared
+ * venue phone, readable by the next person to open it offline, with no session
+ * required and nothing clearing it at logout.
  *
  * Bump VERSION on any change here to retire old caches on activate.
  */
-const VERSION = 'proctad-v1';
+const VERSION = 'proctad-v2';
 const SHELL_CACHE = VERSION + '-shell';
 const ASSET_CACHE = VERSION + '-assets';
-const DOC_CACHE = VERSION + '-docs';
 
 /** Precached so the offline experience works on the very first failure. */
 const SHELL_ASSETS = [
@@ -27,12 +33,6 @@ const SHELL_ASSETS = [
     '/images/brand/proctad-logo.png',
 ];
 
-/**
- * Only these navigations have their HTML cached for an offline reboot. Scoped
- * to the exam-day surfaces on purpose — we don't want to warehouse every
- * authenticated admin page (each embeds its own props) in the cache.
- */
-const OFFLINE_DOC_PATHS = [/^\/scanner(\/|$)/, /^\/scan\//];
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
@@ -52,9 +52,22 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-/** Let the page trigger an immediate activation after an update. */
 self.addEventListener('message', (event) => {
+    /** Let the page trigger an immediate activation after an update. */
     if (event.data === 'skip-waiting') self.skipWaiting();
+
+    /**
+     * Sent on logout. Nothing sensitive is cached any more, but a phone that
+     * was running the previous service worker still holds its DOC_CACHE, and
+     * the operator signing out is the moment to be rid of it.
+     */
+    if (event.data === 'purge-caches') {
+        event.waitUntil(
+            caches.keys().then((keys) => Promise.all(
+                keys.filter((key) => key.endsWith('-docs')).map((key) => caches.delete(key)),
+            )),
+        );
+    }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -95,24 +108,21 @@ async function cacheFirst(request) {
     }
 }
 
+/**
+ * Network-only, with a static fallback. The response is never written to a
+ * cache: on the scanner surfaces it carries whoever was last scanned, and this
+ * runs on shared venue phones.
+ *
+ * The app still boots offline — that was the actual requirement — because the
+ * shell, the hashed JS/CSS bundles and the offline notice are all cached
+ * above. What no longer survives is anybody's personal data.
+ */
 async function handleNavigation(request, url) {
-    const cacheable = OFFLINE_DOC_PATHS.some((pattern) => pattern.test(url.pathname));
-
     try {
-        const response = await fetch(request);
-        if (cacheable && response.ok) {
-            const cache = await caches.open(DOC_CACHE);
-            cache.put(request, response.clone());
-        }
-        return response;
+        return await fetch(request);
     } catch (error) {
-        if (cacheable) {
-            const cache = await caches.open(DOC_CACHE);
-            const cached = await cache.match(request, { ignoreSearch: true });
-            if (cached) return cached;
-        }
-
         const shell = await caches.open(SHELL_CACHE);
+
         return (await shell.match('/offline.html')) || Response.error();
     }
 }
