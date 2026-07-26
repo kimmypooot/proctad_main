@@ -1,10 +1,19 @@
 <script setup>
-import { useId } from 'vue';
+import { computed, useId } from 'vue';
 
 const model = defineModel({ type: Array, required: true });
 
 const props = defineProps({
     title: { type: String, default: null },
+    /**
+     * The form field key (e.g. `ratings`). Each row's radio group becomes
+     * `<name>-<index>`, matching the `ratings.0` shape Laravel returns in its
+     * error bag once dots are normalised — which is how `focusFirstError()`
+     * finds the specific statement that was left blank. Falls back to a
+     * generated id, which still groups the radios correctly but can't be
+     * targeted from outside.
+     */
+    name: { type: String, default: null },
     statements: { type: Array, required: true },
     error: { type: [String, Array], default: null },
     scale: {
@@ -17,7 +26,8 @@ const props = defineProps({
     scaleLabels: { type: Object, default: null },
 });
 
-const name = useId();
+const fallbackName = useId();
+const groupName = computed(() => props.name ?? fallbackName);
 
 const errorFor = (index) => (Array.isArray(props.error) ? props.error[index] : null);
 
@@ -51,7 +61,7 @@ const labelFor = (n) => props.scaleLabels?.[n] ?? `${n}`;
                         </span>
                         <input
                             type="radio"
-                            :name="`${name}-${index}`"
+                            :name="`${groupName}-${index}`"
                             :value="n"
                             :checked="model[index] === n"
                             :aria-label="`${statement} — ${labelFor(n)}`"

@@ -6,6 +6,8 @@ const model = defineModel({ type: [String, Number], default: '' });
 
 const props = defineProps({
     label: { type: String, required: true },
+    /** The form field key — see the note on TextInput's `name`. */
+    name: { type: String, default: null },
     /** Array of strings or { value, label } objects */
     options: { type: Array, default: () => [] },
     error: { type: String, default: null },
@@ -48,6 +50,7 @@ const grouped = computed(() => {
             <select
                 :id="id"
                 v-model="model"
+                :name="name ?? undefined"
                 :required="required"
                 :aria-invalid="!!error || undefined"
                 :aria-describedby="error ? `${id}-error` : undefined"

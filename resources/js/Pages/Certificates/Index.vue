@@ -4,15 +4,16 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import BasePagination from '@/Components/BasePagination.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
 import StepTabs from '@/Components/StepTabs.vue';
-import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextInput from '@/Components/TextInput.vue';
 
 const props = defineProps({
@@ -117,7 +118,7 @@ const submitResign = () => {
         </div>
 
         <!-- Filters -->
-        <div class="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+        <BaseCard padding="sm" class="mt-4 grid gap-4 sm:grid-cols-2">
             <TextInput
                 v-model="search"
                 label="Search"
@@ -131,7 +132,7 @@ const submitResign = () => {
                 :options="[{ value: '', label: 'All types' }, ...types]"
                 @update:model-value="applyFilters"
             />
-        </div>
+        </BaseCard>
         <p class="mt-2 text-sm text-slate-500">{{ certificates.total }} certificate(s) found.</p>
 
         <div v-if="can.bulkResign && selected.length" class="mt-4 flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
@@ -145,10 +146,10 @@ const submitResign = () => {
             right edge on a phone; the cards keep them on screen.
         -->
         <div v-if="certificates.data.length" class="mt-4 space-y-3 md:hidden" :class="{ 'opacity-50': loading }">
-            <div
+            <BaseCard
                 v-for="certificate in certificates.data"
                 :key="`m-${certificate.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
             >
                 <div class="flex items-start gap-3">
                     <input
@@ -156,6 +157,7 @@ const submitResign = () => {
                         v-model="selected"
                         type="checkbox"
                         :value="certificate.id"
+                        :aria-label="`Select ${certificate.type_label} for ${certificate.member.name}`"
                         class="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 accent-brand-600"
                     >
                     <div class="min-w-0 flex-1">
@@ -164,7 +166,12 @@ const submitResign = () => {
                                 <p class="font-mono text-xs font-semibold text-brand-700">{{ certificate.certificate_no ?? '— pending —' }}</p>
                                 <p class="text-xs text-slate-500">{{ certificate.type_label }}</p>
                             </div>
-                            <BaseBadge :variant="certificate.status_variant" class="shrink-0">{{ certificate.status_label }}</BaseBadge>
+                            <div class="flex shrink-0 flex-col items-end gap-1">
+                                <BaseBadge :variant="certificate.status_variant">{{ certificate.status_label }}</BaseBadge>
+                                <BaseBadge v-if="certificate.unsigned" variant="warning" title="Released with no e-signature — re-sign to add one.">
+                                    Unsigned
+                                </BaseBadge>
+                            </div>
                         </div>
 
                         <p class="mt-2 truncate font-medium text-slate-900" :title="certificate.member.name">{{ certificate.member.name }}</p>
@@ -197,18 +204,23 @@ const submitResign = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
-        <div v-if="loading || certificates.data.length" class="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <BaseTable
+            v-if="loading || certificates.data.length"
+            class="mt-4 hidden md:block"
+            :loading="loading"
+            :skeleton-columns="can.bulkResign ? 9 : 8"
+        >
+            <template #head>
                     <tr>
                         <th v-if="can.bulkResign" class="w-8 px-3 py-2">
                             <input
                                 type="checkbox"
                                 class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
                                 :checked="releasedIds().length > 0 && selected.length === releasedIds().length"
+                                aria-label="Select all released certificates on this page"
                                 @change="toggleSelectAllReleased($event.target.checked)"
                             >
                         </th>
@@ -221,16 +233,15 @@ const submitResign = () => {
                         <th class="px-3 py-2">Status</th>
                         <th class="w-16 px-3 py-2 text-center">Actions</th>
                     </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <TableSkeleton v-if="loading" :columns="can.bulkResign ? 9 : 8" />
-                    <tr v-for="certificate in loading ? [] : certificates.data" :key="certificate.id" class="transition-colors hover:bg-brand-50/40">
+            </template>
+                    <tr v-for="certificate in certificates.data" :key="certificate.id" class="transition-colors hover:bg-brand-50/40">
                         <td v-if="can.bulkResign" class="px-3 py-2">
                             <input
                                 v-if="certificate.status === 'released'"
                                 v-model="selected"
                                 type="checkbox"
                                 :value="certificate.id"
+                                :aria-label="`Select ${certificate.type_label} for ${certificate.member.name}`"
                                 class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
                             >
                         </td>
@@ -248,6 +259,14 @@ const submitResign = () => {
                         <td class="hidden px-3 py-2 text-slate-500 lg:table-cell">{{ certificate.released_at ?? '—' }}</td>
                         <td class="px-3 py-2">
                             <BaseBadge :variant="certificate.status_variant">{{ certificate.status_label }}</BaseBadge>
+                            <BaseBadge
+                                v-if="certificate.unsigned"
+                                variant="warning"
+                                class="mt-1 block w-fit"
+                                title="Released with no e-signature — re-sign to add one."
+                            >
+                                Unsigned
+                            </BaseBadge>
                             <p
                                 v-if="certificate.disapproval_remarks"
                                 class="mt-1 max-w-[12rem] truncate text-xs text-accent-600"
@@ -277,9 +296,7 @@ const submitResign = () => {
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-4">
             <EmptyState

@@ -4,6 +4,7 @@ import { Head } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import StepTabs from '@/Components/StepTabs.vue';
 import AssignMemberForm from './Partials/AssignMemberForm.vue';
@@ -128,9 +129,9 @@ const jumpTo = (key) => (currentStep.value = key);
             </template>
         </DashboardPageHeader>
 
-        <div class="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:px-5">
+        <BaseCard padding="none" class="mt-6 px-4 py-3 sm:px-5">
             <StepTabs v-model="currentStep" :steps="steps" aria-label="Examination workflow steps" />
-        </div>
+        </BaseCard>
 
         <VenuesRoomsPanel
             v-if="currentStep === 'venues' && can.manageVenues"

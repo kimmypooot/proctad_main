@@ -3,6 +3,14 @@ import { Head, useForm } from '@inertiajs/vue3';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
 import TextInput from '@/Components/TextInput.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import FormErrorSummary from '@/Components/FormErrorSummary.vue';
+import { useFormErrors } from '@/Composables/useFormErrors';
+
+/** Keys whose humanised form would not match the label on the control. */
+const errorLabels = {
+    password: 'New Password',
+    password_confirmation: 'Confirm New Password',
+};
 
 const props = defineProps({
     token: { type: String, required: true },
@@ -15,6 +23,8 @@ const form = useForm({
     password: '',
     password_confirmation: '',
 });
+
+useFormErrors(form);
 
 const submit = () => {
     form.post('/reset-password', {
@@ -31,8 +41,9 @@ const submit = () => {
         <Head title="Reset Password" />
 
         <form class="space-y-5" novalidate @submit.prevent="submit">
+            <FormErrorSummary :errors="form.errors" :labels="errorLabels" />
             <TextInput
-                v-model="form.email"
+                v-model="form.email" name="email"
                 label="Email Address"
                 type="email"
                 required
@@ -42,7 +53,7 @@ const submit = () => {
             />
 
             <TextInput
-                v-model="form.password"
+                v-model="form.password" name="password"
                 label="New Password"
                 type="password"
                 required
@@ -52,7 +63,7 @@ const submit = () => {
             />
 
             <TextInput
-                v-model="form.password_confirmation"
+                v-model="form.password_confirmation" name="password_confirmation"
                 label="Confirm New Password"
                 type="password"
                 required

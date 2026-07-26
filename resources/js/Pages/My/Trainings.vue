@@ -5,7 +5,9 @@ import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
@@ -80,7 +82,7 @@ const closeViewer = () => (viewing.value = null);
             </div>
 
             <!-- Filters -->
-            <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+            <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-3">
                 <TextInput
                     v-model="search"
                     label="Search"
@@ -99,27 +101,24 @@ const closeViewer = () => (viewing.value = null);
                     placeholder="All statuses"
                     :options="[{ value: '', label: 'All statuses' }, { value: 'completed', label: 'Completed' }, { value: 'scheduled', label: 'Scheduled' }]"
                 />
-            </div>
+            </BaseCard>
             <div v-if="hasActiveFilters" class="mt-2 flex items-center justify-between text-sm text-slate-500">
                 <span>{{ filteredRecords.length }} of {{ records.length }} training(s)</span>
-                <button type="button" class="font-medium text-brand-700 hover:text-brand-800 hover:underline" @click="resetFilters">
-                    Clear filters
-                </button>
+                <BaseButton variant="link" size="sm" @click="resetFilters">Clear filters</BaseButton>
             </div>
 
-            <div v-if="filteredRecords.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <tr>
-                            <th class="px-3 py-2">Training</th>
-                            <th class="hidden px-3 py-2 sm:table-cell">Type</th>
-                            <th class="px-3 py-2">Date</th>
-                            <th class="hidden px-3 py-2 sm:table-cell">Attendance</th>
-                            <th class="px-3 py-2">Status</th>
-                            <th class="w-10 px-3 py-2 text-center">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
+            <BaseTable
+                v-if="filteredRecords.length"
+                class="mt-6"
+                :columns="[
+                    { label: 'Training' },
+                    { label: 'Type', class: 'hidden sm:table-cell' },
+                    { label: 'Date' },
+                    { label: 'Attendance', class: 'hidden sm:table-cell' },
+                    { label: 'Status' },
+                    { label: 'Actions', class: 'w-10', align: 'center' },
+                ]"
+            >
                         <tr v-for="record in filteredRecords" :key="record.id" class="transition-colors hover:bg-brand-50/40">
                             <td class="px-3 py-2 font-medium text-slate-900">
                                 {{ record.title }}
@@ -142,9 +141,7 @@ const closeViewer = () => (viewing.value = null);
                                 <IconButton icon="eye" label="View details" @click="viewRecord(record)" />
                             </td>
                         </tr>
-                    </tbody>
-                </table>
-            </div>
+            </BaseTable>
             <div v-else class="mt-6">
                 <EmptyState
                     icon="academic-cap"

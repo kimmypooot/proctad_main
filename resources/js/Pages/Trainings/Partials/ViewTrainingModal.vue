@@ -4,7 +4,9 @@ import { router, useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
@@ -98,7 +100,7 @@ watch(() => props.show, (open) => {
 
 <template>
     <BaseModal :show="show" title="Training Details" max-width="4xl" @close="emit('close')">
-        <div v-if="loading" class="max-h-[75vh] space-y-6 overflow-y-auto -mx-6 -mt-5 px-6 pt-5 animate-pulse">
+        <div v-if="loading" class="space-y-6 animate-pulse">
             <div class="flex items-start justify-between gap-4">
                 <div class="space-y-2">
                     <div class="h-3 w-24 rounded bg-slate-200" />
@@ -111,7 +113,7 @@ watch(() => props.show, (open) => {
                 <div class="h-8 w-28 rounded-lg bg-slate-200" />
             </div>
 
-            <div class="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+            <BaseCard padding="none" class="p-5 space-y-4">
                 <div class="flex items-center gap-3">
                     <div class="h-4 w-4 rounded bg-slate-200" />
                     <div class="h-5 w-44 rounded bg-slate-200" />
@@ -121,9 +123,9 @@ watch(() => props.show, (open) => {
                     <div class="h-8 rounded-lg bg-slate-200" />
                     <div class="h-8 w-16 rounded-lg bg-slate-200" />
                 </div>
-            </div>
+            </BaseCard>
 
-            <div class="rounded-xl border border-slate-200 bg-white">
+            <BaseCard padding="none">
                 <div class="px-5 py-3 border-b border-slate-100">
                     <div class="h-5 w-28 rounded bg-slate-200" />
                 </div>
@@ -135,11 +137,11 @@ watch(() => props.show, (open) => {
                         <div class="h-4 w-16 rounded bg-slate-200" />
                     </div>
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
         <template v-else-if="raw">
-            <div class="max-h-[75vh] space-y-6 overflow-y-auto -mx-6 -mt-5 px-6 pt-5">
+            <div class="space-y-6">
                 <!-- Header -->
                 <div class="flex items-start justify-between gap-4">
                     <div>
@@ -180,7 +182,7 @@ watch(() => props.show, (open) => {
                 </div>
 
                 <!-- Add participant -->
-                <div v-if="can().assign" class="rounded-xl border border-slate-200 bg-white p-5">
+                <BaseCard v-if="can().assign" padding="none" class="p-5">
                     <h4 class="text-base font-semibold text-slate-900">Add a Participant</h4>
                     <form class="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end" @submit.prevent="assign">
                         <TextInput
@@ -206,7 +208,7 @@ watch(() => props.show, (open) => {
                             Add
                         </BaseButton>
                     </form>
-                </div>
+                </BaseCard>
 
                 <!-- Participants -->
                 <div>
@@ -214,17 +216,16 @@ watch(() => props.show, (open) => {
                         Participants
                         <span v-if="assignments().length" class="ml-1 text-sm font-normal text-slate-400">({{ assignments().length }})</span>
                     </h4>
-                    <div v-if="assignments().length" class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                        <table class="min-w-full divide-y divide-slate-200 text-sm">
-                            <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                <tr>
-                                    <th class="px-3 py-2">Member</th>
-                                    <th class="hidden px-3 py-2 sm:table-cell">Field Office</th>
-                                    <th class="px-3 py-2">Attendance</th>
-                                    <th class="px-3 py-2 text-center">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
+                    <BaseTable
+                        v-if="assignments().length"
+                        class="mt-3"
+                        :columns="[
+                            { label: 'Member' },
+                            { label: 'Field Office', class: 'hidden sm:table-cell' },
+                            { label: 'Attendance' },
+                            { label: 'Actions', align: 'center' },
+                        ]"
+                    >
                                 <tr v-for="assignment in assignments()" :key="assignment.id" class="transition-colors hover:bg-brand-50/40">
                                     <td class="px-3 py-2">
                                         <p class="font-medium text-slate-900">{{ assignment.member.name }}</p>
@@ -247,9 +248,7 @@ watch(() => props.show, (open) => {
                                         </div>
                                     </td>
                                 </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    </BaseTable>
                     <div v-else class="mt-3">
                         <EmptyState
                             icon="users"

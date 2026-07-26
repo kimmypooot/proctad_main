@@ -103,7 +103,7 @@ const confirmDelete = () => useForm({}).delete(`/letterheads/${deleting.value.id
                         <BaseBadge v-if="letterhead.is_active" variant="success">Active</BaseBadge>
                     </div>
                     <p class="mt-0.5 text-xs text-slate-400">Uploaded {{ letterhead.uploaded_at }}</p>
-                    <div class="mt-3 flex gap-1">
+                    <div class="mt-3 flex flex-wrap gap-1">
                         <IconButton v-if="!letterhead.is_active" icon="check-circle" label="Set Active" @click="activate(letterhead)" />
                         <IconButton icon="trash" label="Delete" variant="danger" @click="deleting = letterhead" />
                     </div>

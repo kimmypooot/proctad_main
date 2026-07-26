@@ -68,6 +68,11 @@ class MigrateLegacyData extends Command
 
     private array $oepMap = [];          // legacy nep_id (string) → other_examination_personnel.id
 
+    private ?int $regionalOfficeId = null;
+
+    /** @var array<int, int|null> field office id → the center its personnel are placed in */
+    private array $centerByOffice = [];
+
     public function handle(): int
     {
         $this->legacy = DB::connection('legacy');
@@ -654,6 +659,47 @@ class MigrateLegacyData extends Command
 
     // ─── Other examination personnel ───────────────────────────────────
 
+    /**
+     * The office that stands for "region-wide" (field_offices.is_regional).
+     *
+     * Legacy field offices are all city offices — there is no RO8 row among
+     * them — so an import into a database that was never seeded has none.
+     * Create it on the same terms as FieldOfficeSeeder rather than fail: the
+     * import has to land a valid office on every record.
+     */
+    private function regionalOfficeId(): int
+    {
+        return $this->regionalOfficeId ??= (int) (
+            DB::table('field_offices')->where('is_regional', true)->value('id')
+            ?? DB::table('field_offices')->insertGetId([
+                'name' => 'CSC Regional Office VIII',
+                'code' => 'RO8',
+                'address' => 'Government Center, Candahug, Palo, Leyte',
+                'is_regional' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ])
+        );
+    }
+
+    /**
+     * The testing center an office's personnel are placed in: the one it
+     * administers, else its lowest-id center. Null for the regional office,
+     * whose personnel serve region-wide and sit in no center.
+     */
+    private function centerForOffice(int $officeId): ?int
+    {
+        if ($officeId === $this->regionalOfficeId()) {
+            return null;
+        }
+
+        return $this->centerByOffice[$officeId] ??= DB::table('field_office_testing_center')
+            ->where('field_office_id', $officeId)
+            ->orderByDesc('is_primary')
+            ->orderBy('testing_center_id')
+            ->value('testing_center_id');
+    }
+
     private function importOtherExaminationPersonnel(): void
     {
         $typeMap = [
@@ -668,6 +714,10 @@ class MigrateLegacyData extends Command
         ];
 
         foreach ($this->legacy->table('proctad_non_exam_personnel')->orderBy('nep_id')->get() as $row) {
+            $officeId = ($row->field_office_id !== null
+                ? ($this->foMap[$row->field_office_id] ?? null)
+                : null) ?? $this->regionalOfficeId();
+
             $id = DB::table('other_examination_personnel')->insertGetId([
                 'oep_id' => $row->nep_id,
                 'first_name' => $row->first_name,
@@ -680,9 +730,15 @@ class MigrateLegacyData extends Command
                 'agency' => $row->agency,
                 'position' => $row->position,
                 'personnel_type' => ($typeMap[$row->personnel_type] ?? PersonnelType::Helper)->value,
-                'field_office_id' => $row->field_office_id !== null
-                    ? ($this->foMap[$row->field_office_id] ?? null)
-                    : null,
+                // Legacy documented NULL as "region-wide" but never implemented
+                // it, leaving those rows invisible to every field office. Here
+                // region-wide is the regional office itself, so nulls land
+                // there — same intent, and a jurisdiction the app honors.
+                'field_office_id' => $officeId,
+                // The center is what field office staff are scoped by, so an
+                // imported row without one would be invisible to them. Legacy
+                // had no such column; derive it from the office.
+                'testing_center_id' => $this->centerForOffice($officeId),
                 'is_active' => $row->status === 'active',
                 'created_by' => $this->userMap[$row->created_by] ?? null,
                 'created_at' => $row->created_at,

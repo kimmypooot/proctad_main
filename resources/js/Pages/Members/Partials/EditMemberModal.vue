@@ -3,8 +3,11 @@ import { ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import FormErrorSummary from '@/Components/FormErrorSummary.vue';
 import MemberForm from './MemberForm.vue';
 import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
+import { useFormErrors } from '@/Composables/useFormErrors';
+import { memberFieldLabels } from './memberFieldLabels';
 
 const props = defineProps({
     show: { type: Boolean, required: true },
@@ -17,6 +20,7 @@ const loading = ref(false);
 const loaded = ref(false);
 const loadError = ref(null);
 const fieldOffices = ref([]);
+const testingCenters = ref([]);
 const statuses = ref([]);
 
 const form = useForm({
@@ -31,10 +35,15 @@ const form = useForm({
     agency: '',
     position: '',
     field_office_id: '',
+    testing_center_id: '',
     status: '',
     disqualification_remarks: '',
     photo: null,
 });
+
+// Pull the user to the first rejected field — this form is long enough that a
+// server rejection would otherwise leave them scrolling for red text.
+useFormErrors(form);
 
 watch(() => props.show, (open) => {
     if (open && props.memberId) {
@@ -63,11 +72,13 @@ const fetchEditData = async () => {
         form.agency = json.member.agency ?? '';
         form.position = json.member.position ?? '';
         form.field_office_id = json.member.field_office_id ?? '';
+        form.testing_center_id = json.member.testing_center_id ?? '';
         form.status = json.member.status ?? '';
         form.disqualification_remarks = json.member.disqualification_remarks ?? '';
         form.photo = null;
 
         fieldOffices.value = json.fieldOffices;
+        testingCenters.value = json.testingCenters;
         statuses.value = json.statuses;
         loaded.value = true;
     } catch (e) {
@@ -99,9 +110,19 @@ const submit = () => {
         </div>
 
         <template v-else-if="loaded">
-            <div class="max-h-[70vh] overflow-y-auto -mx-6 -mt-5 px-6 pt-5">
+            <div>
                 <form novalidate @submit.prevent="submit">
-                    <MemberForm :form="form" :field-offices="fieldOffices" :statuses="statuses" />
+                    <FormErrorSummary
+                        :errors="form.errors"
+                        :labels="memberFieldLabels"
+                        class="mb-5"
+                    />
+                    <MemberForm
+                        :form="form"
+                        :field-offices="fieldOffices"
+                        :testing-centers="testingCenters"
+                        :statuses="statuses"
+                    />
 
                     <div class="mt-8 flex justify-end gap-3 pb-1">
                         <BaseButton variant="outline" size="sm" @click="emit('close')">Cancel</BaseButton>

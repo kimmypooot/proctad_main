@@ -13,14 +13,17 @@ class MemberIdCard
      */
     public static function data(Member $member): array
     {
-        $member->loadMissing('fieldOffice:id,name,code', 'user:id,google_avatar');
-        $signatory = Signatory::currentFor($member->field_office_id);
+        $member->loadMissing('fieldOffice:id,name,code', 'testingCenter:id,name', 'user:id,google_avatar');
+        $signatory = Signatory::currentFor($member->administeringFieldOfficeId());
 
         return [
             'proctad_id' => $member->proctad_id,
             'name' => $member->nameFirstLast(),
             'agency' => $member->agency,
             'position' => $member->position,
+            // A test administrator is based at a testing center; the field office
+            // is only meaningful for the members who are CSC staff themselves.
+            'testing_center' => $member->testingCenter?->name,
             'field_office' => $member->fieldOffice?->name,
             'status' => $member->status->value,
             'status_label' => $member->status->label(),

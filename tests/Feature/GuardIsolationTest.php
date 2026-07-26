@@ -45,11 +45,15 @@ class GuardIsolationTest extends TestCase
         }
     }
 
-    public function test_field_office_staff_cannot_access_region_approval_routes(): void
+    public function test_field_office_staff_cannot_access_certificate_approvals(): void
     {
+        // FO Admin and Field Director share the same access; approving
+        // certificates is the one thing reserved for the Field Director.
         $foAdmin = User::factory()->create(['role' => UserRole::FoAdmin]);
 
-        $this->actingAs($foAdmin)->get('/audit-logs')->assertForbidden();
         $this->actingAs($foAdmin)->get('/approvals')->assertForbidden();
+
+        // The Audit Trail is shared, scoped to the staff member's own office.
+        $this->actingAs($foAdmin)->get('/audit-logs')->assertOk();
     }
 }

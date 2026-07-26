@@ -32,8 +32,17 @@ class RegistrationTest extends TestCase
         return $this;
     }
 
+    /**
+     * Registration asks for a testing center, not a field office — the office is
+     * resolved from it server-side. Tests still set up the office (members and
+     * staff hang off it), so this takes the office and uses one of its centers,
+     * creating one when the test did not.
+     */
     private function validPayload(FieldOffice $fieldOffice, array $overrides = []): array
     {
+        $center = $fieldOffice->testingCenters()->first()
+            ?? TestingCenter::factory()->forFieldOffice($fieldOffice)->create();
+
         return array_merge([
             'first_name' => 'Juan',
             'middle_name' => 'Santos',
@@ -44,7 +53,7 @@ class RegistrationTest extends TestCase
             'mobile_number' => '09171234567',
             'agency' => 'DepEd Division Office',
             'position' => 'Teacher III',
-            'field_office_id' => $fieldOffice->id,
+            'testing_center_id' => $center->id,
             'terms' => true,
         ], $overrides);
     }
@@ -66,28 +75,66 @@ class RegistrationTest extends TestCase
         $member = Member::where('user_id', $user->id)->first();
         $this->assertNotNull($member);
         $this->assertNotNull($member->proctad_id);
-        $this->assertSame($fieldOffice->id, $member->field_office_id);
+        $this->assertNull($member->field_office_id);
+        $this->assertSame($fieldOffice->testingCenters()->first()->id, $member->testing_center_id);
         $this->assertSame('male', $member->sex->value ?? $member->sex);
         $this->assertSame('1990-05-15', $member->date_of_birth);
         $this->assertTrue($member->requirements()->exists());
     }
 
-    /** Self-registration (Google sign-up) links the new user to their field office's centers. */
-    public function test_registration_links_the_new_user_to_their_testing_centers(): void
+    /**
+     * A registrant is an external test administrator, not a CSC employee, so
+     * neither their account nor their member record is filed under a field
+     * office — and the account gains no office-derived testing centers with it.
+     * Their own testing center is the only thing placing them.
+     */
+    public function test_registration_files_the_new_account_under_no_field_office(): void
     {
         $fieldOffice = FieldOffice::factory()->create();
-        $centerA = TestingCenter::factory()->forFieldOffice($fieldOffice)->create();
-        $centerB = TestingCenter::factory()->forFieldOffice($fieldOffice)->create();
+        TestingCenter::factory()->forFieldOffice($fieldOffice)->create();
 
         $this->withGooglePending()
             ->post('/register', $this->validPayload($fieldOffice))
             ->assertRedirect(route('dashboard'));
 
         $user = User::where('email', 'juan@example.test')->firstOrFail();
-        $this->assertEqualsCanonicalizing(
-            [$centerA->id, $centerB->id],
-            $user->testingCenters()->pluck('testing_centers.id')->all(),
+
+        $this->assertNull($user->field_office_id);
+        $this->assertSame([], $user->testingCenters()->pluck('testing_centers.id')->all());
+        $this->assertNull($user->member->field_office_id);
+    }
+
+    /**
+     * A center nobody handles still accepts registrations. Nothing is resolved
+     * from the office at sign-up any more, so an unhandled center is a gap in
+     * who administers the members there, not a reason to turn an applicant away.
+     */
+    public function test_registration_is_allowed_at_a_center_with_no_field_office(): void
+    {
+        $orphan = TestingCenter::factory()->create(['name' => 'Unassigned City']);
+        $fieldOffice = FieldOffice::factory()->create();
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice, ['testing_center_id' => $orphan->id]))
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertSame(
+            $orphan->id,
+            Member::where('email', 'juan@example.test')->value('testing_center_id'),
         );
+    }
+
+    /** Inactive centers are not offered, and must not be accepted if submitted. */
+    public function test_registration_rejects_an_inactive_testing_center(): void
+    {
+        $fieldOffice = FieldOffice::factory()->create();
+        $closed = TestingCenter::factory()->forFieldOffice($fieldOffice)->create(['is_active' => false]);
+
+        $this->withGooglePending()
+            ->post('/register', $this->validPayload($fieldOffice, ['testing_center_id' => $closed->id]))
+            ->assertSessionHasErrors('testing_center_id');
+
+        $this->assertGuest();
     }
 
     public function test_registration_requires_connecting_google_first(): void
@@ -110,8 +157,8 @@ class RegistrationTest extends TestCase
                 'sex' => '',
                 'agency' => '',
                 'date_of_birth' => '',
-                'field_office_id' => '',
-            ]))->assertSessionHasErrors(['sex', 'agency', 'date_of_birth', 'field_office_id']);
+                'testing_center_id' => '',
+            ]))->assertSessionHasErrors(['sex', 'agency', 'date_of_birth', 'testing_center_id']);
 
         $this->assertGuest();
         $this->assertSame(0, User::count());

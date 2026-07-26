@@ -10,6 +10,7 @@ use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -24,8 +25,13 @@ class MyProctadTest extends TestCase
     public function test_linked_member_sees_profile_and_id_card(): void
     {
         $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $center = TestingCenter::create(['name' => 'Tacloban City', 'is_active' => true]);
         $user = User::factory()->create(['role' => UserRole::Member]);
-        $member = Member::factory()->create(['field_office_id' => $office->id, 'user_id' => $user->id]);
+        $member = Member::factory()->create([
+            'field_office_id' => $office->id,
+            'testing_center_id' => $center->id,
+            'user_id' => $user->id,
+        ]);
 
         $this->actingAs($user)
             ->get('/my/profile')
@@ -33,6 +39,7 @@ class MyProctadTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('My/Profile')
                 ->where('member.proctad_id', $member->proctad_id)
+                ->where('member.testing_center', 'Tacloban City')
                 ->has('requirements'));
 
         $this->actingAs($user)
@@ -41,6 +48,7 @@ class MyProctadTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('My/QrCode')
                 ->where('idCard.proctad_id', $member->proctad_id)
+                ->where('idCard.testing_center', 'Tacloban City')
                 ->where('idCard.qr_value', route('verify', $member->proctad_id)));
     }
 

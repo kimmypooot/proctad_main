@@ -6,6 +6,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
@@ -216,19 +217,18 @@ const confirmDelete = () => destroyForm.delete(`/settings/${deleting.value.id}`,
             </BaseButton>
         </div>
 
-        <div v-if="settings.length" class="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Key</th>
-                        <th class="px-3 py-2">Value</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Type</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Description</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Visibility</th>
-                        <th class="px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
+        <BaseTable
+            v-if="settings.length"
+            class="mt-3"
+            :columns="[
+                { label: 'Key' },
+                { label: 'Value' },
+                { label: 'Type', class: 'hidden sm:table-cell' },
+                { label: 'Description', class: 'hidden xl:table-cell' },
+                { label: 'Visibility', class: 'hidden md:table-cell' },
+                { label: 'Actions', align: 'center' },
+            ]"
+        >
                     <tr v-for="setting in settings" :key="setting.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="px-3 py-2 font-mono text-xs font-medium text-slate-900">{{ setting.key }}</td>
                         <td class="max-w-[10rem] truncate px-3 py-2 text-slate-600" :title="setting.value || ''">{{ setting.value || '—' }}</td>
@@ -246,9 +246,7 @@ const confirmDelete = () => destroyForm.delete(`/settings/${deleting.value.id}`,
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-3">
             <EmptyState

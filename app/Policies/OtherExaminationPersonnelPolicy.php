@@ -20,7 +20,7 @@ class OtherExaminationPersonnelPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $oep->field_office_id;
+            && $oep->isWithinJurisdictionOf($user);
     }
 
     public function create(User $user): bool
@@ -45,6 +45,6 @@ class OtherExaminationPersonnelPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $user->field_office_id === $oep->field_office_id;
+            && $oep->isWithinJurisdictionOf($user);
     }
 }

@@ -2,6 +2,7 @@
 import AppIcon from './AppIcon.vue';
 import FlipCard from './FlipCard.vue';
 import QrCode from './QrCode.vue';
+import UserAvatar from './UserAvatar.vue';
 
 defineProps({
     /** Payload from App\Support\MemberIdCard::data() */
@@ -31,13 +32,9 @@ defineProps({
                      look blurry/"zoomed in". -->
                 <div class="absolute left-1/2 top-[33%] flex w-[88%] -translate-x-1/2 items-center justify-center gap-1.5">
                     <div class="h-[100px] w-[100px] shrink-0 overflow-hidden rounded-lg border-2 border-slate-200 bg-white">
-                        <img
-                            v-if="card.photo_url"
-                            :src="card.photo_url"
-                            :alt="`Photo of ${card.name}`"
-                            class="h-full w-full object-cover"
-                        >
-                        <AppIcon v-else name="user-circle" class="h-full w-full p-2 text-slate-300" />
+                        <UserAvatar :src="card.photo_url" :name="card.name">
+                            <AppIcon name="user-circle" class="h-full w-full p-2 text-slate-300" />
+                        </UserAvatar>
                     </div>
                     <div class="flex h-[130px] w-[130px] shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 border-slate-200 bg-white p-1">
                         <QrCode :value="card.qr_value" :size="122" />

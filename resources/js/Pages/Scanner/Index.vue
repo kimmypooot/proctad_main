@@ -6,6 +6,7 @@ import ScannerShell from '@/Layouts/ScannerShell.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseModal from '@/Components/BaseModal.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import LoadingSpinner from '@/Components/LoadingSpinner.vue';
 import SelectInput from '@/Components/SelectInput.vue';
@@ -62,12 +63,18 @@ const coveringSeat = ref(null);
 const chosenAlternate = ref('');
 const coverBusy = ref(false);
 
-const markAbsent = (seat) => {
-    if (!window.confirm(`Record that ${seat.name} did not report as ${seat.role_label}? An alternate can then be called in.`)) return;
+// Confirmed via the app's own modal rather than a native window.confirm — declaring
+// someone absent is a consequential, online-only judgement, and the styled dialog
+// keeps it consistent with every other confirm in the app.
+const absentTarget = ref(null);
+const markAbsent = (seat) => (absentTarget.value = seat);
 
+const confirmMarkAbsent = () => {
+    if (!absentTarget.value) return;
     coverBusy.value = true;
-    router.post(coverUrl('mark-absent'), { assignment_id: seat.id }, {
+    router.post(coverUrl('mark-absent'), { assignment_id: absentTarget.value.id }, {
         preserveScroll: true,
+        onSuccess: () => (absentTarget.value = null),
         onFinish: () => (coverBusy.value = false),
     });
 };
@@ -179,7 +186,10 @@ watch([selectedExam, selectedTraining, selectedVenue], () => {
 /** Toast + audio feedback for a scan outcome, driven by the response props. */
 const handleScanOutcome = (resultProps) => {
     if (resultProps.notFound) {
-        pushToast('error', 'No record found for this code.');
+        // Auto-dismiss, unlike errors elsewhere: this station scans one person
+        // after another, and a verdict left on screen belongs to whoever is
+        // standing there now. The ScanResultHero above carries the lasting state.
+        pushToast('error', 'No record found for this code.', { duration: 5000 });
         beep(220, 250);
         return;
     }
@@ -1169,7 +1179,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                     <p class="font-mono text-xs font-semibold text-brand-700">{{ oepResult.oep_id }}</p>
                                     <p class="mt-1 text-lg font-bold text-slate-900">{{ oepResult.name }}</p>
                                     <p class="mt-0.5 text-sm text-slate-600">{{ oepResult.personnel_type_label }}</p>
-                                    <p class="text-sm font-medium text-slate-700">{{ oepResult.field_office ?? 'Region-wide' }}</p>
+                                    <p class="text-sm font-medium text-slate-700">{{ oepResult.testing_center ?? oepResult.field_office ?? '—' }}</p>
                                     <p v-if="oepResult.venue" class="mt-1.5 text-sm text-slate-600">
                                         <AppIcon name="building-office" class="mr-1 inline h-4 w-4 align-text-bottom text-slate-400" />
                                         {{ oepResult.venue }}
@@ -1220,4 +1230,19 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
         :oep-id="oepModalId"
         @close="oepModalId = null"
     />
+
+    <!-- Mark-absent confirmation. Replaces a native window.confirm so the
+         judgement gets the same styled, focus-trapped dialog as the rest of the app. -->
+    <BaseModal :show="!!absentTarget" title="Record as absent" max-width="sm" @close="absentTarget = null">
+        <p class="text-sm leading-relaxed text-slate-600">
+            Record that <strong>{{ absentTarget?.name }}</strong> did not report as
+            <strong>{{ absentTarget?.role_label }}</strong>? An alternate can then be called in.
+        </p>
+        <template #footer>
+            <BaseButton variant="outline" size="sm" @click="absentTarget = null">Cancel</BaseButton>
+            <BaseButton variant="accent" size="sm" :loading="coverBusy" :disabled="coverBusy" @click="confirmMarkAbsent">
+                Mark absent
+            </BaseButton>
+        </template>
+    </BaseModal>
 </template>

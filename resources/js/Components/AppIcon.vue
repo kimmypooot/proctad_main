@@ -8,6 +8,26 @@ import { computed } from 'vue';
 const props = defineProps({
     name: { type: String, required: true },
     class: { type: String, default: 'w-6 h-6' },
+    /** Override the optical stroke weight below. Rarely needed. */
+    strokeWidth: { type: [Number, String], default: null },
+});
+
+/**
+ * Stroke weight has to scale inversely with render size, because the paths are
+ * authored against a fixed 24px viewBox. A flat 1.5 renders as a 1px hairline at
+ * `h-4`, which is why small icons read noticeably lighter than the semibold text
+ * beside them, and as a heavy 2px slab at `h-10`. Derived from the size utility
+ * in `class`; anything unparseable falls back to the 24px default.
+ */
+const strokeWidth = computed(() => {
+    if (props.strokeWidth !== null) return props.strokeWidth;
+
+    const match = /(?:^|\s)(?:h|w|size)-(\d+(?:\.\d+)?)/.exec(props.class);
+    const rem = match ? parseFloat(match[1]) : 6;
+
+    if (rem <= 4) return 1.75; // ≤ 16px
+    if (rem <= 6) return 1.5; // 20–24px
+    return 1.25; // 28px and up
 });
 
 const strokeIcons = {
@@ -99,7 +119,7 @@ const path = computed(() => {
         viewBox="0 0 24 24"
         :fill="isFill ? 'currentColor' : 'none'"
         :stroke="isFill ? 'none' : 'currentColor'"
-        :stroke-width="isFill ? undefined : 1.5"
+        :stroke-width="isFill ? undefined : strokeWidth"
         stroke-linecap="round"
         stroke-linejoin="round"
         aria-hidden="true"

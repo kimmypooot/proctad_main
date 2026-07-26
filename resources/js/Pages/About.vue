@@ -114,7 +114,7 @@ const milestones = [
                             <span class="h-2 w-2 rounded-full bg-brand-600" />
                         </span>
                         <div class="rounded-xl border border-slate-100 bg-white p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-sm sm:p-6">
-                            <p class="text-xs font-bold uppercase tracking-widest text-accent-500">
+                            <p class="text-xs font-bold uppercase tracking-widest text-accent-600">
                                 {{ milestone.year }}
                             </p>
                             <p class="mt-1 text-sm leading-relaxed text-slate-700 sm:text-base">

@@ -5,7 +5,9 @@ import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
@@ -177,7 +179,7 @@ const confirmBulkDisapprove = () => {
             </div>
 
             <!-- Filters -->
-            <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
+            <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <TextInput v-model="search" label="Search" placeholder="Member name or PROCTAD ID" />
                 <SelectInput
                     v-model="typeFilter"
@@ -192,12 +194,10 @@ const confirmBulkDisapprove = () => {
                     placeholder="All field offices"
                     :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: String(fo.id), label: fo.name }))]"
                 />
-            </div>
+            </BaseCard>
             <div v-if="hasActiveFilters" class="mt-2 flex items-center justify-between text-sm text-slate-500">
                 <span>{{ filtered.length }} of {{ pending.length }} request(s)</span>
-                <button type="button" class="font-medium text-brand-700 hover:text-brand-800 hover:underline" @click="resetFilters">
-                    Clear filters
-                </button>
+                <BaseButton variant="link" size="sm" @click="resetFilters">Clear filters</BaseButton>
             </div>
 
             <!-- Bulk action bar -->
@@ -215,15 +215,15 @@ const confirmBulkDisapprove = () => {
             </div>
 
             <!-- Queue table -->
-            <div v-if="filtered.length" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <BaseTable v-if="filtered.length" class="mt-4">
+                <template #head>
                         <tr>
                             <th class="w-8 px-3 py-2">
                                 <input
                                     type="checkbox"
                                     class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
                                     :checked="allFilteredSelected"
+                                    aria-label="Select all certificates awaiting approval"
                                     @change="toggleSelectAllFiltered"
                                 >
                             </th>
@@ -234,14 +234,14 @@ const confirmBulkDisapprove = () => {
                             <th class="px-3 py-2">Waiting</th>
                             <th class="px-3 py-2 text-center">Actions</th>
                         </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
+                </template>
                         <tr v-for="certificate in filtered" :key="certificate.id" class="transition-colors hover:bg-brand-50/40">
                             <td class="px-3 py-2">
                                 <input
                                     type="checkbox"
                                     class="h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600"
                                     :checked="selected.includes(certificate.id)"
+                                    :aria-label="`Select ${certificate.type_label} for ${certificate.member.name}`"
                                     @change="toggleOne(certificate.id)"
                                 >
                             </td>
@@ -285,9 +285,7 @@ const confirmBulkDisapprove = () => {
                                 </div>
                             </td>
                         </tr>
-                    </tbody>
-                </table>
-            </div>
+            </BaseTable>
             <div v-else class="mt-4">
                 <EmptyState
                     icon="clipboard-check"

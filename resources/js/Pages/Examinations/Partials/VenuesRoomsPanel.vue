@@ -4,6 +4,7 @@ import { Link, useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import IconButton from '@/Components/IconButton.vue';
@@ -104,7 +105,7 @@ const groupOepAssignments = (assignments) => {
 
 <template>
     <div class="space-y-6">
-        <div class="rounded-xl border border-slate-200 bg-white p-5">
+        <BaseCard padding="none" class="p-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h2 class="text-base font-semibold text-slate-900">Step 1 · Schools & Rooms</h2>
@@ -117,7 +118,7 @@ const groupOepAssignments = (assignments) => {
                     Add School
                 </BaseButton>
             </div>
-        </div>
+        </BaseCard>
 
         <!-- Stats grid -->
         <div v-if="venues.length" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -129,7 +130,7 @@ const groupOepAssignments = (assignments) => {
 
         <!-- School cards -->
         <div v-if="venues.length" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <div v-for="venue in venues" :key="venue.id" class="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+            <BaseCard v-for="venue in venues" :key="venue.id" padding="none" class="flex flex-col p-5">
                 <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
                         <p class="truncate font-semibold text-slate-900">{{ venue.school_name }}</p>
@@ -184,7 +185,12 @@ const groupOepAssignments = (assignments) => {
                                     <AppIcon v-if="oepAssignment.present" name="check-circle" class="h-3 w-3" />
                                     {{ oepAssignment.name }}
                                 </button>
-                                <button type="button" class="text-accent-500 hover:text-accent-700" @click="removingOep = oepAssignment">
+                                <button
+                                    type="button"
+                                    class="-mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-accent-600 transition-colors hover:bg-accent-50 hover:text-accent-700"
+                                    :aria-label="`Remove ${oepAssignment.name}`"
+                                    @click="removingOep = oepAssignment"
+                                >
                                     <AppIcon name="x-mark" class="h-3 w-3" />
                                 </button>
                             </span>
@@ -203,7 +209,7 @@ const groupOepAssignments = (assignments) => {
                         <AppIcon name="plus" class="h-3.5 w-3.5" /> Add Personnel
                     </BaseButton>
                 </div>
-            </div>
+            </BaseCard>
 
             <!-- Next-step nudge -->
             <div class="flex items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 md:col-span-2 xl:col-span-3">

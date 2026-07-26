@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Enums\EligibilityRequirement;
 use App\Http\Controllers\Controller;
-use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,7 +38,12 @@ class RegisteredUserController extends Controller
                 'last_name' => $googlePending['last_name'],
                 'avatar' => $googlePending['avatar'],
             ] : null,
-            'fieldOffices' => FieldOffice::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
+            // Registrants pick the testing center (a city) they serve, not a
+            // field office. The office is an internal, administrative fact —
+            // Tacloban City is served by Leyte I and Leyte II in turn, so an
+            // applicant has no way to know which of the two to choose. The
+            // server resolves it from the center (see store()).
+            'testingCenters' => TestingCenter::where('is_active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
@@ -66,12 +71,16 @@ class RegisteredUserController extends Controller
             'mobile_number' => ['required', 'string', 'regex:/^(\+639|09)\d{9}$/'],
             'agency' => ['required', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],
-            'field_office_id' => ['required', 'exists:field_offices,id'],
+            'testing_center_id' => [
+                'required',
+                Rule::exists('testing_centers', 'id')->where('is_active', true),
+            ],
             'terms' => ['accepted'],
         ], [
             'mobile_number.regex' => 'Enter a valid Philippine mobile number (e.g. 09171234567).',
             'date_of_birth.before' => 'You must be at least 18 years old to register.',
-            'field_office_id.required' => 'Please select your Field Office.',
+            'testing_center_id.required' => 'Please select your Testing Center.',
+            'testing_center_id.exists' => 'That Testing Center is not accepting registrations.',
             'terms.accepted' => 'You must accept the Terms and Conditions to register.',
         ]);
 
@@ -148,7 +157,9 @@ class RegisteredUserController extends Controller
                 'suffix' => $validated['suffix'] ?? null,
                 'email' => $email,
                 'mobile_number' => $validated['mobile_number'],
-                'field_office_id' => $validated['field_office_id'],
+                // No field office: this account belongs to an external test
+                // administrator, not a CSC employee. The office column says who
+                // someone works for, and they work for their own agency.
                 // Google-registered accounts sign in via Google only — this random
                 // value just satisfies the required, non-nullable column.
                 'password' => Str::random(40),
@@ -171,7 +182,7 @@ class RegisteredUserController extends Controller
                 'mobile_number' => $validated['mobile_number'],
                 'agency' => $validated['agency'],
                 'position' => $validated['position'] ?? null,
-                'field_office_id' => $validated['field_office_id'],
+                'testing_center_id' => $validated['testing_center_id'],
                 'user_id' => $user->id,
             ];
 

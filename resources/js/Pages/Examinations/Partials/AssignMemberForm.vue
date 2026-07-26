@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
 import Tooltip from '@/Components/Tooltip.vue';
@@ -60,18 +61,18 @@ watch(() => props.prefillVenueId, (venueId) => {
 }, { immediate: true });
 
 /*
- * The field office of the venue currently chosen, or null when none is.
+ * The testing center of the venue currently chosen, or null when none is.
  * Members who also hold a field-office-scoped staff post (Field Office Staff,
  * Field Director) serve only where they work, so they drop out of the list
- * until a venue in their own office is picked — the server enforces this in
- * staffJurisdictionRule; hiding them here just avoids offering a choice that
- * would be rejected.
+ * until a venue in one of their own centers is picked — the server enforces
+ * this in staffJurisdictionRule; hiding them here just avoids offering a
+ * choice that would be rejected.
  */
-const selectedVenueOfficeIds = computed(() => props.venues
-    .find((v) => v.id === Number(assignForm.examination_school_id))?.field_office_ids ?? []);
+const selectedVenueCenterId = computed(() => props.venues
+    .find((v) => v.id === Number(assignForm.examination_school_id))?.testing_center_id ?? null);
 
-const isEligible = (member) => member.confined_to_office_id === null
-    || selectedVenueOfficeIds.value.includes(member.confined_to_office_id);
+const isEligible = (member) => member.confined_to_center_ids === null
+    || member.confined_to_center_ids.includes(selectedVenueCenterId.value);
 
 const eligibleMembers = computed(() => props.assignableMembers.filter(isEligible));
 
@@ -83,7 +84,7 @@ const confinedOutCount = computed(
 
 // Changing the venue can strip eligibility from someone already ticked; without
 // this their id would ride along in the payload and fail validation.
-watch(selectedVenueOfficeIds, () => {
+watch(selectedVenueCenterId, () => {
     const stillEligible = new Set(eligibleMembers.value.map((m) => m.id));
     selected.value = selected.value.filter((id) => stillEligible.has(id));
 });
@@ -131,7 +132,7 @@ const assign = () => assignForm
 </script>
 
 <template>
-    <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <BaseCard padding="none" class="p-5">
         <h2 class="text-base font-semibold text-slate-900">Step 2 · Assign Members</h2>
 
         <p v-if="!venues.length" class="mt-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-500">
@@ -259,5 +260,5 @@ const assign = () => assignForm
                 </BaseButton>
             </div>
         </form>
-    </div>
+    </BaseCard>
 </template>

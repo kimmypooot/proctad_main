@@ -27,7 +27,9 @@
     <header>
         <div>
             <h1>{{ $member->name }}</h1>
-            <p class="meta"><span class="id">{{ $member->proctad_id }}</span> &middot; {{ $member->fieldOffice?->name ?? 'Unassigned' }}</p>
+            {{-- Testing center first: it is what every test administrator has.
+                 A field office only applies to the members who are CSC staff. --}}
+            <p class="meta"><span class="id">{{ $member->proctad_id }}</span> &middot; {{ $member->testingCenter?->name ?? $member->fieldOffice?->name ?? 'Unassigned' }}</p>
         </div>
         <div class="meta">
             Service History Report<br>

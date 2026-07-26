@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import SelectInput from '@/Components/SelectInput.vue';
@@ -87,7 +88,7 @@ const copy = async (url) => {
 </script>
 
 <template>
-    <div class="rounded-xl border border-slate-200 bg-white p-6">
+    <BaseCard padding="none" class="p-6">
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
                 <h2 class="text-base font-semibold text-slate-900">Scanner Links</h2>
@@ -190,5 +191,5 @@ const copy = async (url) => {
                 </BaseButton>
             </template>
         </BaseModal>
-    </div>
+    </BaseCard>
 </template>

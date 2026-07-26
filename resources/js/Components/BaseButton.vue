@@ -33,10 +33,18 @@ const props = defineProps({
     icon: { type: String, default: null },
 });
 
+/**
+ * Hover feedback is colour + elevation, never geometry. `primary`/`accent`
+ * previously carried a `hover:scale-[1.02]` that the other four variants did
+ * not — so buttons sitting side by side in one row behaved differently — and
+ * scaling a text button re-rasterizes its label, which reads as a blur rather
+ * than as feedback. Elevation is the convention public-sector design systems
+ * settle on for the same reason.
+ */
 const variants = {
-    primary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm hover:scale-[1.02] transition-all duration-200',
+    primary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm hover:shadow-md',
     secondary: 'bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-200',
-    accent: 'bg-accent-500 text-white hover:bg-accent-600 active:bg-accent-700 shadow-sm hover:scale-[1.02] transition-all duration-200',
+    accent: 'bg-accent-500 text-white hover:bg-accent-600 active:bg-accent-700 shadow-sm hover:shadow-md',
     outline: 'border border-slate-300 bg-white text-slate-700 hover:border-brand-400 hover:text-brand-700 active:bg-slate-50',
     ghost: 'text-brand-700 hover:bg-brand-50 active:bg-brand-100',
     white: 'bg-white text-brand-700 hover:bg-brand-50 active:bg-brand-100 shadow-sm',
@@ -69,7 +77,8 @@ const classes = computed(() => isLink.value
         props.block ? 'w-full' : '',
     ]
     : [
-        'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors duration-200',
+        // `transition` (not `transition-colors`) so the variants' hover elevation animates too.
+        'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition duration-150',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         'disabled:pointer-events-none disabled:opacity-60',
         variants[props.variant],

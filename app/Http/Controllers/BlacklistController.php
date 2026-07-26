@@ -28,7 +28,7 @@ class BlacklistController extends Controller
 
         $blacklists = Blacklist::query()
             ->with(['member:id,proctad_id,first_name,middle_name,last_name,suffix', 'fieldOffice:id,name,code', 'blacklistedBy:id,name', 'liftedBy:id,name'])
-            ->when(! $regionWide, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when(! $regionWide, fn ($q) => $q->inJurisdictionOf($user))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search')->trim();
                 $q->whereHas('member', fn ($q) => $q
@@ -87,7 +87,7 @@ class BlacklistController extends Controller
 
         $members = Member::query()
             ->select('id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix')
-            ->when(! $user->role->isRegionWide(), fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            ->when(! $user->role->isRegionWide(), fn ($q) => $q->withinJurisdictionOf($user))
             ->whereDoesntHave('blacklists', fn ($q) => $q->where('status', BlacklistStatus::Active))
             ->where(fn ($q) => $q
                 ->where('first_name', 'like', "%{$term}%")
@@ -120,6 +120,7 @@ class BlacklistController extends Controller
         Blacklist::create([
             'member_id' => $member->id,
             'field_office_id' => $member->field_office_id,
+            'testing_center_id' => $member->testing_center_id,
             'reason' => $request->validated('reason'),
             'status' => BlacklistStatus::Active,
             'blacklisted_by' => $request->user()->id,

@@ -4,6 +4,7 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BarChart from '@/Components/Charts/BarChart.vue';
 import LineAreaChart from '@/Components/Charts/LineAreaChart.vue';
 import StatusBreakdownBar from '@/Components/Charts/StatusBreakdownBar.vue';
@@ -13,6 +14,7 @@ import ProgressRing from '@/Components/ProgressRing.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
 import TableSkeleton from '@/Components/TableSkeleton.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 
 // Cycled by index, not tied to any stat's meaning — purely to break up the
 // grid visually instead of four identical brand-blue chips in a row.
@@ -22,7 +24,9 @@ const actionAccents = ['brand', 'emerald', 'amber', 'accent'];
 const props = defineProps({
     role: { type: String, required: true },
     roleLabel: { type: String, required: true },
-    fieldOffice: { type: Object, default: null },
+    // Field office for staff, testing center for test administrators — see
+    // DashboardController::scopeBadge().
+    scopeBadge: { type: Object, default: null },
     stats: { type: Array, required: true },
     memberSummary: { type: Object, default: null },
     analytics: { type: Object, default: null },
@@ -66,7 +70,6 @@ const quickActions = computed(() => {
         { label: 'Scan QR Code', icon: 'qr-code', href: '/scanner' },
         { label: 'Manage User Accounts', icon: 'user-group', href: '/users' },
         { label: 'Examinations', icon: 'calendar', href: '/examinations' },
-        { label: 'Evaluation Monitoring', icon: 'document-check', href: '/evaluation-monitoring' },
         { label: 'Certificate Approvals', icon: 'clipboard-check', href: '/approvals' },
     ];
 });
@@ -112,9 +115,9 @@ const applyFeedFilter = () => {
         <DashboardPageHeader :title="`Welcome back, ${firstName}`" subtitle="Here's an overview of your PROCTAD workspace.">
             <template #actions>
                 <BaseBadge variant="brand">{{ roleLabel }}</BaseBadge>
-                <BaseBadge v-if="fieldOffice" variant="neutral">
-                    <AppIcon name="building-office" class="h-3.5 w-3.5" />
-                    {{ fieldOffice.name }}
+                <BaseBadge v-if="scopeBadge" variant="neutral">
+                    <AppIcon :name="scopeBadge.icon" class="h-3.5 w-3.5" />
+                    {{ scopeBadge.label }}
                 </BaseBadge>
             </template>
         </DashboardPageHeader>
@@ -146,15 +149,6 @@ const applyFeedFilter = () => {
                     :href="stat.href"
                     :accent="secondaryStatAccents[i % secondaryStatAccents.length]"
                 />
-                <StatCard
-                    v-if="analytics.evaluationCompliance"
-                    compact
-                    label="Evaluation Compliance"
-                    :value="`${analytics.evaluationCompliance.percentage}%`"
-                    icon="document-check"
-                    href="/evaluation-monitoring"
-                    :accent="secondaryStatAccents[analytics.secondaryStats.length % secondaryStatAccents.length]"
-                />
             </div>
 
             <div class="mt-4 grid gap-4 xl:grid-cols-3">
@@ -170,7 +164,7 @@ const applyFeedFilter = () => {
 
             <div class="mt-4 grid gap-4 xl:grid-cols-3">
                 <!-- Upcoming examinations with assignment-confirmation progress -->
-                <div class="xl:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
+                <BaseCard padding="none" class="xl:col-span-2 p-5">
                     <h3 class="text-sm font-semibold text-slate-900">Upcoming Examinations</h3>
                     <div v-if="!analytics.upcomingExaminations.length" class="mt-4">
                         <EmptyState icon="calendar" title="No upcoming examinations" description="Scheduled exams will appear here." />
@@ -188,7 +182,7 @@ const applyFeedFilter = () => {
                             </BaseBadge>
                         </li>
                     </ul>
-                </div>
+                </BaseCard>
                 <StatusBreakdownBar
                     title="Performance Ratings"
                     :segments="analytics.performanceRatingBreakdown"
@@ -201,7 +195,7 @@ const applyFeedFilter = () => {
             </div>
 
             <!-- Recent registrations -->
-            <div class="mt-4 rounded-xl border border-slate-200 bg-white p-5">
+            <BaseCard padding="none" class="mt-4 p-5">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <h3 class="text-sm font-semibold text-slate-900">Recent Registrations</h3>
                     <div v-if="analytics.fieldOffices" class="w-56">
@@ -249,7 +243,7 @@ const applyFeedFilter = () => {
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </BaseCard>
         </template>
 
         <!-- Role-specific panel -->
@@ -337,8 +331,9 @@ const applyFeedFilter = () => {
                         <!-- Identity -->
                         <Link href="/my/profile" class="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md">
                             <span class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-white ring-4 ring-brand-50">
-                                <img v-if="memberSummary.photo_url" :src="memberSummary.photo_url" :alt="memberSummary.name" class="h-full w-full object-cover">
-                                <AppIcon v-else name="user-circle" class="h-8 w-8" />
+                                <UserAvatar :src="memberSummary.photo_url" :name="memberSummary.name">
+                                    <AppIcon name="user-circle" class="h-8 w-8" />
+                                </UserAvatar>
                             </span>
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-semibold text-slate-900">{{ memberSummary.name }}</p>
@@ -359,7 +354,7 @@ const applyFeedFilter = () => {
                         </Link>
 
                         <!-- Latest activity -->
-                        <div class="rounded-xl border border-slate-200 bg-white p-5">
+                        <BaseCard padding="none" class="p-5">
                             <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Latest Activity</p>
                             <template v-if="memberSummary.latest_certificate || memberSummary.latest_service">
                                 <Link
@@ -381,7 +376,7 @@ const applyFeedFilter = () => {
                                 </Link>
                             </template>
                             <p v-else class="mt-1.5 text-sm text-slate-400">No activity yet.</p>
-                        </div>
+                        </BaseCard>
                     </div>
                 </div>
             </section>

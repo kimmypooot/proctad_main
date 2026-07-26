@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseAlert from '@/Components/BaseAlert.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
@@ -106,7 +107,7 @@ const generate = () => {
 
 <template>
     <div>
-        <div class="rounded-xl border border-slate-200 bg-white p-5">
+        <BaseCard padding="none" class="p-5">
             <h2 class="text-base font-semibold text-slate-900">Step 5 · Generate Reports</h2>
             <p class="mt-1 text-sm text-slate-500">
                 Generate the final printable and payroll documents for this examination. Each report has its own
@@ -127,7 +128,7 @@ const generate = () => {
                     </BaseButton>
                 </div>
             </div>
-        </div>
+        </BaseCard>
 
         <BaseModal :show="!!activeReport" :title="activeReport ? `Generate ${activeReport.title}` : ''" @close="close">
             <div v-if="activeReport" class="space-y-4">

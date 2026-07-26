@@ -13,9 +13,46 @@
  *
  * Shadow / elevation:
  *   shadow-sm  — buttons (primary/accent/white variants), scrolled sticky nav
- *   shadow-md  — ID cards
- *   shadow-lg  — dropdowns (notifications, account menu), mobile nav panel
+ *   shadow-md  — ID cards, button hover
+ *   shadow-lg  — dropdowns (notifications, account menu), mobile nav panel, toasts
  *   shadow-xl  — modal surface (BaseModal)
+ *   Hover feedback is colour + elevation only. No scale/translate on controls:
+ *   transforms re-rasterize label text and nudge neighbours in a flex row.
+ *
+ * Type scale:
+ *   text-xs   — badges, table column headers, timestamps, counts. NEVER body copy;
+ *               12px is below what a good part of our user base reads comfortably.
+ *   text-sm   — default UI text: form labels, table cells, buttons, controls
+ *   text-base — page body copy, modal prose, empty-state descriptions
+ *   text-lg+  — headings only
+ *
+ * Spacing rhythm:
+ *   gap-2 / gap-3        — within one control group (icon + label, button cluster)
+ *   gap-4                — between fields in a form
+ *   space-y-6            — between cards/panels down a page
+ *   px-4 sm:px-6 lg:px-8 — page gutters; never a bare `px-6`, it crowds small phones
+ *
+ * Touch targets:
+ *   Interactive controls are >= 40px on touch, and may tighten to 32px from `sm` up
+ *   (see IconButton). Buttons carry a min-height rather than relying on padding.
+ *
+ * Icons:
+ *   Always via AppIcon, which scales stroke weight to render size. Icon-only
+ *   controls need a visible text label at touch widths — Tooltip is hover/focus
+ *   only and never fires on a touchscreen.
+ *
+ * Focus:
+ *   The `:focus-visible` rule below is the single focus indicator. Do NOT add
+ *   `focus:ring-*` to controls — it duplicates that outline and, unlike it,
+ *   also fires on mouse click.
+ *
+ * Checkboxes:
+ *   CheckboxInput for "checkbox + explanatory text" form fields — it owns the
+ *   label association and error slot. Row-selection checkboxes in tables are a
+ *   different control (no label, no error, an `aria-label` naming the row) and
+ *   stay raw markup:
+ *     h-4 w-4 rounded border-slate-300 text-brand-600 accent-brand-600
+ *   swapping in `accent-*` when the selection feeds a destructive bulk action.
  */
 
 @theme {

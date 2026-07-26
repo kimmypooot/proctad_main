@@ -45,18 +45,41 @@ class DashboardController extends Controller
             : ($user->role ?? UserRole::Member);
 
         $member = $role === UserRole::Member
-            ? Member::with('requirements', 'user:id,google_avatar')->where('user_id', $user->id)->first()
+            ? Member::with('requirements', 'user:id,google_avatar', 'testingCenter:id,name')->where('user_id', $user->id)->first()
             : null;
 
         return Inertia::render('Dashboard/Index', [
             'role' => $role->value,
             'roleLabel' => $role->label(),
-            'fieldOffice' => $fieldOffice?->only('id', 'name', 'code'),
+            'scopeBadge' => $this->scopeBadge($role, $member, $fieldOffice),
             'stats' => $this->statsFor($role, $user, $member),
             'memberSummary' => $role === UserRole::Member ? $this->memberSummary($member) : null,
             'analytics' => $this->adminAnalytics($role, $user, $request),
             'pendingApprovals' => $this->pendingApprovals($role, $user),
         ]);
+    }
+
+    /**
+     * The jurisdiction the workspace covers, named on the header badge. Staff
+     * work for a field office; a test administrator works for their own agency
+     * and is based at a testing center instead, so labelling their dashboard
+     * with a field office would name an office they don't belong to.
+     *
+     * @return array{label: string, icon: string}|null
+     */
+    private function scopeBadge(UserRole $role, ?Member $member, ?FieldOffice $fieldOffice): ?array
+    {
+        if ($role === UserRole::Member) {
+            // Null for regional-office members, who serve region-wide, and for
+            // members not yet placed in a center — better no badge than a wrong one.
+            return $member?->testingCenter
+                ? ['label' => $member->testingCenter->name, 'icon' => 'map-pin']
+                : null;
+        }
+
+        return $fieldOffice
+            ? ['label' => $fieldOffice->name, 'icon' => 'building-office']
+            : null;
     }
 
     /**
@@ -78,7 +101,7 @@ class DashboardController extends Controller
 
         $base = Certificate::where('status', CertificateStatus::Pending)
             ->whereIn('type', $types)
-            ->when(! $role->isRegionWide(), fn ($q) => $q->where('field_office_id', $user->field_office_id));
+            ->when(! $role->isRegionWide(), fn ($q) => $q->inJurisdictionOf($user));
 
         return [
             'total' => (clone $base)->count(),
@@ -390,7 +413,7 @@ class DashboardController extends Controller
     private function statsFor(UserRole $role, User $user, ?Member $member): array
     {
         $activeMembers = fn () => Member::where('status', MemberStatus::Active);
-        $foMembers = fn () => $activeMembers()->where('field_office_id', $user->field_office_id);
+        $foMembers = fn () => $activeMembers()->withinJurisdictionOf($user);
 
         return match ($role) {
             UserRole::SuperAdmin, UserRole::EsdAdmin => [
@@ -423,16 +446,16 @@ class DashboardController extends Controller
                     'Pending Approvals',
                     Certificate::where('status', CertificateStatus::Pending)
                         ->whereIn('type', [CertificateType::Appearance, CertificateType::DesignationOrder])
-                        ->where('field_office_id', $user->field_office_id)->count(),
+                        ->inJurisdictionOf($user)->count(),
                     'clipboard-check',
                     'Appearance & Designation Orders',
                     '/approvals',
                 ),
                 $this->stat('Active Members in Field Office', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
-                $this->stat('Service Records', ExamAssignment::where('field_office_id', $user->field_office_id)->count(), 'document-text', 'Exam assignments in your FO'),
+                $this->stat('Service Records', ExamAssignment::inJurisdictionOf($user)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Approved This Month',
-                    Certificate::where('field_office_id', $user->field_office_id)
+                    Certificate::inJurisdictionOf($user)
                         ->whereIn('type', [CertificateType::Appearance, CertificateType::DesignationOrder])
                         ->whereNotNull('approved_at')
                         ->whereMonth('approved_at', now()->month)
@@ -445,11 +468,11 @@ class DashboardController extends Controller
             ],
             UserRole::FoAdmin => [
                 $this->stat('Active Members in Field Office', $foMembers()->count(), 'users', $user->fieldOffice?->name, '/members'),
-                $this->stat('Service Records', ExamAssignment::where('field_office_id', $user->field_office_id)->count(), 'document-text', 'Exam assignments in your FO'),
+                $this->stat('Service Records', ExamAssignment::inJurisdictionOf($user)->count(), 'document-text', 'Exam assignments in your FO'),
                 $this->stat(
                     'Issuance Requests',
                     Certificate::where('status', CertificateStatus::Pending)
-                        ->where('field_office_id', $user->field_office_id)->count(),
+                        ->inJurisdictionOf($user)->count(),
                     'paper-airplane',
                     'Awaiting approval',
                     '/certificates',
@@ -458,7 +481,7 @@ class DashboardController extends Controller
                     'Upcoming Trainings',
                     Training::whereNull('completed_at')
                         ->whereDate('training_date', '>=', today())
-                        ->where('field_office_id', $user->field_office_id)
+                        ->whereIn('field_office_id', $user->scopedFieldOfficeIds())
                         ->count(),
                     'academic-cap',
                     null,

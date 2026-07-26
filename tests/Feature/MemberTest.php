@@ -7,6 +7,7 @@ use App\Enums\MemberStatus;
 use App\Enums\UserRole;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use App\Notifications\MemberRequirementReviewed;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,8 +55,16 @@ class MemberTest extends TestCase
             'agency' => 'DepEd Division Office',
             'position' => 'Teacher III',
             'field_office_id' => $office->id,
+            'testing_center_id' => $this->centerFor($office)->id,
             ...$overrides,
         ];
+    }
+
+    /** A testing center the office handles, created on first use. */
+    private function centerFor(FieldOffice $office): TestingCenter
+    {
+        return $office->testingCenters()->first()
+            ?? TestingCenter::factory()->forFieldOffice($office)->create();
     }
 
     public function test_store_mints_proctad_id_and_creates_account_and_requirements(): void
@@ -149,6 +158,22 @@ class MemberTest extends TestCase
         $this->actingAs($user)->delete("/members/{$member->id}")->assertForbidden();
 
         $this->actingAs($this->staff(UserRole::Member))->get('/members')->assertForbidden();
+    }
+
+    public function test_details_carries_the_testing_center_for_the_view_modal(): void
+    {
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+        $center = $this->centerFor($this->leyte);
+        $member = Member::factory()->create([
+            'field_office_id' => $this->leyte->id,
+            'testing_center_id' => $center->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get("/members/{$member->id}/details")
+            ->assertOk()
+            ->assertJsonPath('member.testing_center.name', $center->name)
+            ->assertJsonPath('member.field_office.name', $this->leyte->name);
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Http\Requests\StoreMemberRequest;
 use App\Http\Requests\UpdateMemberRequest;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use App\Services\IdCardPdfService;
 use App\Services\PerformanceRatingCalculator;
@@ -39,11 +40,18 @@ class MemberController extends Controller
         $regionWide = $user->role->isRegionWide();
 
         $members = Member::query()
-            ->with('fieldOffice:id,name,code')
+            ->with('fieldOffice:id,name,code', 'testingCenter:id,name', 'user.fieldOffice:id,is_regional')
             ->with(['assignments' => fn ($q) => $q
                 ->whereNotNull('attendance_confirmed_at')
                 ->with('examination:id,title,exam_date')])
-            ->when(! $regionWide, fn ($q) => $q->where('field_office_id', $user->field_office_id))
+            // Jurisdiction is the testing center, so Leyte I and Leyte II staff
+            // share the Tacloban City roster. Regional-office members appear for
+            // every office too: they serve region-wide and any office may need
+            // to assign them, though MemberPolicy keeps them read-only here.
+            ->when(! $regionWide, fn ($q) => $q
+                ->where(fn ($q) => $q
+                    ->whereIn('testing_center_id', $user->scopedTestingCenterIds())
+                    ->orWhereHas('fieldOffice', fn ($o) => $o->where('is_regional', true))))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search')->trim();
                 $q->where(fn ($q) => $q
@@ -107,6 +115,7 @@ class MemberController extends Controller
 
         $member->load(
             'fieldOffice:id,name,code',
+            'testingCenter:id,name',
             'requirements',
             'assignments.examination:id,title,type,exam_date',
         );
@@ -170,7 +179,7 @@ class MemberController extends Controller
     {
         Gate::authorize('view', $member);
 
-        $member->load('fieldOffice:id,name,code', 'assignments.examination:id,title,exam_type_id,exam_date');
+        $member->load('fieldOffice:id,name,code', 'testingCenter:id,name', 'assignments.examination:id,title,exam_type_id,exam_date');
 
         return view('members.service-history-print', [
             'member' => $member,
@@ -203,9 +212,10 @@ class MemberController extends Controller
             'member' => $member->only([
                 'id', 'proctad_id', 'first_name', 'middle_name', 'last_name', 'suffix',
                 'sex', 'date_of_birth', 'email', 'mobile_number', 'agency', 'position', 'field_office_id',
-                'status', 'disqualification_remarks',
+                'testing_center_id', 'status', 'disqualification_remarks',
             ]),
             'fieldOffices' => $this->assignableFieldOffices($request->user(), $member->field_office_id),
+            'testingCenters' => $this->assignableTestingCenters($request->user(), $member->testing_center_id),
             'statuses' => $this->statusOptions(),
         ]);
     }
@@ -346,9 +356,30 @@ class MemberController extends Controller
     {
         return FieldOffice::query()
             ->where(fn ($q) => $q->where('is_active', true)->when($currentId, fn ($q2) => $q2->orWhere('id', $currentId)))
-            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereKey($user->field_office_id))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('id', $user->scopedFieldOfficeIds()))
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
+    }
+
+    /**
+     * Testing centers this user may file a member under, tagged with the offices
+     * that handle each so the form can narrow the list once an office is chosen.
+     * The member's current center is always included, even if since deactivated,
+     * so editing an existing record never silently moves them.
+     */
+    private function assignableTestingCenters(User $user, ?int $currentId = null)
+    {
+        return TestingCenter::query()
+            ->where(fn ($q) => $q->where('is_active', true)->when($currentId, fn ($q2) => $q2->orWhere('id', $currentId)))
+            ->when($user->role->isFieldOfficeScoped(), fn ($q) => $q->whereIn('id', $user->scopedTestingCenterIds()))
+            ->with('fieldOffices:id')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (TestingCenter $center) => [
+                'id' => $center->id,
+                'name' => $center->name,
+                'field_office_ids' => $center->fieldOffices->pluck('id'),
+            ]);
     }
 
     private function statusOptions(): array
@@ -376,6 +407,12 @@ class MemberController extends Controller
             'mobile_number' => $member->mobile_number,
             'agency' => $member->agency,
             'field_office' => $member->fieldOffice?->only('id', 'name', 'code'),
+            'testing_center' => $member->testingCenter?->only('id', 'name'),
+            // Surfaces the members left unplaced by the testing-center backfill:
+            // their office handles several centers, so no center could be
+            // derived and staff have to choose one. Regional-office members
+            // legitimately have none, hence the exclusion.
+            'needs_testing_center' => $member->testing_center_id === null && ! $member->isRegionWide(),
             'status' => $member->status->value,
             'status_label' => $member->status->label(),
             'status_variant' => $member->status->badgeVariant(),

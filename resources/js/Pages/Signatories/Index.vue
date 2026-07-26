@@ -4,10 +4,14 @@ import { Head, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
+import FormErrorSummary from '@/Components/FormErrorSummary.vue';
+import { useFormErrors } from '@/Composables/useFormErrors';
 import IconButton from '@/Components/IconButton.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -30,6 +34,8 @@ const form = useForm({
     signature: null,
     remove_signature: false,
 });
+
+useFormErrors(form);
 
 /** Local object URL for previewing a freshly picked file before it's uploaded. */
 const signaturePreview = ref(null);
@@ -130,10 +136,10 @@ const confirmDelete = () => {
 
         <!-- Mobile (below md): a card per signatory so the edit/remove actions stay on screen. -->
         <div v-if="signatories.length" class="mt-6 space-y-3 md:hidden">
-            <div
+            <BaseCard
                 v-for="signatory in signatories"
                 :key="`m-${signatory.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
             >
                 <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
@@ -154,28 +160,34 @@ const confirmDelete = () => {
                         :alt="`${signatory.name} signature`"
                         class="h-8 w-auto max-w-[140px] object-contain"
                     >
+                    <BaseBadge
+                        v-else-if="signatory.active"
+                        variant="warning"
+                        title="No e-signature uploaded — certificates issued now will have a blank signature line."
+                    >
+                        No e-signature
+                    </BaseBadge>
                     <span v-else class="text-xs text-slate-400">Signed by hand</span>
                 </div>
-                <div v-if="signatory.can_manage" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                <div v-if="signatory.can_manage" class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
                     <IconButton icon="pencil" label="Edit" @click="openEdit(signatory)" />
                     <IconButton icon="trash" label="Remove" variant="danger" @click="deleting = signatory" />
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
-        <div v-if="signatories.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Name</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Position</th>
-                        <th class="hidden px-3 py-2 lg:table-cell">E-Signature</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Scope</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
+        <BaseTable
+            v-if="signatories.length"
+            class="mt-6 hidden md:block"
+            :columns="[
+                { label: 'Name' },
+                { label: 'Position', class: 'hidden sm:table-cell' },
+                { label: 'E-Signature', class: 'hidden lg:table-cell' },
+                { label: 'Scope', class: 'hidden md:table-cell' },
+                { label: 'Status' },
+                { label: 'Actions', align: 'center' },
+            ]"
+        >
                     <tr v-for="signatory in signatories" :key="signatory.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="px-3 py-2 font-medium text-slate-900">
                             {{ signatory.name }}
@@ -189,7 +201,14 @@ const confirmDelete = () => {
                                 :alt="`${signatory.name} signature`"
                                 class="h-8 w-auto max-w-[140px] object-contain"
                             />
-                            <span v-else class="text-xs text-slate-400">Signed by hand</span>
+                            <BaseBadge
+                        v-else-if="signatory.active"
+                        variant="warning"
+                        title="No e-signature uploaded — certificates issued now will have a blank signature line."
+                    >
+                        No e-signature
+                    </BaseBadge>
+                    <span v-else class="text-xs text-slate-400">Signed by hand</span>
                         </td>
                         <td class="hidden px-3 py-2 md:table-cell">
                             <BaseBadge :variant="signatory.field_office ? 'neutral' : 'brand'">
@@ -208,9 +227,7 @@ const confirmDelete = () => {
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState
@@ -223,10 +240,14 @@ const confirmDelete = () => {
         <!-- Create / edit modal -->
         <BaseModal :show="showForm" :title="editing ? 'Edit Signatory' : 'Add Signatory'" @close="showForm = false">
             <form id="signatory-form" class="space-y-4" novalidate @submit.prevent="submit">
-                <TextInput v-model="form.name" label="Full Name" required :error="form.errors.name" placeholder="e.g. Atty. Juana D. Reyes" />
-                <TextInput v-model="form.position" label="Position" required :error="form.errors.position" placeholder="e.g. Director IV" />
+                <FormErrorSummary
+                    :errors="form.errors"
+                    :labels="{ name: 'Full Name', field_office_id: 'Field Office', signature: 'Signature Image' }"
+                />
+                <TextInput v-model="form.name" name="name" label="Full Name" required :error="form.errors.name" placeholder="e.g. Atty. Juana D. Reyes" />
+                <TextInput v-model="form.position" name="position" label="Position" required :error="form.errors.position" placeholder="e.g. Director IV" />
                 <SelectInput
-                    v-model="form.field_office_id"
+                    v-model="form.field_office_id" name="field_office_id"
                     label="Scope"
                     required
                     :options="scopeOptions"
@@ -260,7 +281,7 @@ const confirmDelete = () => {
                     </p>
                 </div>
 
-                <CheckboxInput v-model="form.active">Active (used on newly issued IDs and certificates)</CheckboxInput>
+                <CheckboxInput v-model="form.active" name="active">Active (used on newly issued IDs and certificates)</CheckboxInput>
             </form>
             <template #footer>
                 <BaseButton variant="outline" size="sm" @click="showForm = false">Cancel</BaseButton>

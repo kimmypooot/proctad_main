@@ -150,6 +150,35 @@ const submitCenter = () => {
     })).post('/testing-centers', { ...opts, onFinish: () => centerForm.transform((d) => d) });
 };
 
+/* --- Administering office modal ---
+   Test administrators belong to a testing center, not a field office, so their
+   ID cards and certificates are signed by whichever office administers that
+   center. Where a center is shared — Leyte I and Leyte II both serve Tacloban
+   City — one of them holds it, and this records the hand-over. --- */
+const adminOfficeForm = useForm({ field_office_id: null });
+const showAdminOfficeForm = ref(false);
+const adminOfficeCenter = ref(null);
+
+const officeName = (center, officeId) =>
+    center.handling_offices?.find((o) => o.id === officeId)?.name ?? null;
+
+const administeringOfficeName = (center) => officeName(center, center.administering_field_office_id);
+
+const openAdminOfficeForm = (center) => {
+    adminOfficeForm.clearErrors();
+    adminOfficeCenter.value = center;
+    adminOfficeForm.field_office_id = center.administering_field_office_id;
+    showAdminOfficeForm.value = true;
+};
+
+const submitAdminOffice = () => {
+    adminOfficeForm.patch(`/testing-centers/${adminOfficeCenter.value.id}/administering-office`, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => (showAdminOfficeForm.value = false),
+    });
+};
+
 /* --- School modal --- */
 const schoolForm = useForm({
     id: null, name: '', testing_center_id: null,
@@ -323,8 +352,8 @@ const statusOptions = [
                     </p>
                 </div>
                 <template v-if="can.manageFieldOffices">
-                    <IconButton icon="pencil" label="Edit" @click.stop="openOfficeEdit(office)" />
-                    <IconButton icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'office', item: office }" />
+                    <IconButton icon-only icon="pencil" label="Edit" @click.stop="openOfficeEdit(office)" />
+                    <IconButton icon-only icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'office', item: office }" />
                 </template>
                 <AppIcon name="chevron-right" class="h-4 w-4 shrink-0 text-slate-300" />
             </button>
@@ -354,11 +383,22 @@ const statusOptions = [
                     <p class="text-xs text-slate-500">
                         {{ center.schools_count }} school{{ center.schools_count === 1 ? '' : 's' }}
                         · {{ center.users_count }} staff
+                        <!-- Only ambiguous where a center is shared; showing it
+                             there answers "who gets our new registrants?" -->
+                        <template v-if="center.field_office_ids.length > 1">
+                            · Administered by
+                            <span class="font-medium text-slate-700">{{ administeringOfficeName(center) ?? 'not set' }}</span>
+                        </template>
                     </p>
                 </div>
+                <IconButton
+                    v-if="center.can_designate_administering && center.field_office_ids.length > 1"
+                    icon-only icon="arrow-path" label="Change administering office"
+                    @click.stop="openAdminOfficeForm(center)"
+                />
                 <template v-if="center.can_manage">
-                    <IconButton icon="pencil" label="Edit" @click.stop="openCenterEdit(center)" />
-                    <IconButton icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'center', item: center }" />
+                    <IconButton icon-only icon="pencil" label="Edit" @click.stop="openCenterEdit(center)" />
+                    <IconButton icon-only icon="trash" label="Remove" variant="danger" @click.stop="deleting = { type: 'center', item: center }" />
                 </template>
                 <AppIcon name="chevron-right" class="h-4 w-4 shrink-0 text-slate-300" />
             </button>
@@ -388,8 +428,8 @@ const statusOptions = [
                     </p>
                 </div>
                 <template v-if="school.can_manage">
-                    <IconButton icon="pencil" label="Edit" @click="openSchoolEdit(school)" />
-                    <IconButton icon="trash" label="Remove" variant="danger" @click="deleting = { type: 'school', item: school }" />
+                    <IconButton icon-only icon="pencil" label="Edit" @click="openSchoolEdit(school)" />
+                    <IconButton icon-only icon="trash" label="Remove" variant="danger" @click="deleting = { type: 'school', item: school }" />
                 </template>
             </div>
             <EmptyState
@@ -458,6 +498,40 @@ const statusOptions = [
                 <BaseButton variant="outline" size="sm" @click="showCenterForm = false">Cancel</BaseButton>
                 <BaseButton type="submit" form="center-form" variant="primary" size="sm" :loading="centerForm.processing" :disabled="centerForm.processing">
                     {{ centerForm.id ? 'Save Changes' : 'Add Testing Center' }}
+                </BaseButton>
+            </template>
+        </BaseModal>
+
+        <!-- Administering office modal -->
+        <BaseModal :show="showAdminOfficeForm" title="Change Administering Office" @close="showAdminOfficeForm = false">
+            <form id="admin-office-form" class="space-y-4" novalidate @submit.prevent="submitAdminOffice">
+                <p class="text-xs text-slate-500">
+                    Testing Center: <span class="font-medium text-slate-700">{{ adminOfficeCenter?.name }}</span>
+                </p>
+
+                <SelectInput
+                    v-model="adminOfficeForm.field_office_id"
+                    label="Administered by"
+                    required
+                    :options="(adminOfficeCenter?.handling_offices ?? []).map((o) => ({ value: o.id, label: o.name }))"
+                    :error="adminOfficeForm.errors.field_office_id"
+                />
+
+                <div class="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <AppIcon name="information-circle" class="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                        Test administrators belong to a testing center, not a field office, so this decides whose
+                        signatory signs the ID cards and certificates of everyone serving
+                        <span class="font-semibold">{{ adminOfficeCenter?.name }}</span>. Already-issued certificates
+                        keep the signature they were released with, and both offices continue to see and manage
+                        everyone at a shared center.
+                    </p>
+                </div>
+            </form>
+            <template #footer>
+                <BaseButton variant="outline" size="sm" @click="showAdminOfficeForm = false">Cancel</BaseButton>
+                <BaseButton type="submit" form="admin-office-form" variant="primary" size="sm" :loading="adminOfficeForm.processing" :disabled="adminOfficeForm.processing">
+                    Save Changes
                 </BaseButton>
             </template>
         </BaseModal>

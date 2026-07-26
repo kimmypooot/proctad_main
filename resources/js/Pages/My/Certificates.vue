@@ -5,6 +5,7 @@ import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
@@ -93,7 +94,7 @@ const closeViewer = () => (viewing.value = null);
             </div>
 
             <!-- Filters -->
-            <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+            <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-3">
                 <TextInput
                     v-model="search"
                     label="Search"
@@ -112,19 +113,18 @@ const closeViewer = () => (viewing.value = null);
                     placeholder="All types"
                     :options="[{ value: '', label: 'All types' }, ...typeOptions]"
                 />
-            </div>
+            </BaseCard>
             <div v-if="hasActiveFilters" class="mt-2 flex items-center justify-between text-sm text-slate-500">
                 <span>{{ filteredCertificates.length }} of {{ certificates.length }} certificate(s)</span>
-                <button type="button" class="font-medium text-brand-700 hover:text-brand-800 hover:underline" @click="resetFilters">
-                    Clear filters
-                </button>
+                <BaseButton variant="link" size="sm" @click="resetFilters">Clear filters</BaseButton>
             </div>
 
             <div v-if="filteredCertificates.length" class="mt-6 space-y-3">
-                <div
+                <BaseCard
                     v-for="certificate in filteredCertificates"
                     :key="certificate.id"
-                    class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 transition-shadow duration-200 hover:shadow-md"
+                    padding="none"
+                    class="flex flex-wrap items-center justify-between gap-4 p-5 transition-shadow duration-200 hover:shadow-md"
                 >
                     <div class="flex items-start gap-4">
                         <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
@@ -156,7 +156,7 @@ const closeViewer = () => (viewing.value = null);
                             </BaseButton>
                         </template>
                     </div>
-                </div>
+                </BaseCard>
             </div>
             <div v-else class="mt-6">
                 <EmptyState

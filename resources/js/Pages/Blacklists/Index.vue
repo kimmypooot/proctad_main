@@ -4,13 +4,14 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import BasePagination from '@/Components/BasePagination.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import StatCard from '@/Components/StatCard.vue';
-import TableSkeleton from '@/Components/TableSkeleton.vue';
 import TextArea from '@/Components/TextArea.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { fetchJson, messageFor } from '@/Composables/useJsonFetch';
@@ -150,7 +151,7 @@ const submitLift = () => liftForm.post(`/blacklists/${lifting.value.id}/lift`, {
         </div>
 
         <!-- Filters -->
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <TextInput v-model="search" label="Search" placeholder="Name or PROCTAD ID" />
             <SelectInput
                 v-model="status"
@@ -165,24 +166,24 @@ const submitLift = () => liftForm.post(`/blacklists/${lifting.value.id}/lift`, {
                 placeholder="All field offices"
                 :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: fo.id, label: fo.name }))]"
             />
-        </div>
+        </BaseCard>
 
         <!-- Results -->
-        <div v-if="loading || blacklists.data.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Member</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Field Office</th>
-                        <th class="px-3 py-2">Reason</th>
-                        <th class="hidden px-3 py-2 lg:table-cell">Blacklisted</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="w-24 px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <TableSkeleton v-if="loading" :columns="6" />
-                    <tr v-for="entry in loading ? [] : blacklists.data" :key="entry.id" class="transition-colors hover:bg-brand-50/40">
+        <BaseTable
+            v-if="loading || blacklists.data.length"
+            class="mt-6"
+            :loading="loading"
+            :skeleton-columns="6"
+            :columns="[
+                { label: 'Member' },
+                { label: 'Field Office', class: 'hidden md:table-cell' },
+                { label: 'Reason' },
+                { label: 'Blacklisted', class: 'hidden lg:table-cell' },
+                { label: 'Status' },
+                { label: 'Actions', class: 'w-24', align: 'center' },
+            ]"
+        >
+                    <tr v-for="entry in blacklists.data" :key="entry.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="px-3 py-2">
                             <p class="font-medium text-slate-900">{{ entry.member.name }}</p>
                             <p class="font-mono text-xs text-brand-700">{{ entry.member.proctad_id }}</p>
@@ -215,9 +216,7 @@ const submitLift = () => liftForm.post(`/blacklists/${lifting.value.id}/lift`, {
                             </BaseButton>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState

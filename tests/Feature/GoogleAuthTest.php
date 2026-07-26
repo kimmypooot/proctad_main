@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\FieldOffice;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Socialite\Contracts\Provider;
@@ -79,7 +80,7 @@ class GoogleAuthTest extends TestCase
 
     public function test_completes_registration_from_pending_google_identity(): void
     {
-        $fieldOffice = FieldOffice::factory()->create();
+        $center = TestingCenter::factory()->forFieldOffice(FieldOffice::factory()->create())->create();
         $this->mockGoogleUser('google-999', 'stranger@gmail.com', 'Stranger', 'Person');
         $this->get('/auth/google/callback');
 
@@ -90,7 +91,7 @@ class GoogleAuthTest extends TestCase
             'date_of_birth' => '1990-05-15',
             'mobile_number' => '09171234567',
             'agency' => 'DepEd Division Office',
-            'field_office_id' => $fieldOffice->id,
+            'testing_center_id' => $center->id,
             'terms' => true,
         ])->assertRedirect(route('dashboard'));
 
@@ -108,7 +109,7 @@ class GoogleAuthTest extends TestCase
 
     public function test_registration_rejects_a_pending_google_identity_whose_email_was_since_taken(): void
     {
-        $fieldOffice = FieldOffice::factory()->create();
+        $center = TestingCenter::factory()->forFieldOffice(FieldOffice::factory()->create())->create();
         $this->mockGoogleUser('google-999', 'stranger@gmail.com', 'Stranger', 'Person');
         $this->get('/auth/google/callback');
 
@@ -121,7 +122,7 @@ class GoogleAuthTest extends TestCase
             'date_of_birth' => '1990-05-15',
             'mobile_number' => '09171234567',
             'agency' => 'DepEd Division Office',
-            'field_office_id' => $fieldOffice->id,
+            'testing_center_id' => $center->id,
             'terms' => true,
         ])->assertStatus(422);
 

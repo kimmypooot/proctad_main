@@ -3,6 +3,8 @@ import { reactive } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseCard from '@/Components/BaseCard.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 
 const props = defineProps({
@@ -64,10 +66,10 @@ const save = (row) => {
                 <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ group.label }}</h2>
                 <!-- Mobile (below md): a stacked card per rate. -->
                 <div class="space-y-2 md:hidden">
-                    <div
+                    <BaseCard
                         v-for="row in group.rows"
                         :key="`m-${row.payee_value}`"
-                        class="rounded-xl border border-slate-200 bg-white p-4"
+                        padding="sm"
                     >
                         <p class="font-medium text-slate-900">
                             {{ row.label }}
@@ -92,19 +94,17 @@ const save = (row) => {
                                 Save
                             </button>
                         </div>
-                    </div>
+                    </BaseCard>
                 </div>
 
-                <div class="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-                    <table class="min-w-full divide-y divide-slate-200 text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            <tr>
-                                <th class="px-3 py-2">Role</th>
-                                <th class="px-3 py-2">Rate (PHP)</th>
-                                <th class="px-3 py-2"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
+                <BaseTable
+                    class="hidden md:block"
+                    :columns="[
+                        { label: 'Role' },
+                        { label: 'Rate (PHP)' },
+                        { label: '' },
+                    ]"
+                >
                             <tr v-for="row in group.rows" :key="row.payee_value" class="hover:bg-brand-50/40">
                                 <td class="px-3 py-2 font-medium text-slate-900">
                                     {{ row.label }}
@@ -132,19 +132,17 @@ const save = (row) => {
                                     </button>
                                 </td>
                             </tr>
-                        </tbody>
-                    </table>
-                </div>
+                </BaseTable>
             </section>
 
             <section v-for="group in personnelTypeGroups" :key="`personnel-type-${group.key}`">
                 <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ group.label }}</h2>
                 <!-- Mobile (below md): a stacked card per rate. -->
                 <div class="space-y-2 md:hidden">
-                    <div
+                    <BaseCard
                         v-for="row in group.rows"
                         :key="`m-${row.payee_value}`"
-                        class="rounded-xl border border-slate-200 bg-white p-4"
+                        padding="sm"
                     >
                         <p class="font-medium text-slate-900">
                             {{ row.label }}
@@ -169,19 +167,17 @@ const save = (row) => {
                                 Save
                             </button>
                         </div>
-                    </div>
+                    </BaseCard>
                 </div>
 
-                <div class="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-                    <table class="min-w-full divide-y divide-slate-200 text-sm">
-                        <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            <tr>
-                                <th class="px-3 py-2">Personnel Type</th>
-                                <th class="px-3 py-2">Rate (PHP)</th>
-                                <th class="px-3 py-2"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
+                <BaseTable
+                    class="hidden md:block"
+                    :columns="[
+                        { label: 'Personnel Type' },
+                        { label: 'Rate (PHP)' },
+                        { label: '' },
+                    ]"
+                >
                             <tr v-for="row in group.rows" :key="row.payee_value" class="hover:bg-brand-50/40">
                                 <td class="px-3 py-2 font-medium text-slate-900">
                                     {{ row.label }}
@@ -209,9 +205,7 @@ const save = (row) => {
                                     </button>
                                 </td>
                             </tr>
-                        </tbody>
-                    </table>
-                </div>
+                </BaseTable>
             </section>
         </div>
     </DashboardLayout>

@@ -17,4 +17,13 @@ class FieldOfficeFactory extends Factory
             'address' => fake()->address(),
         ];
     }
+
+    /** The regional office (RO8) — how "region-wide" is expressed, for members and OEP alike. */
+    public function regional(): static
+    {
+        return $this->state(fn () => [
+            'name' => 'CSC Regional Office VIII',
+            'is_regional' => true,
+        ]);
+    }
 }

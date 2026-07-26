@@ -5,6 +5,8 @@ const model = defineModel({ type: String, default: '' });
 
 const props = defineProps({
     label: { type: String, required: true },
+    /** The form field key — see the note on TextInput's `name`. */
+    name: { type: String, default: null },
     error: { type: String, default: null },
     hint: { type: String, default: null },
     required: { type: Boolean, default: false },
@@ -34,6 +36,7 @@ const describedBy = computed(() => {
         <textarea
             :id="id"
             v-model="model"
+            :name="name ?? undefined"
             :rows="rows"
             :required="required"
             :maxlength="maxlength ?? undefined"

@@ -82,7 +82,7 @@ const steps = [
                         </span>
 
                         <div class="pt-1">
-                            <p class="text-xs font-semibold uppercase tracking-widest text-accent-500">
+                            <p class="text-xs font-semibold uppercase tracking-widest text-accent-600">
                                 Step {{ index + 1 }}
                             </p>
                             <h2 class="mt-1 text-lg font-semibold text-slate-900">{{ step.title }}</h2>

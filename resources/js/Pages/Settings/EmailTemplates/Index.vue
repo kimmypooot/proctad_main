@@ -3,7 +3,9 @@ import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BasePagination from '@/Components/BasePagination.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import SelectInput from '@/Components/SelectInput.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
@@ -160,10 +162,10 @@ const resetLogFilters = () => {
 
         <!-- Mobile (below md): a card per template so preview/edit stay on screen. -->
         <div v-if="templates.length" class="mt-6 space-y-3 md:hidden">
-            <div
+            <BaseCard
                 v-for="template in templates"
                 :key="`m-${template.id}`"
-                class="rounded-xl border border-slate-200 bg-white p-4"
+                padding="sm"
             >
                 <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
@@ -175,25 +177,24 @@ const resetLogFilters = () => {
                     </BaseBadge>
                 </div>
                 <p class="mt-2 text-xs text-slate-600" :title="template.subject">{{ template.subject }}</p>
-                <div class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                <div class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
                     <IconButton icon="eye" label="Preview" @click="openPreview(template)" />
                     <IconButton v-if="can.manage" icon="pencil" label="Edit" @click="openEdit(template)" />
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
-        <div v-if="templates.length" class="mt-6 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">Name</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Code</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Subject</th>
-                        <th class="px-3 py-2">Status</th>
-                        <th class="w-10 px-3 py-2 text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
+        <BaseTable
+            v-if="templates.length"
+            class="mt-6 hidden md:block"
+            :columns="[
+                { label: 'Name' },
+                { label: 'Code', class: 'hidden sm:table-cell' },
+                { label: 'Subject', class: 'hidden md:table-cell' },
+                { label: 'Status' },
+                { label: 'Actions', class: 'w-10', align: 'center' },
+            ]"
+        >
                     <tr v-for="template in templates" :key="template.id" class="transition-colors hover:bg-brand-50/40">
                         <td class="px-3 py-2 font-medium text-slate-900">{{ template.name }}</td>
                         <td class="hidden whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-500 sm:table-cell">{{ template.code }}</td>
@@ -210,9 +211,7 @@ const resetLogFilters = () => {
                             </div>
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState
@@ -233,7 +232,7 @@ const resetLogFilters = () => {
                 Every delivery attempt, with the exact content the recipient was sent.
             </p>
 
-            <div class="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
+            <BaseCard padding="sm" class="mt-4 grid gap-4 sm:grid-cols-3">
                 <TextInput
                     v-model="logSearch"
                     label="Search"
@@ -253,19 +252,17 @@ const resetLogFilters = () => {
                     :options="[{ value: '', label: 'All templates' }, ...templates.map((t) => ({ value: t.id, label: t.name }))]"
                     @change="applyLogFilters"
                 />
-            </div>
+            </BaseCard>
             <div v-if="logSearch || logStatus || logTemplate" class="mt-2 text-right">
-                <button type="button" class="text-sm font-medium text-brand-700 hover:underline" @click="resetLogFilters">
-                    Clear filters
-                </button>
+                <BaseButton variant="link" size="sm" @click="resetLogFilters">Clear filters</BaseButton>
             </div>
 
             <!-- Mobile (below md): a card per sent email so "view content" stays on screen. -->
             <div v-if="logs.data.length" class="mt-4 space-y-3 md:hidden">
-                <div
+                <BaseCard
                     v-for="log in logs.data"
                     :key="`m-${log.id}`"
-                    class="rounded-xl border border-slate-200 bg-white p-4"
+                    padding="sm"
                 >
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0">
@@ -280,25 +277,24 @@ const resetLogFilters = () => {
                         <div v-if="log.template_name" class="flex gap-1"><dt class="font-medium text-slate-400">Template:</dt><dd class="text-slate-600">{{ log.template_name }}</dd></div>
                         <div class="flex gap-1"><dt class="font-medium text-slate-400">When:</dt><dd class="text-slate-600">{{ log.at }}</dd></div>
                     </dl>
-                    <div v-if="log.has_body" class="mt-3 flex gap-1 border-t border-slate-100 pt-3">
+                    <div v-if="log.has_body" class="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
                         <IconButton icon="eye" label="View sent content" @click="openLog(log)" />
                     </div>
-                </div>
+                </BaseCard>
             </div>
 
-            <div v-if="logs.data.length" class="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white md:block">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <tr>
-                            <th class="px-3 py-2">Recipient</th>
-                            <th class="hidden px-3 py-2 md:table-cell">Subject</th>
-                            <th class="hidden px-3 py-2 lg:table-cell">Template</th>
-                            <th class="px-3 py-2">Status</th>
-                            <th class="hidden px-3 py-2 sm:table-cell">When</th>
-                            <th class="w-10 px-3 py-2 text-center">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
+            <BaseTable
+                v-if="logs.data.length"
+                class="mt-4 hidden md:block"
+                :columns="[
+                    { label: 'Recipient' },
+                    { label: 'Subject', class: 'hidden md:table-cell' },
+                    { label: 'Template', class: 'hidden lg:table-cell' },
+                    { label: 'Status' },
+                    { label: 'When', class: 'hidden sm:table-cell' },
+                    { label: 'Actions', class: 'w-10', align: 'center' },
+                ]"
+            >
                         <tr v-for="log in logs.data" :key="log.id" class="transition-colors hover:bg-brand-50/40">
                             <td class="px-3 py-2">
                                 <p class="font-medium text-slate-900">{{ log.recipient_name || '—' }}</p>
@@ -326,9 +322,7 @@ const resetLogFilters = () => {
                                 <span v-else class="text-xs text-slate-300" title="Content was not recorded for this email">—</span>
                             </td>
                         </tr>
-                    </tbody>
-                </table>
-            </div>
+            </BaseTable>
 
             <div v-else class="mt-4">
                 <EmptyState

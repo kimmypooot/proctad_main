@@ -3,11 +3,12 @@ import { ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BasePagination from '@/Components/BasePagination.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import SelectInput from '@/Components/SelectInput.vue';
-import TableSkeleton from '@/Components/TableSkeleton.vue';
 
 const props = defineProps({
     logs: { type: Object, required: true },
@@ -46,7 +47,7 @@ const changeSummary = (log) => {
     <DashboardLayout>
         <DashboardPageHeader title="Audit Trail" subtitle="Every create, update, and delete across PROCTAD records." />
 
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+        <BaseCard padding="sm" class="mt-6 grid gap-4 sm:grid-cols-2">
             <SelectInput
                 v-model="action"
                 label="Action"
@@ -64,22 +65,22 @@ const changeSummary = (log) => {
                 placeholder="All types"
                 :options="[{ value: '', label: 'All types' }, ...types]"
             />
-        </div>
+        </BaseCard>
 
-        <div v-if="loading || logs.data.length" class="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-3 py-2">When</th>
-                        <th class="px-3 py-2">Who</th>
-                        <th class="px-3 py-2">Action</th>
-                        <th class="hidden px-3 py-2 sm:table-cell">Record</th>
-                        <th class="hidden px-3 py-2 md:table-cell">Fields Changed</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <TableSkeleton v-if="loading" :columns="5" />
-                    <tr v-for="log in loading ? [] : logs.data" :key="log.id" class="align-top transition-colors hover:bg-brand-50/40">
+        <BaseTable
+            v-if="loading || logs.data.length"
+            class="mt-6"
+            :loading="loading"
+            :skeleton-columns="5"
+            :columns="[
+                { label: 'When' },
+                { label: 'Who' },
+                { label: 'Action' },
+                { label: 'Record', class: 'hidden sm:table-cell' },
+                { label: 'Fields Changed', class: 'hidden md:table-cell' },
+            ]"
+        >
+                    <tr v-for="log in logs.data" :key="log.id" class="align-top transition-colors hover:bg-brand-50/40">
                         <td class="whitespace-nowrap px-3 py-2 text-slate-500">{{ log.created_at }}</td>
                         <td class="px-3 py-2 font-medium text-slate-800">{{ log.actor }}</td>
                         <td class="px-3 py-2">
@@ -95,9 +96,7 @@ const changeSummary = (log) => {
                             {{ changeSummary(log) ?? '—' }}
                         </td>
                     </tr>
-                </tbody>
-            </table>
-        </div>
+        </BaseTable>
 
         <div v-else class="mt-6">
             <EmptyState

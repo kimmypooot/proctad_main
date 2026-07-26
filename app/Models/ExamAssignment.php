@@ -6,6 +6,7 @@ use App\Enums\AssignmentStatus;
 use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\ScopedByTestingCenter;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
-    'examination_id', 'examination_school_id', 'exam_room_id', 'member_id', 'role', 'field_office_id',
+    'examination_id', 'examination_school_id', 'exam_room_id', 'member_id', 'role', 'field_office_id', 'testing_center_id',
     'status', 'confirmation_sent_at', 'responded_at', 'decline_reason',
     'attendance_confirmed_at', 'attendance_confirmed_by', 'performance_rating', 'remarks',
     'marked_absent_at', 'marked_absent_by', 'covering_for_assignment_id', 'original_role',
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class ExamAssignment extends Model
 {
     /** @use HasFactory<\Database\Factories\ExamAssignmentFactory> */
-    use Auditable, HasFactory;
+    use Auditable, HasFactory, ScopedByTestingCenter;
 
     protected $attributes = [
         'status' => 'pending',

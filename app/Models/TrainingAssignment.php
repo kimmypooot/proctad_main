@@ -3,19 +3,20 @@
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\ScopedByTestingCenter;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'training_id', 'member_id', 'field_office_id',
+    'training_id', 'member_id', 'field_office_id', 'testing_center_id',
     'attendance_confirmed_at', 'attendance_confirmed_by',
 ])]
 class TrainingAssignment extends Model
 {
     /** @use HasFactory<\Database\Factories\TrainingAssignmentFactory> */
-    use Auditable, HasFactory;
+    use Auditable, HasFactory, ScopedByTestingCenter;
 
     protected function casts(): array
     {

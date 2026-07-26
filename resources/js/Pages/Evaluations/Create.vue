@@ -633,7 +633,7 @@ const errorCount = computed(() => Object.keys(form.errors).length);
                         <SectionTitle icon="clipboard-check" label="Exam Preparation" />
                         <RatingGrid
                                 :scale-labels="criteria.rating_scale"
-                            v-model="form.exam_preparation"
+                            v-model="form.exam_preparation" name="exam_preparation"
                             :statements="criteria.exam_preparation"
                             :error="form.errors.exam_preparation"
                         />
@@ -650,22 +650,22 @@ const errorCount = computed(() => Object.keys(form.errors).length);
 
                             <RatingGrid
                                 :scale-labels="criteria.rating_scale"
-                                v-model="form.venue_readiness"
+                                v-model="form.venue_readiness" name="venue_readiness"
                                 title="Venue Readiness"
                                 :statements="criteria.venue_readiness"
                                 :error="form.errors.venue_readiness"
                             />
-                            <TextArea v-model="form.venue_comment" label="Comments on the venue preparation" optional :error="form.errors.venue_comment" />
+                            <TextArea v-model="form.venue_comment" name="venue_comment" label="Comments on the venue preparation" optional :error="form.errors.venue_comment" />
 
                             <RatingGrid
                                 :scale-labels="criteria.rating_scale"
-                                v-model="form.committee_coordination"
+                                v-model="form.committee_coordination" name="committee_coordination"
                                 title="Examination Committee Performance and Coordination"
                                 :statements="criteria.committee_coordination"
                                 :error="form.errors.committee_coordination"
                             />
                             <TextArea
-                                v-model="form.committee_comment"
+                                v-model="form.committee_comment" name="committee_comment"
                                 label="Did you experience any problems related to personnel or coordination?"
                                 optional
                                 :error="form.errors.committee_comment"
@@ -673,13 +673,13 @@ const errorCount = computed(() => Object.keys(form.errors).length);
 
                             <RatingGrid
                                 :scale-labels="criteria.rating_scale"
-                                v-model="form.conduct_of_exam"
+                                v-model="form.conduct_of_exam" name="conduct_of_exam"
                                 title="Conduct of Examination"
                                 :statements="criteria.conduct_of_exam"
                                 :error="form.errors.conduct_of_exam"
                             />
                             <TextArea
-                                v-model="form.conduct_comment"
+                                v-model="form.conduct_comment" name="conduct_comment"
                                 label="Were there any issues encountered during the conduct of the exam?"
                                 optional
                                 :error="form.errors.conduct_comment"
@@ -687,13 +687,13 @@ const errorCount = computed(() => Object.keys(form.errors).length);
 
                             <RatingGrid
                                 :scale-labels="criteria.rating_scale"
-                                v-model="form.examinee_experience"
+                                v-model="form.examinee_experience" name="examinee_experience"
                                 title="Examinee Experience"
                                 :statements="criteria.examinee_experience"
                                 :error="form.errors.examinee_experience"
                             />
                             <TextArea
-                                v-model="form.examinee_comment"
+                                v-model="form.examinee_comment" name="examinee_comment"
                                 label="Did examinees report any concerns about the venue or the process?"
                                 optional
                                 :error="form.errors.examinee_comment"
@@ -704,27 +704,27 @@ const errorCount = computed(() => Object.keys(form.errors).length);
                             <SectionTitle icon="document-check" label="Overall Assessment and Recommendations" />
 
                             <SelectInput
-                                v-model="form.overall_rating"
+                                v-model="form.overall_rating" name="overall_rating"
                                 label="Overall, how would you rate the conduct of the examination at your field office?"
                                 required
                                 :options="overallRatingOptions"
                                 :error="form.errors.overall_rating"
                             />
-                            <TextArea v-model="form.what_worked" label="What worked effectively during the exam?" optional :error="form.errors.what_worked" />
+                            <TextArea v-model="form.what_worked" name="what_worked" label="What worked effectively during the exam?" optional :error="form.errors.what_worked" />
                             <TextArea
-                                v-model="form.challenges"
+                                v-model="form.challenges" name="challenges"
                                 label="What challenges or issues would you recommend addressing for future exams?"
                                 optional
                                 :error="form.errors.challenges"
                             />
                             <TextArea
-                                v-model="form.improvements"
+                                v-model="form.improvements" name="improvements"
                                 label="What areas would you recommend improving for future examinations?"
                                 optional
                                 :error="form.errors.improvements"
                             />
                             <TextArea
-                                v-model="form.suggestions"
+                                v-model="form.suggestions" name="suggestions"
                                 label="What suggestions do you have to further improve venue readiness, staff performance, or the overall examinee experience?"
                                 optional
                                 :error="form.errors.suggestions"

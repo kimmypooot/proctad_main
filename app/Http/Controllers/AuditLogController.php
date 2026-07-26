@@ -25,7 +25,7 @@ class AuditLogController extends Controller
             // Field-office-scoped staff (Field Director and FO Admin) only see
             // activity within their own Field Office (spec 4.2).
             ->when($user->role->isFieldOfficeScoped(),
-                fn ($q) => $q->where('field_office_id', $user->field_office_id))
+                fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
             ->when($request->filled('action'), fn ($q) => $q->where('action', $request->string('action')))
             ->when($request->filled('type'), fn ($q) => $q->where('auditable_type', $request->string('type')))
             ->latest('id')

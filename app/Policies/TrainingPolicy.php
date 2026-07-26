@@ -30,7 +30,7 @@ class TrainingPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $training->field_office_id === $user->field_office_id;
+            && in_array($training->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 
     public function delete(User $user, Training $training): bool
@@ -45,6 +45,6 @@ class TrainingPolicy
         }
 
         return $user->role->isFieldOfficeScoped()
-            && $training->field_office_id === $user->field_office_id;
+            && in_array($training->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 }

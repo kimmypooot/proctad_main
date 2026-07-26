@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'code', 'address', 'is_active'])]
+#[Fillable(['name', 'code', 'address', 'is_active', 'is_regional'])]
 class FieldOffice extends Model
 {
     /** @use HasFactory<\Database\Factories\FieldOfficeFactory> */
@@ -18,6 +18,7 @@ class FieldOffice extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_regional' => 'boolean',
         ];
     }
 

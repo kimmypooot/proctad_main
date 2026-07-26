@@ -28,6 +28,17 @@ class TestingCenterPolicy
         return $this->manage($user, $testingCenter);
     }
 
+    /**
+     * Choose which office administers this center, and so whose signatory signs
+     * for the members serving there. Region-wide roles only: the offices
+     * sharing a center are peers, and letting either claim it would let one
+     * put its own signature on the other's members' certificates.
+     */
+    public function designateAdministering(User $user, TestingCenter $testingCenter): bool
+    {
+        return $user->role->isRegionWide();
+    }
+
     private function manage(User $user, TestingCenter $testingCenter): bool
     {
         if ($user->hasRole(UserRole::SuperAdmin, UserRole::EsdAdmin)) {

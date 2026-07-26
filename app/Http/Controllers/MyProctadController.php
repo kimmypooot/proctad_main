@@ -43,6 +43,9 @@ class MyProctadController extends Controller
                 'mobile_number' => $member->mobile_number,
                 'agency' => $member->agency,
                 'position' => $member->position,
+                // A test administrator serves a testing center; the field office
+                // only applies to the members who are CSC staff themselves.
+                'testing_center' => $member->testingCenter?->name,
                 'field_office' => $member->fieldOffice?->name,
                 'status_label' => $member->status->label(),
                 'status_variant' => $member->status->badgeVariant(),
@@ -161,7 +164,10 @@ class MyProctadController extends Controller
                         'role_label' => $assignment->role->label(),
                         'status_label' => $assignment->status->label(),
                         'status_variant' => $assignment->status->badgeVariant(),
-                        'testing_center' => $assignment->examinationSchool?->school?->name,
+                        // The school served at, not the member's testing center —
+                        // it was keyed and labelled as the latter, which read as a
+                        // field office/center on a record that is about a venue.
+                        'venue' => $assignment->examinationSchool?->school?->name,
                         // Withheld rooms are omitted from the payload entirely, not
                         // just hidden in the template — this page is the member's
                         // own data, so the value must not be readable in devtools.
@@ -206,7 +212,7 @@ class MyProctadController extends Controller
 
         abort_unless($member, 404);
 
-        $member->load('fieldOffice:id,name,code', 'assignments.examination:id,title,exam_type_id,exam_date');
+        $member->load('fieldOffice:id,name,code', 'testingCenter:id,name', 'assignments.examination:id,title,exam_type_id,exam_date');
 
         return view('members.service-history-print', [
             'member' => $member,
@@ -401,7 +407,7 @@ class MyProctadController extends Controller
 
     private function ownMember(Request $request): ?Member
     {
-        return Member::with('fieldOffice:id,name,code', 'requirements', 'user:id,google_avatar')
+        return Member::with('fieldOffice:id,name,code', 'testingCenter:id,name', 'requirements', 'user:id,google_avatar')
             ->where('user_id', $request->user()->id)
             ->first();
     }

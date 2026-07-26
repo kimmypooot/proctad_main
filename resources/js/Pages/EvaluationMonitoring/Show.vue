@@ -4,6 +4,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 
 const props = defineProps({
@@ -40,7 +41,7 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
         </DashboardPageHeader>
 
         <!-- Header card -->
-        <div class="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-6 sm:grid-cols-2 lg:grid-cols-4">
+        <BaseCard padding="none" class="mt-6 grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div>
                 <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Examination</p>
                 <p class="mt-0.5 text-sm text-slate-900">{{ evaluation.examination?.title }}</p>
@@ -57,12 +58,12 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
                 <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Submitted</p>
                 <p class="mt-0.5 text-sm text-slate-900">{{ evaluation.submitted_at }}</p>
             </div>
-        </div>
+        </BaseCard>
 
         <!-- Room ratings (Supervising Examiner) -->
         <div v-if="isSupervisingExaminer && evaluation.room_ratings?.length" class="mt-6 space-y-4">
             <h2 class="text-base font-semibold text-slate-900">Room Examiner / Proctor Ratings</h2>
-            <div v-for="(rating, index) in evaluation.room_ratings" :key="index" class="rounded-xl border border-slate-200 bg-white p-6">
+            <BaseCard v-for="(rating, index) in evaluation.room_ratings" :key="index" padding="none" class="p-6">
                 <div class="flex items-center justify-between">
                     <p class="font-medium text-slate-900">{{ rating.ratee_name }}</p>
                     <!-- Not prefixed: room_number already reads "Room-001". -->
@@ -77,11 +78,11 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
                     </div>
                 </div>
                 <p v-if="rating.comment" class="mt-3 text-sm text-slate-600">{{ rating.comment }}</p>
-            </div>
+            </BaseCard>
         </div>
 
         <!-- Room Readiness -->
-        <div v-if="evaluation.room_readiness" class="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+        <BaseCard v-if="evaluation.room_readiness" padding="none" class="mt-6 p-6">
             <h2 class="text-base font-semibold text-slate-900">Room Readiness</h2>
             <ul class="mt-4 space-y-2">
                 <li v-for="(statement, index) in criteria.room_readiness" :key="index" class="flex items-start gap-2 text-sm">
@@ -93,10 +94,10 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
                     <span :class="evaluation.room_readiness[index] ? 'text-slate-700' : 'text-slate-400'">{{ statement }}</span>
                 </li>
             </ul>
-        </div>
+        </BaseCard>
 
         <!-- Exam Preparation (Room Examiner/Proctor) -->
-        <div v-if="isRoomRole && evaluation.exam_preparation" class="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+        <BaseCard v-if="isRoomRole && evaluation.exam_preparation" padding="none" class="mt-6 p-6">
             <h2 class="text-base font-semibold text-slate-900">Exam Preparation</h2>
             <ul class="mt-4 space-y-2">
                 <li v-for="(statement, index) in criteria.exam_preparation" :key="index" class="flex items-center justify-between text-sm">
@@ -105,11 +106,11 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
                     <span v-else class="text-slate-300">—</span>
                 </li>
             </ul>
-        </div>
+        </BaseCard>
 
         <!-- Examination Administration (Chief Examiner / Supervising Examiner) -->
         <template v-if="showAdministration">
-            <div class="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+            <BaseCard padding="none" class="mt-6 p-6">
                 <h2 class="text-base font-semibold text-slate-900">Examination Administration</h2>
 
                 <div
@@ -133,9 +134,9 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
                     <p v-else class="mt-2 text-sm text-slate-400">Not rated.</p>
                     <p v-if="evaluation[section.comment]" class="mt-2 text-sm text-slate-600">{{ evaluation[section.comment] }}</p>
                 </div>
-            </div>
+            </BaseCard>
 
-            <div class="mt-6 rounded-xl border border-slate-200 bg-white p-6">
+            <BaseCard padding="none" class="mt-6 p-6">
                 <h2 class="text-base font-semibold text-slate-900">Overall Assessment and Recommendations</h2>
                 <p v-if="overallRatingLabel" class="mt-2 text-sm text-slate-700">{{ overallRatingLabel }}</p>
 
@@ -157,7 +158,7 @@ const overallRatingLabel = computed(() => props.criteria.overall_rating_options[
                         <dd class="mt-0.5 text-sm text-slate-700">{{ evaluation.suggestions }}</dd>
                     </div>
                 </dl>
-            </div>
+            </BaseCard>
         </template>
     </DashboardLayout>
 </template>

@@ -29,6 +29,7 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use Auditable, HasFactory, Notifiable;
 
+
     /**
      * Get the attributes that should be cast.
      *
@@ -80,6 +81,70 @@ class User extends Authenticatable
             : [];
 
         return $this->testingCenters()->sync($centerIds);
+    }
+
+    /**
+     * The testing centers this user's jurisdiction covers. Field-office-scoped
+     * staff (FO Admin, Field Director) see and manage members by center rather
+     * than by office, which is what lets Leyte I and Leyte II staff share the
+     * Tacloban City roster they jointly serve.
+     *
+     * Read live from field_office_testing_center rather than the user's own
+     * testing_center_user pivot. The pivot is derived from the same table (see
+     * syncTestingCentersFromFieldOffice) but only re-syncs when the user is
+     * saved, so it goes stale the moment an office gains a center — and
+     * authorization must never depend on when a resync last ran.
+     *
+     * Deliberately not memoized on the instance. A User can outlive the state
+     * it was read from — a queued job, a console command, or a request that
+     * links a new center and then authorizes against it — and a cached
+     * jurisdiction that has gone stale silently grants or denies the wrong
+     * access. The lookup is a primary-key scan of a table with one row per
+     * office-center pair, so the cost is not worth the risk.
+     *
+     * @return list<int>
+     */
+    public function scopedTestingCenterIds(): array
+    {
+        if ($this->field_office_id === null) {
+            return [];
+        }
+
+        return DB::table('field_office_testing_center')
+            ->where('field_office_id', $this->field_office_id)
+            ->pluck('testing_center_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Every field office sharing any of this user's testing centers, including
+     * their own. Records denormalize `field_office_id` at the time they are
+     * written (certificates, blacklists, audit logs), so widening the comparison
+     * to the sibling offices is what makes those records visible across a shared
+     * jurisdiction without stamping a center onto all twelve tables.
+     *
+     * @return list<int>
+     */
+    public function scopedFieldOfficeIds(): array
+    {
+        $centerIds = $this->scopedTestingCenterIds();
+
+        $ids = $centerIds === []
+            ? []
+            : DB::table('field_office_testing_center')
+                ->whereIn('testing_center_id', $centerIds)
+                ->distinct()
+                ->pluck('field_office_id')
+                ->all();
+
+        // An office with no centers linked yet still scopes to itself, so a
+        // half-configured office sees its own records rather than everything.
+        if ($this->field_office_id !== null && ! in_array($this->field_office_id, $ids, true)) {
+            $ids[] = $this->field_office_id;
+        }
+
+        return array_values(array_map('intval', $ids));
     }
 
     public function member(): HasOne

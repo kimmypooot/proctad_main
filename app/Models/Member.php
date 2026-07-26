@@ -6,6 +6,7 @@ use App\Enums\MemberStatus;
 use App\Enums\UserRole;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'first_name', 'middle_name', 'last_name', 'suffix', 'sex', 'date_of_birth', 'email',
-    'mobile_number', 'agency', 'position', 'photo_path', 'field_office_id',
+    'mobile_number', 'agency', 'position', 'photo_path', 'field_office_id', 'testing_center_id',
     'status', 'disqualification_remarks', 'user_id',
 ])]
 class Member extends Model
@@ -132,6 +133,99 @@ class Member extends Model
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);
+    }
+
+    /**
+     * The testing center (city) this member serves — their jurisdiction, and
+     * what decides which staff may see and manage them. Null for regional-office
+     * members, who serve region-wide, and for the handful of members whose
+     * office handles several centers and who have not been placed in one yet.
+     */
+    public function testingCenter(): BelongsTo
+    {
+        return $this->belongsTo(TestingCenter::class);
+    }
+
+    /**
+     * The office administering this member for signing purposes — whose
+     * signatory appears on their ID card and certificates.
+     *
+     * CSC staff are administered by the office they work for. External test
+     * administrators have no office of their own, so it comes from the office
+     * that administers their testing center.
+     */
+    public function administeringFieldOfficeId(): ?int
+    {
+        return $this->field_office_id
+            ?? $this->testingCenter?->administeringFieldOfficeId();
+    }
+
+    /**
+     * Whether this member may be assigned to any venue in the region rather
+     * than only their own testing center.
+     *
+     * Read from their staff account, not from the member record: a field office
+     * describes who someone works for, which is a fact about CSC employees.
+     * External test administrators work for their own agency and have none.
+     *
+     * Two ways to qualify, because region-wide staff are recorded both ways.
+     * ESD Admins and the directors hold no field office at all — their role is
+     * already region-wide, so none was ever needed — while other regional
+     * office employees are placed there by office.
+     */
+    public function isRegionWide(): bool
+    {
+        return $this->user !== null
+            && ($this->user->role->isRegionWide() || (bool) $this->user->fieldOffice?->is_regional);
+    }
+
+    /** The SQL form of isRegionWide(), for use inside a query. */
+    private static function regionWideConstraint(): \Closure
+    {
+        return fn (Builder $query) => $query->whereHas('user', fn (Builder $u) => $u
+            ->whereIn('role', UserRole::regionWideValues())
+            ->orWhereHas('fieldOffice', fn (Builder $o) => $o->where('is_regional', true)));
+    }
+
+    /** Members whose staff account gives them region-wide reach. */
+    public function scopeServingRegionWide(Builder $query): Builder
+    {
+        return $query->where(self::regionWideConstraint());
+    }
+
+    /** The complement: members confined to the testing center they serve. */
+    public function scopeNotServingRegionWide(Builder $query): Builder
+    {
+        return $query->whereNot(self::regionWideConstraint());
+    }
+
+    /**
+     * Members a field-office-scoped user may draw on: those serving a testing
+     * center their office covers, plus regional-office members, who serve
+     * region-wide and so belong to every office's pool.
+     *
+     * The single definition of "within my jurisdiction" for member queries —
+     * used by the members list, the assignment candidate pool, and the bulk
+     * assignment filter, which must agree or staff see people they cannot act on.
+     */
+    public function scopeWithinJurisdictionOf(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->whereIn('testing_center_id', $user->scopedTestingCenterIds())
+            ->orWhere(self::regionWideConstraint()));
+    }
+
+    /**
+     * Row-level form of scopeWithinJurisdictionOf, for guards on a single
+     * member. Named differently from the scope on purpose: an instance method
+     * called `withinJurisdictionOf` would shadow the scope for any static-style
+     * call, and the two would silently diverge.
+     */
+    public function isWithinJurisdictionOf(User $user): bool
+    {
+        return $this->isRegionWide()
+            || ($this->testing_center_id !== null
+                && in_array($this->testing_center_id, $user->scopedTestingCenterIds(), true));
     }
 
     public function requirements(): HasMany

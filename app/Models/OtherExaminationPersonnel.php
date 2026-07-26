@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PersonnelType;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'oep_id', 'first_name', 'middle_name', 'last_name', 'suffix', 'sex',
     'contact_number', 'email', 'agency', 'position', 'personnel_type',
-    'field_office_id', 'photo_path', 'is_active', 'created_by',
+    'field_office_id', 'testing_center_id', 'photo_path', 'is_active', 'created_by',
 ])]
 class OtherExaminationPersonnel extends Model
 {
@@ -94,6 +95,70 @@ class OtherExaminationPersonnel extends Model
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);
+    }
+
+    /**
+     * The testing center (city) this person works in — their jurisdiction, and
+     * what decides which staff may see and manage them, exactly as for members.
+     * Null only for regional-office personnel, who serve region-wide.
+     */
+    public function testingCenter(): BelongsTo
+    {
+        return $this->belongsTo(TestingCenter::class);
+    }
+
+    /**
+     * Whether this person serves region-wide rather than out of one field
+     * office — true for regional-office (RO8) personnel, who may be assigned
+     * to any venue in the region.
+     *
+     * Region-wide is the regional office itself, never a missing office: a null
+     * `field_office_id` used to be read as region-wide (legacy
+     * `proctad_non_exam_personnel.field_office_id`, "NULL = region-wide") but
+     * nothing ever implemented that, so those rows were invisible to every
+     * field office instead. The column is now required and backfilled — see
+     * 2026_07_26_000003_require_field_office_on_other_examination_personnel.
+     *
+     * Prefers an already-loaded relation, matching Member::isRegionWide():
+     * this is called per row while presenting lists.
+     */
+    public function isRegionWide(): bool
+    {
+        return (bool) ($this->relationLoaded('fieldOffice')
+            ? $this->fieldOffice?->is_regional
+            : $this->fieldOffice()->value('is_regional'));
+    }
+
+    /**
+     * Personnel a field-office-scoped user may see and manage: those working in
+     * a testing center their office covers, plus regional-office personnel, who
+     * serve region-wide and so belong to every office's pool.
+     *
+     * Scoped by center rather than by office for the same reason members are:
+     * Leyte I and Leyte II both serve Tacloban City, and staff of either must
+     * see the personnel working there whichever office hired them.
+     *
+     * The single definition of "within my jurisdiction" for OEP queries — used
+     * by the list, the scanner lookup, and assignment, which must agree or
+     * staff see people they cannot act on.
+     */
+    public function scopeWithinJurisdictionOf(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->whereIn('testing_center_id', $user->scopedTestingCenterIds())
+            ->orWhereHas('fieldOffice', fn (Builder $o) => $o->where('is_regional', true)));
+    }
+
+    /**
+     * Row-level form of scopeWithinJurisdictionOf, for guards on a single
+     * record. Named differently from the scope for the same reason as
+     * Member::isWithinJurisdictionOf.
+     */
+    public function isWithinJurisdictionOf(User $user): bool
+    {
+        return $this->isRegionWide()
+            || ($this->testing_center_id !== null
+                && in_array($this->testing_center_id, $user->scopedTestingCenterIds(), true));
     }
 
     public function createdBy(): BelongsTo

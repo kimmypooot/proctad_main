@@ -8,6 +8,8 @@ use App\Enums\UserRole;
 use App\Models\Certificate;
 use App\Models\ExamAssignment;
 use App\Models\FieldOffice;
+use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -17,16 +19,28 @@ class CertificatePagesTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * A certificate belonging to the given office's jurisdiction. Staff see
+     * certificates by testing center now, so "belongs to this office" means its
+     * member serves a center that office handles — the office id itself is only
+     * set for members who are CSC staff, which these are not.
+     */
     private function certificate(CertificateType $type, CertificateStatus $status, ?int $fieldOfficeId = null): Certificate
     {
-        $assignment = ExamAssignment::factory()->create(
-            $fieldOfficeId ? ['field_office_id' => $fieldOfficeId] : [],
-        );
+        $member = $fieldOfficeId
+            ? Member::factory()->create([
+                'field_office_id' => null,
+                'testing_center_id' => TestingCenter::factory()->forFieldOffice($fieldOfficeId)->create()->id,
+            ])
+            : Member::factory()->create(['field_office_id' => null]);
+
+        $assignment = ExamAssignment::factory()->create(['member_id' => $member->id]);
 
         return Certificate::create([
             'type' => $type,
             'member_id' => $assignment->member_id,
             'field_office_id' => $assignment->field_office_id,
+            'testing_center_id' => $assignment->testing_center_id,
             'certifiable_type' => ExamAssignment::class,
             'certifiable_id' => $assignment->id,
             'status' => $status,
@@ -51,6 +65,33 @@ class CertificatePagesTest extends TestCase
             ->get('/certificates?status=released')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('certificates.data', 1));
+    }
+
+    public function test_index_flags_released_certificates_with_no_signature(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+
+        // Released without a signature snapshot — the case this flag exists for.
+        $unsigned = $this->certificate(CertificateType::Appreciation, CertificateStatus::Released);
+        $unsigned->update(['signatory_signature_path' => null]);
+
+        // Released with a signature snapshot — must not be flagged.
+        $signed = $this->certificate(CertificateType::Appearance, CertificateStatus::Released);
+        $signed->update(['signatory_signature_path' => 'signatures/example.png']);
+
+        // Pending is never "unsigned" regardless of snapshot — it isn't issued yet.
+        $pending = $this->certificate(CertificateType::DesignationOrder, CertificateStatus::Pending);
+
+        $this->actingAs($admin)
+            ->get('/certificates')
+            ->assertOk()
+            ->assertInertia(function (Assert $page) use ($unsigned, $signed, $pending) {
+                $rows = collect($page->toArray()['props']['certificates']['data']);
+
+                $this->assertTrue($rows->firstWhere('id', $unsigned->id)['unsigned']);
+                $this->assertFalse($rows->firstWhere('id', $signed->id)['unsigned']);
+                $this->assertFalse($rows->firstWhere('id', $pending->id)['unsigned']);
+            });
     }
 
     public function test_member_cannot_view_certificates_index(): void

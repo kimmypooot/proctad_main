@@ -4,13 +4,16 @@ import { router } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import BaseTable from '@/Components/BaseTable.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import EditMemberModal from './EditMemberModal.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import MemberIdCard from '@/Components/MemberIdCard.vue';
 import QrCode from '@/Components/QrCode.vue';
 import StepTabs from '@/Components/StepTabs.vue';
+import UserAvatar from '@/Components/UserAvatar.vue';
 import { useDetailsResource } from '@/Composables/useDetailsResource';
 
 const props = defineProps({
@@ -141,6 +144,10 @@ const detailItems = (m) => [
     ['Email', m.email],
     ['Mobile Number', m.mobile_number],
     ['Agency', m.agency],
+    // The center a member serves is their jurisdiction; the field office only
+    // applies to the members who are CSC staff, so it follows rather than
+    // standing in for the center.
+    ['Testing Center', m.testing_center?.name ?? '—'],
     ['Field Office', m.field_office?.name ?? '—'],
     ['Position', m.position ?? '—'],
     ['Registered', m.created_at],
@@ -149,7 +156,7 @@ const detailItems = (m) => [
 
 <template>
     <BaseModal :show="show" title="Member Details" max-width="4xl" @close="emit('close')">
-        <div v-if="loading" class="max-h-[75vh] space-y-6 overflow-y-auto -mx-6 -mt-5 px-6 pt-5 animate-pulse">
+        <div v-if="loading" class="space-y-6 animate-pulse">
             <!-- Header skeleton -->
             <div class="flex items-start justify-between gap-4">
                 <div class="flex items-start gap-4">
@@ -189,17 +196,12 @@ const detailItems = (m) => [
                 <div class="flex items-start justify-between gap-4">
                     <div class="flex min-w-0 items-start gap-4">
                         <div class="shrink-0">
-                            <img
-                                v-if="member().photo_url"
-                                :src="member().photo_url"
-                                :alt="member().name"
-                                class="h-12 w-12 rounded-full object-cover ring-2 ring-slate-100"
-                            >
-                            <div
-                                v-else
-                                class="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-slate-100"
-                            >
-                                {{ member().first_name?.[0] }}{{ member().last_name?.[0] }}
+                            <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-slate-100">
+                                <UserAvatar
+                                    :src="member().photo_url"
+                                    :name="member().name"
+                                    :initials="`${member().first_name?.[0] ?? ''}${member().last_name?.[0] ?? ''}`"
+                                />
                             </div>
                         </div>
                         <div class="min-w-0">
@@ -207,6 +209,16 @@ const detailItems = (m) => [
                             <h3 class="break-words text-xl font-semibold text-slate-900">{{ member().name }}</h3>
                             <div class="mt-1 flex flex-wrap items-center gap-2">
                                 <BaseBadge :variant="member().status_variant">{{ member().status_label }}</BaseBadge>
+                                <BaseBadge v-if="member().testing_center" variant="neutral">
+                                    <AppIcon name="map-pin" class="h-3.5 w-3.5" />
+                                    {{ member().testing_center.name }}
+                                </BaseBadge>
+                                <!-- Left unplaced by the testing-center backfill — staff
+                                     opening the record are the ones who can fix it. -->
+                                <BaseBadge v-else-if="member().needs_testing_center" variant="warning">
+                                    <AppIcon name="map-pin" class="h-3.5 w-3.5" />
+                                    Needs a testing center
+                                </BaseBadge>
                                 <BaseBadge v-if="member().field_office" variant="neutral">
                                     <AppIcon name="building-office" class="h-3.5 w-3.5" />
                                     {{ member().field_office.name }}
@@ -233,7 +245,7 @@ const detailItems = (m) => [
                 <StepTabs v-model="activeTab" :steps="tabs" aria-label="Member details sections" />
             </div>
 
-            <div class="-mx-6 max-h-[60vh] overflow-y-auto px-6 py-5">
+            <div class="pt-5">
                 <!-- Details -->
                 <div v-if="activeTab === 'details'">
                     <dl class="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
@@ -313,7 +325,7 @@ const detailItems = (m) => [
 
                 <!-- Digital ID -->
                 <div v-else-if="activeTab === 'id'" class="grid gap-6 md:grid-cols-2">
-                    <div class="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-6">
+                    <BaseCard padding="none" class="flex min-w-0 flex-col p-6">
                         <div class="flex items-center justify-between gap-2 print:hidden">
                             <h4 class="text-base font-semibold text-slate-900">ID Card</h4>
                             <BaseButton variant="outline" size="sm" @click="printCard">Print ID Card</BaseButton>
@@ -321,9 +333,9 @@ const detailItems = (m) => [
                         <div id="print-id-card" class="mt-4 flex flex-1 items-center justify-center">
                             <MemberIdCard :card="idCard()" />
                         </div>
-                    </div>
+                    </BaseCard>
 
-                    <div class="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-6 print:hidden">
+                    <BaseCard padding="none" class="flex min-w-0 flex-col p-6 print:hidden">
                         <div class="flex items-center justify-between gap-2">
                             <h4 class="text-base font-semibold text-slate-900">QR Code</h4>
                             <div class="flex gap-2">
@@ -335,7 +347,7 @@ const detailItems = (m) => [
                             <QrCode ref="qrRef" :value="idCard().qr_value" :size="200" />
                             <p class="break-all text-center text-xs text-slate-500">{{ idCard().qr_value }}</p>
                         </div>
-                    </div>
+                    </BaseCard>
                 </div>
 
                 <!-- Service History -->
@@ -351,18 +363,17 @@ const detailItems = (m) => [
                             </BaseButton>
                         </div>
                     </div>
-                    <div v-if="serviceHistory().length" class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                        <table class="min-w-full divide-y divide-slate-200 text-sm">
-                            <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                <tr>
-                                    <th class="px-3 py-2">Examination</th>
-                                    <th class="px-3 py-2">Date</th>
-                                    <th class="hidden px-3 py-2 sm:table-cell">Role Performed</th>
-                                    <th class="hidden px-3 py-2 md:table-cell">Attendance</th>
-                                    <th class="px-3 py-2">Rating</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
+                    <BaseTable
+                        v-if="serviceHistory().length"
+                        class="mt-4"
+                        :columns="[
+                            { label: 'Examination' },
+                            { label: 'Date' },
+                            { label: 'Role Performed', class: 'hidden sm:table-cell' },
+                            { label: 'Attendance', class: 'hidden md:table-cell' },
+                            { label: 'Rating' },
+                        ]"
+                    >
                                 <tr v-for="record in serviceHistory()" :key="record.id" class="transition-colors hover:bg-brand-50/40">
                                     <td class="px-3 py-2">
                                         <p class="font-medium text-slate-900">{{ record.exam_title }}</p>
@@ -384,9 +395,7 @@ const detailItems = (m) => [
                                         <span v-else class="text-slate-400">—</span>
                                     </td>
                                 </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    </BaseTable>
                     <div v-else class="mt-4">
                         <EmptyState
                             icon="clock"
