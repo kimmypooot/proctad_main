@@ -5,11 +5,17 @@ import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import FileInput from '@/Components/FileInput.vue';
+import FormErrorSummary from '@/Components/FormErrorSummary.vue';
 import TextInput from '@/Components/TextInput.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
+import { useFormErrors } from '@/Composables/useFormErrors';
+
+/** Keys whose humanised form would not match the label on the control. */
+const errorLabels = { photo: 'ID Photo' };
 
 const props = defineProps({
     member: { type: Object, default: null },
@@ -23,7 +29,11 @@ const compliancePercent = props.requirementsTotal
     : 0;
 
 const detailFields = (member) => [
-    ['building-office', 'Field Office', member.field_office],
+    // A test administrator is based at a testing center. Only the members who
+    // are CSC staff have a field office of their own, so it shows when set
+    // rather than standing in for the center.
+    ['map-pin', 'Testing Center', member.testing_center ?? '—'],
+    ...(member.field_office ? [['building-library', 'Field Office', member.field_office]] : []),
     ['briefcase', 'Agency', member.agency],
     ['identification', 'Position', member.position ?? '—'],
     ['envelope', 'Email', member.email],
@@ -72,6 +82,8 @@ const form = useForm({
     photo: null,
 });
 
+useFormErrors(form);
+
 const startEditing = () => {
     form.reset();
     form.clearErrors();
@@ -108,7 +120,7 @@ const submit = () => form
 
         <div v-else class="mt-6 grid gap-6 lg:grid-cols-3">
             <!-- Identity card -->
-            <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <BaseCard padding="none" class="overflow-hidden">
                 <div class="bg-gradient-to-br from-brand-700 to-brand-800 px-6 pb-8 pt-6 text-white">
                     <div class="flex items-center gap-4">
                         <div class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/30 bg-white/10">
@@ -150,8 +162,9 @@ const submit = () => form
                 </dl>
 
                 <form v-else class="space-y-4 p-6" novalidate @submit.prevent="submit">
+                    <FormErrorSummary :errors="form.errors" :labels="errorLabels" />
                     <FileInput
-                        v-model="form.photo"
+                        v-model="form.photo" name="photo"
                         label="ID Photo"
                         optional
                         compress
@@ -161,13 +174,13 @@ const submit = () => form
                     />
                     <div class="grid grid-cols-2 gap-3">
                         <TextInput
-                            v-model="form.first_name"
+                            v-model="form.first_name" name="first_name"
                             label="First Name"
                             required
                             :error="form.errors.first_name"
                         />
                         <TextInput
-                            v-model="form.last_name"
+                            v-model="form.last_name" name="last_name"
                             label="Last Name"
                             required
                             :error="form.errors.last_name"
@@ -175,13 +188,13 @@ const submit = () => form
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <TextInput
-                            v-model="form.middle_name"
+                            v-model="form.middle_name" name="middle_name"
                             label="Middle Name"
                             optional
                             :error="form.errors.middle_name"
                         />
                         <TextInput
-                            v-model="form.suffix"
+                            v-model="form.suffix" name="suffix"
                             label="Suffix"
                             optional
                             placeholder="Jr., III"
@@ -195,7 +208,7 @@ const submit = () => form
                          members from correcting the one address the system actually
                          contacts them on. -->
                     <TextInput
-                        v-model="form.email"
+                        v-model="form.email" name="email"
                         label="Email Address"
                         type="email"
                         required
@@ -203,7 +216,7 @@ const submit = () => form
                         hint="Where we send assignment confirmations and certificate notices — keep it an address you can read. This doesn't change how you sign in."
                     />
                     <TextInput
-                        v-model="form.mobile_number"
+                        v-model="form.mobile_number" name="mobile_number"
                         label="Mobile Number"
                         required
                         inputmode="tel"
@@ -211,13 +224,13 @@ const submit = () => form
                         :error="form.errors.mobile_number"
                     />
                     <TextInput
-                        v-model="form.position"
+                        v-model="form.position" name="position"
                         label="Position"
                         optional
                         :error="form.errors.position"
                     />
                     <p class="text-xs text-slate-400">
-                        Sex, agency, and Field Office are managed by your Field Office — contact them to update these.
+                        Sex, agency, and Testing Center are managed by your Field Office — contact them to update these.
                     </p>
                     <div class="flex justify-end gap-2 pt-2">
                         <BaseButton type="button" variant="outline" size="sm" :disabled="form.processing" @click="editing = false">
@@ -228,10 +241,10 @@ const submit = () => form
                         </BaseButton>
                     </div>
                 </form>
-            </div>
+            </BaseCard>
 
             <!-- Eligibility overview (read-only) -->
-            <div class="rounded-xl border border-slate-200 bg-white p-6 lg:col-span-2">
+            <BaseCard class="lg:col-span-2">
                 <div class="flex items-center justify-between">
                     <h2 class="text-base font-semibold text-slate-900">Eligibility Requirements</h2>
                     <BaseBadge :variant="compliedCount === requirementsTotal ? 'success' : 'warning'">
@@ -296,7 +309,7 @@ const submit = () => form
                     You can submit supporting documents here (PDF, JPG or PNG, up to 5&nbsp;MB). Your
                     Field Office verifies each one — contact them about anything already verified.
                 </p>
-            </div>
+            </BaseCard>
         </div>
     </DashboardLayout>
 </template>

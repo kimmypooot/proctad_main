@@ -5,6 +5,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import AppLogo from '@/Components/AppLogo.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
+import DropdownMenu from '@/Components/DropdownMenu.vue';
 import ToastContainer from '@/Components/ToastContainer.vue';
 import Tooltip from '@/Components/Tooltip.vue';
 import UserAvatar from '@/Components/UserAvatar.vue';
@@ -20,8 +21,6 @@ watch(() => page.props.flash, (flash) => {
 }, { immediate: true });
 const sidebarOpen = ref(false);
 const sidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === 'true');
-const notificationsOpen = ref(false);
-const userMenuOpen = ref(false);
 const notifications = computed(() => page.props.notifications ?? { unread_count: 0, items: [] });
 
 /**
@@ -72,8 +71,6 @@ onBeforeUnmount(() => {
 });
 
 const openNotification = (notification) => {
-    notificationsOpen.value = false;
-
     if (notification.read_at) {
         if (notification.url) router.visit(notification.url);
         return;
@@ -446,9 +443,18 @@ const workspace = computed(() => page.props.workspace ?? 'staff');
 const inMemberWorkspace = computed(() => workspace.value === 'member');
 const canSwitchWorkspace = computed(() => page.props.canSwitchWorkspace ?? false);
 
-const navItems = computed(() => (inMemberWorkspace.value
-    ? navByRole.member
-    : navByRole[user.value?.role] ?? navByRole.member));
+const navItems = computed(() => {
+    const groups = inMemberWorkspace.value
+        ? navByRole.member
+        : navByRole[user.value?.role] ?? navByRole.member;
+
+    // Drop "coming soon" placeholders (href '#') so the sidebar never renders a
+    // dead, unclickable affordance; skip any section left empty as a result. The
+    // dashboard keeps these as clearly-labelled disabled cards instead.
+    return groups
+        .map((group) => ({ ...group, items: group.items.filter((item) => item.href !== '#') }))
+        .filter((group) => group.items.length);
+});
 
 // In the member workspace a staff user is acting as a PROCTAD member, so the
 // header must say so — otherwise "Super Administrator" sits above a member-only
@@ -458,7 +464,6 @@ const roleLabel = computed(() => (inMemberWorkspace.value
     : roleLabels[user.value?.role] ?? 'User'));
 
 const switchWorkspace = (target) => {
-    userMenuOpen.value = false;
     router.post('/workspace', { workspace: target });
 };
 
@@ -594,7 +599,29 @@ const logout = () => {
                 </template>
             </nav>
 
-            <div class="border-t border-brand-800 p-4" :class="sidebarCollapsed && 'lg:px-2'">
+            <div class="space-y-1 border-t border-brand-800 p-4" :class="sidebarCollapsed && 'lg:px-2'">
+                <!--
+                    Switching hats is a frequent move for dual-role staff, so it
+                    sits in the sidebar next to Log out rather than only behind
+                    the account menu. Only staff who hold an accreditation see it.
+                -->
+                <button
+                    v-if="canSwitchWorkspace"
+                    type="button"
+                    :title="inMemberWorkspace ? 'Back to staff console' : 'Switch to my PROCTAD'"
+                    class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-brand-100 transition-colors hover:bg-brand-800 hover:text-white"
+                    :class="sidebarCollapsed && 'lg:justify-center lg:px-2'"
+                    @click="closeMobileSidebar(); switchWorkspace(inMemberWorkspace ? 'staff' : 'member')"
+                >
+                    <AppIcon
+                        :name="inMemberWorkspace ? 'building-office' : 'identification'"
+                        class="h-4 w-4 shrink-0"
+                    />
+                    <span :class="sidebarCollapsed && 'lg:hidden'">
+                        {{ inMemberWorkspace ? 'Back to staff console' : 'Switch to my PROCTAD' }}
+                    </span>
+                </button>
+
                 <button
                     type="button"
                     title="Log out"
@@ -654,34 +681,29 @@ const logout = () => {
                         <AppIcon name="x-mark" class="h-3.5 w-3.5 shrink-0 text-brand-400" />
                     </button>
 
-                    <div class="relative">
-                        <Tooltip text="Notifications">
-                        <button
-                            type="button"
-                            class="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                            aria-label="Notifications"
-                            @click="notificationsOpen = !notificationsOpen"
-                        >
-                            <AppIcon name="bell" class="h-5 w-5" />
-                            <span
-                                v-if="notifications.unread_count > 0"
-                                class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white"
-                            >
-                                {{ notifications.unread_count > 9 ? '9+' : notifications.unread_count }}
-                            </span>
-                        </button>
-                        </Tooltip>
+                    <DropdownMenu align="right" panel-class="mt-2 w-80 rounded-lg" :auto-focus="false">
+                        <template #trigger="{ toggle, triggerAttrs, setTrigger }">
+                            <Tooltip text="Notifications">
+                                <button
+                                    :ref="setTrigger"
+                                    type="button"
+                                    class="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                    aria-label="Notifications"
+                                    v-bind="triggerAttrs"
+                                    @click="toggle"
+                                >
+                                    <AppIcon name="bell" class="h-5 w-5" />
+                                    <span
+                                        v-if="notifications.unread_count > 0"
+                                        class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white"
+                                    >
+                                        {{ notifications.unread_count > 9 ? '9+' : notifications.unread_count }}
+                                    </span>
+                                </button>
+                            </Tooltip>
+                        </template>
 
-                        <div
-                            v-if="notificationsOpen"
-                            class="fixed inset-0 z-30"
-                            @click="notificationsOpen = false"
-                        />
-
-                        <div
-                            v-if="notificationsOpen"
-                            class="absolute right-0 z-40 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg"
-                        >
+                        <template #default="{ close }">
                             <div class="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
                                 <p class="text-sm font-semibold text-slate-700">Notifications</p>
                                 <button
@@ -701,52 +723,49 @@ const logout = () => {
                                     v-for="item in notifications.items"
                                     :key="item.id"
                                     type="button"
-                                    class="block w-full border-b border-slate-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50"
+                                    role="menuitem"
+                                    class="block w-full border-b border-slate-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
                                     :class="!item.read_at && 'bg-brand-50/60'"
-                                    @click="openNotification(item)"
+                                    @click="close(); openNotification(item)"
                                 >
                                     <p class="text-sm font-medium text-slate-800">{{ item.title }}</p>
                                     <p class="mt-0.5 text-xs text-slate-500">{{ item.body }}</p>
                                     <p class="mt-1 text-[11px] text-slate-400">{{ item.created_at }}</p>
                                 </button>
                             </div>
-                        </div>
-                    </div>
+                        </template>
+                    </DropdownMenu>
 
-                    <div class="relative">
-                        <button
-                            type="button"
-                            class="flex items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
-                            aria-label="Account menu"
-                            @click="userMenuOpen = !userMenuOpen"
-                        >
-                            <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-xs font-semibold text-white">
-                                <UserAvatar :src="user?.avatar_url" :name="user?.name" />
-                            </span>
-                            <span class="hidden text-left sm:block">
-                                <span class="block text-sm font-bold leading-none text-slate-800">{{ user?.name }}</span>
-                                <span class="mt-0.5 block text-xs leading-none text-slate-400">{{ roleLabel }}</span>
-                            </span>
-                            <AppIcon name="chevron-down" class="h-4 w-4 shrink-0 text-slate-400 transition-transform" :class="userMenuOpen && 'rotate-180'" />
-                        </button>
+                    <DropdownMenu align="right" panel-class="mt-1 w-56 rounded-xl p-1">
+                        <template #trigger="{ toggle, open, triggerAttrs, setTrigger }">
+                            <button
+                                :ref="setTrigger"
+                                type="button"
+                                class="flex items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                                aria-label="Account menu"
+                                v-bind="triggerAttrs"
+                                @click="toggle"
+                            >
+                                <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-xs font-semibold text-white">
+                                    <UserAvatar :src="user?.avatar_url" :name="user?.name" />
+                                </span>
+                                <span class="hidden text-left sm:block">
+                                    <span class="block text-sm font-bold leading-none text-slate-800">{{ user?.name }}</span>
+                                    <span class="mt-0.5 block text-xs leading-none text-slate-400">{{ roleLabel }}</span>
+                                </span>
+                                <AppIcon name="chevron-down" class="h-4 w-4 shrink-0 text-slate-400 transition-transform" :class="open && 'rotate-180'" />
+                            </button>
+                        </template>
 
-                        <div
-                            v-if="userMenuOpen"
-                            class="fixed inset-0 z-30"
-                            @click="userMenuOpen = false"
-                        />
-
-                        <div
-                            v-if="userMenuOpen"
-                            class="absolute right-0 z-40 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
-                        >
+                        <template #default="{ close }">
                             <!-- Only for staff who also hold an accreditation. -->
                             <template v-if="canSwitchWorkspace">
                                 <button
                                     v-if="inMemberWorkspace"
                                     type="button"
-                                    class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
-                                    @click="switchWorkspace('staff')"
+                                    role="menuitem"
+                                    class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                                    @click="close(); switchWorkspace('staff')"
                                 >
                                     <AppIcon name="building-office" class="h-4 w-4 shrink-0 text-slate-400" />
                                     Back to staff console
@@ -754,8 +773,9 @@ const logout = () => {
                                 <button
                                     v-else
                                     type="button"
-                                    class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
-                                    @click="switchWorkspace('member')"
+                                    role="menuitem"
+                                    class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                                    @click="close(); switchWorkspace('member')"
                                 >
                                     <AppIcon name="identification" class="h-4 w-4 shrink-0 text-slate-400" />
                                     Switch to my PROCTAD
@@ -765,14 +785,15 @@ const logout = () => {
 
                             <button
                                 type="button"
-                                class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-accent-600 transition-colors hover:bg-accent-50"
-                                @click="userMenuOpen = false; confirmingLogout = true"
+                                role="menuitem"
+                                class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-accent-600 transition-colors hover:bg-accent-50 focus:bg-accent-50 focus:outline-none"
+                                @click="close(); confirmingLogout = true"
                             >
                                 <AppIcon name="arrow-right-on-rectangle" class="h-4 w-4 shrink-0" />
                                 Log out
                             </button>
-                        </div>
-                    </div>
+                        </template>
+                    </DropdownMenu>
                 </div>
             </header>
 

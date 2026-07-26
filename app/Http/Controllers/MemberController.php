@@ -115,6 +115,7 @@ class MemberController extends Controller
 
         $member->load(
             'fieldOffice:id,name,code',
+            'testingCenter:id,name',
             'requirements',
             'assignments.examination:id,title,type,exam_date',
         );
@@ -178,7 +179,7 @@ class MemberController extends Controller
     {
         Gate::authorize('view', $member);
 
-        $member->load('fieldOffice:id,name,code', 'assignments.examination:id,title,exam_type_id,exam_date');
+        $member->load('fieldOffice:id,name,code', 'testingCenter:id,name', 'assignments.examination:id,title,exam_type_id,exam_date');
 
         return view('members.service-history-print', [
             'member' => $member,

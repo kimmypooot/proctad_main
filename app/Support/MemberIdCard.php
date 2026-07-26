@@ -21,6 +21,9 @@ class MemberIdCard
             'name' => $member->nameFirstLast(),
             'agency' => $member->agency,
             'position' => $member->position,
+            // A test administrator is based at a testing center; the field office
+            // is only meaningful for the members who are CSC staff themselves.
+            'testing_center' => $member->testingCenter?->name,
             'field_office' => $member->fieldOffice?->name,
             'status' => $member->status->value,
             'status_label' => $member->status->label(),

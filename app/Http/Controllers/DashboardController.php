@@ -45,18 +45,41 @@ class DashboardController extends Controller
             : ($user->role ?? UserRole::Member);
 
         $member = $role === UserRole::Member
-            ? Member::with('requirements', 'user:id,google_avatar')->where('user_id', $user->id)->first()
+            ? Member::with('requirements', 'user:id,google_avatar', 'testingCenter:id,name')->where('user_id', $user->id)->first()
             : null;
 
         return Inertia::render('Dashboard/Index', [
             'role' => $role->value,
             'roleLabel' => $role->label(),
-            'fieldOffice' => $fieldOffice?->only('id', 'name', 'code'),
+            'scopeBadge' => $this->scopeBadge($role, $member, $fieldOffice),
             'stats' => $this->statsFor($role, $user, $member),
             'memberSummary' => $role === UserRole::Member ? $this->memberSummary($member) : null,
             'analytics' => $this->adminAnalytics($role, $user, $request),
             'pendingApprovals' => $this->pendingApprovals($role, $user),
         ]);
+    }
+
+    /**
+     * The jurisdiction the workspace covers, named on the header badge. Staff
+     * work for a field office; a test administrator works for their own agency
+     * and is based at a testing center instead, so labelling their dashboard
+     * with a field office would name an office they don't belong to.
+     *
+     * @return array{label: string, icon: string}|null
+     */
+    private function scopeBadge(UserRole $role, ?Member $member, ?FieldOffice $fieldOffice): ?array
+    {
+        if ($role === UserRole::Member) {
+            // Null for regional-office members, who serve region-wide, and for
+            // members not yet placed in a center — better no badge than a wrong one.
+            return $member?->testingCenter
+                ? ['label' => $member->testingCenter->name, 'icon' => 'map-pin']
+                : null;
+        }
+
+        return $fieldOffice
+            ? ['label' => $fieldOffice->name, 'icon' => 'building-office']
+            : null;
     }
 
     /**

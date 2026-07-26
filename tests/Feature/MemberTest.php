@@ -160,6 +160,22 @@ class MemberTest extends TestCase
         $this->actingAs($this->staff(UserRole::Member))->get('/members')->assertForbidden();
     }
 
+    public function test_details_carries_the_testing_center_for_the_view_modal(): void
+    {
+        $admin = $this->staff(UserRole::FoAdmin, $this->leyte);
+        $center = $this->centerFor($this->leyte);
+        $member = Member::factory()->create([
+            'field_office_id' => $this->leyte->id,
+            'testing_center_id' => $center->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get("/members/{$member->id}/details")
+            ->assertOk()
+            ->assertJsonPath('member.testing_center.name', $center->name)
+            ->assertJsonPath('member.field_office.name', $this->leyte->name);
+    }
+
     /**
      * Field Directors operate their own Field Office alongside FO Admin staff.
      * The scoping half matters most: every controller scope keys off

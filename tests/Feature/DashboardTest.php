@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Enums\UserRole;
 use App\Models\FieldOffice;
+use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -57,10 +59,25 @@ class DashboardTest extends TestCase
                     ->where('role', $role->value)
                     ->where('roleLabel', $role->label())
                     ->has('stats', 4)
-                    ->where('fieldOffice', $role->isRegionWide()
+                    // Members are badged with their testing center, not an
+                    // office — none here, since makeUser creates no member record.
+                    ->where('scopeBadge', $role->isRegionWide() || $role === UserRole::Member
                         ? null
-                        : ['id' => $office->id, 'name' => $office->name, 'code' => $office->code]));
+                        : ['label' => $office->name, 'icon' => 'building-office']));
         }
+    }
+
+    public function test_member_dashboard_is_badged_with_their_testing_center(): void
+    {
+        $center = TestingCenter::create(['name' => 'Tacloban City', 'is_active' => true]);
+        $user = $this->makeUser(UserRole::Member);
+        Member::factory()->create(['user_id' => $user->id, 'email' => $user->email, 'testing_center_id' => $center->id]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('scopeBadge', ['label' => 'Tacloban City', 'icon' => 'map-pin']));
     }
 
     public function test_role_middleware_blocks_unauthorized_roles(): void

@@ -5,6 +5,7 @@ import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import BaseCard from '@/Components/BaseCard.vue';
 import DashboardPageHeader from '@/Components/DashboardPageHeader.vue';
 import EmptyState from '@/Components/EmptyState.vue';
 import MemberIdCard from '@/Components/MemberIdCard.vue';
@@ -103,7 +104,7 @@ onBeforeUnmount(() => {
         <!-- The reason members open this page, so it comes before the ID card:
              the same code as the one on the card, at a size a scanner can read. -->
         <div v-if="idCard" class="mt-6 print:hidden">
-            <div class="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 sm:flex-row sm:items-center sm:gap-6">
+            <BaseCard padding="none" class="flex flex-col items-center gap-4 p-6 sm:flex-row sm:items-center sm:gap-6">
                 <div class="shrink-0 rounded-lg border border-slate-200 bg-white p-3">
                     <QrCode :value="idCard.qr_value" :size="180" />
                 </div>
@@ -123,7 +124,7 @@ onBeforeUnmount(() => {
                         Show full screen
                     </BaseButton>
                 </div>
-            </div>
+            </BaseCard>
         </div>
 
         <div v-if="idCard" class="mt-8 grid gap-8 lg:grid-cols-5">
@@ -136,7 +137,7 @@ onBeforeUnmount(() => {
 
             <!-- Details -->
             <div class="space-y-6 print:hidden lg:col-span-3">
-                <div class="rounded-xl border border-slate-200 bg-white p-6">
+                <BaseCard>
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
                             <p class="truncate text-xl font-bold text-slate-900">{{ idCard.name }}</p>
@@ -165,6 +166,15 @@ onBeforeUnmount(() => {
                         <div class="flex items-start gap-2.5">
                             <AppIcon name="map-pin" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                             <div class="min-w-0">
+                                <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Testing Center</dt>
+                                <dd class="mt-0.5 truncate text-sm text-slate-700">{{ idCard.testing_center ?? '—' }}</dd>
+                            </div>
+                        </div>
+                        <!-- Only the members who are CSC staff have an office of
+                             their own — external test administrators do not. -->
+                        <div v-if="idCard.field_office" class="flex items-start gap-2.5">
+                            <AppIcon name="building-library" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                            <div class="min-w-0">
                                 <dt class="text-xs font-medium uppercase tracking-wide text-slate-400">Field Office</dt>
                                 <dd class="mt-0.5 truncate text-sm text-slate-700">{{ idCard.field_office }}</dd>
                             </div>
@@ -180,9 +190,9 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                     </dl>
-                </div>
+                </BaseCard>
 
-                <div class="rounded-xl border border-slate-200 bg-white p-6">
+                <BaseCard>
                     <h2 class="flex items-center gap-2 text-base font-semibold text-slate-900">
                         <AppIcon name="light-bulb" class="h-5 w-5 text-brand-600" />
                         How to use your Digital ID
@@ -201,7 +211,7 @@ onBeforeUnmount(() => {
                             <p class="text-sm text-slate-600">Download the PDF for a printable, wallet-sized front-and-back copy of your official ID.</p>
                         </li>
                     </ul>
-                </div>
+                </BaseCard>
             </div>
         </div>
     </DashboardLayout>
