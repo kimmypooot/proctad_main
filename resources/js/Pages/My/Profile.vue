@@ -177,12 +177,14 @@ const submit = () => form
                             v-model="form.first_name" name="first_name"
                             label="First Name"
                             required
+                            uppercase
                             :error="form.errors.first_name"
                         />
                         <TextInput
                             v-model="form.last_name" name="last_name"
                             label="Last Name"
                             required
+                            uppercase
                             :error="form.errors.last_name"
                         />
                     </div>
@@ -191,13 +193,15 @@ const submit = () => form
                             v-model="form.middle_name" name="middle_name"
                             label="Middle Name"
                             optional
+                            uppercase
                             :error="form.errors.middle_name"
                         />
                         <TextInput
                             v-model="form.suffix" name="suffix"
                             label="Suffix"
                             optional
-                            placeholder="Jr., III"
+                            uppercase
+                            placeholder="JR., III"
                             :error="form.errors.suffix"
                         />
                     </div>
@@ -227,6 +231,7 @@ const submit = () => form
                         v-model="form.position" name="position"
                         label="Position"
                         optional
+                        uppercase
                         :error="form.errors.position"
                     />
                     <p class="text-xs text-slate-400">

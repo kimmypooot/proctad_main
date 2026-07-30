@@ -36,10 +36,33 @@ const props = defineProps({
     disabled: { type: Boolean, default: false },
     /** Tooltip text shown beside the label via an info icon. */
     tooltip: { type: String, default: null },
+    /**
+     * Uppercase what is typed, for fields the server stores uppercase anyway
+     * (see Member/OtherExaminationPersonnel's mutators). It transforms the
+     * bound value rather than applying `text-transform`, so what the field
+     * shows is what will be saved — a CSS-only version leaves the form
+     * disagreeing with the record the moment it is submitted.
+     */
+    uppercase: { type: Boolean, default: false },
 });
 
 const id = useId();
 const showPassword = ref(false);
+
+// A computed proxy rather than an @input handler, so v-model keeps its own
+// IME/composition handling instead of us fighting it with a second listener.
+//
+// The getter transforms too, not just the setter: a prefilled value (a staff
+// account's name and agency, say) arrives in whatever case it is stored in, and
+// the server will uppercase it on write regardless — so showing it as typed
+// would reintroduce exactly the mismatch this prop exists to remove.
+const cased = (input) => (props.uppercase && typeof input === 'string' ? input.toUpperCase() : input);
+const value = computed({
+    get: () => cased(model.value),
+    set: (next) => {
+        model.value = cased(next);
+    },
+});
 
 const isPassword = computed(() => props.type === 'password');
 const inputType = computed(() => (isPassword.value && showPassword.value ? 'text' : props.type));
@@ -71,7 +94,7 @@ const describedBy = computed(() => {
 
             <input
                 :id="id"
-                v-model="model"
+                v-model="value"
                 :name="name ?? undefined"
                 :type="inputType"
                 :required="required"

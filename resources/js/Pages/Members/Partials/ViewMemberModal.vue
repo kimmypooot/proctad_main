@@ -64,13 +64,6 @@ const tabs = computed(() => [
     { key: 'history', label: `Service History (${serviceHistory().length})` },
 ]);
 
-watch(() => props.show, (open) => {
-    if (open && props.memberId) {
-        activeTab.value = 'details';
-        fetchMember();
-    }
-});
-
 const fetchMember = async () => {
     const json = await load();
 
@@ -89,6 +82,24 @@ const fetchMember = async () => {
         };
     }
 };
+
+/*
+ * `immediate` so a modal that is *already* open on its first render loads too.
+ * A plain watcher only fires on a change, so arriving at /members?view=<id> —
+ * where `show` starts true and never transitions — left the fetch unrun: no
+ * request, no spinner, just the empty fallback reading "Could not load member
+ * details." The existing guard covers the closed case this now also runs for.
+ *
+ * Declared below fetchMember on purpose: an immediate watcher runs during
+ * setup, so a callback placed above it would hit the const's dead zone the
+ * moment the modal did start open — turning the silent failure into a crash.
+ */
+watch(() => props.show, (open) => {
+    if (open && props.memberId) {
+        activeTab.value = 'details';
+        fetchMember();
+    }
+}, { immediate: true });
 
 const deleteMember = () => {
     deleting.value = true;

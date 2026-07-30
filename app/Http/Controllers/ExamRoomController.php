@@ -226,6 +226,37 @@ class ExamRoomController extends Controller
         return back()->with('success', 'Room designations updated.');
     }
 
+    /**
+     * Save the per-room designation grid in one request.
+     *
+     * One request, not one PUT per changed room: Inertia's sync visit queue
+     * runs a single request at a time and interrupts whatever is in flight, so
+     * a loop of per-room updates cancels all but the last one.
+     */
+    public function updateDesignations(Request $request, ExaminationSchool $venue): RedirectResponse
+    {
+        Gate::authorize('create', ExaminationSchool::class);
+        $this->authorizeForVenue($request->user(), $venue);
+
+        $validated = $request->validate([
+            'designations' => ['required', 'array', 'min:1'],
+            'designations.*.id' => ['required', 'integer'],
+            'designations.*.designation' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $wanted = collect($validated['designations'])->keyBy('id');
+
+        // Read back through the venue's own rooms, so an id belonging to another
+        // venue is silently skipped rather than edited.
+        $rooms = $venue->rooms()->whereIn('id', $wanted->keys())->get();
+
+        DB::transaction(fn () => $rooms->each(
+            fn (ExamRoom $room) => $room->update(['designation' => $wanted[$room->id]['designation'] ?: null]),
+        ));
+
+        return back()->with('success', $rooms->count().' room designation(s) updated.');
+    }
+
     private function authorizeForVenue(User $user, ExaminationSchool $venue): void
     {
         $venue->loadMissing('school');

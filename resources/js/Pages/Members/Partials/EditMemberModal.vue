@@ -22,6 +22,7 @@ const loadError = ref(null);
 const fieldOffices = ref([]);
 const testingCenters = ref([]);
 const statuses = ref([]);
+const isEmployee = ref(false);
 
 const form = useForm({
     first_name: '',
@@ -80,6 +81,7 @@ const fetchEditData = async () => {
         fieldOffices.value = json.fieldOffices;
         testingCenters.value = json.testingCenters;
         statuses.value = json.statuses;
+        isEmployee.value = json.isEmployee ?? false;
         loaded.value = true;
     } catch (e) {
         loaded.value = false;
@@ -122,6 +124,7 @@ const submit = () => {
                         :field-offices="fieldOffices"
                         :testing-centers="testingCenters"
                         :statuses="statuses"
+                        :is-employee="isEmployee"
                     />
 
                     <div class="mt-8 flex justify-end gap-3 pb-1">

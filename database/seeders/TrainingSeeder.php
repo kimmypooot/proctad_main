@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Enums\MemberStatus;
+use App\Enums\TrainingSession;
 use App\Enums\TrainingType;
 use App\Models\Member;
 use App\Models\Training;
@@ -22,7 +23,7 @@ class TrainingSeeder extends Seeder
             'title' => 'TEA Batch 1 — 2026',
             'type' => TrainingType::Tea,
             'training_date' => '2026-02-10',
-            'end_date' => '2026-02-12',
+            'session' => TrainingSession::Am,
             'venue' => 'CSC RO VIII Training Hall, Palo, Leyte',
         ]);
 

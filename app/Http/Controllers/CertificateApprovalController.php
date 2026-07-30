@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\CertificateType;
 use App\Models\Certificate;
-use App\Models\FieldOffice;
 use App\Services\CertificateService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,7 +25,6 @@ class CertificateApprovalController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $regionWide = $user->role->isRegionWide();
 
         $types = Certificate::approvableTypesFor($user);
 
@@ -38,7 +36,7 @@ class CertificateApprovalController extends Controller
 
         $pending = (clone $base)
             ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix',
-                'fieldOffice:id,name,code', 'requestedBy:id,name', 'certifiable')
+                'testingCenter:id,name', 'requestedBy:id,name', 'certifiable')
             // Oldest first: the queue should drain in the order people have
             // been waiting, not bury older requests under newer ones.
             ->oldest('id')
@@ -52,8 +50,8 @@ class CertificateApprovalController extends Controller
                     'proctad_id' => $certificate->member->proctad_id,
                     'name' => $certificate->member->name,
                 ],
-                'field_office_id' => $certificate->field_office_id,
-                'field_office' => $certificate->fieldOffice?->name,
+                'testing_center_id' => $certificate->testing_center_id,
+                'testing_center' => $certificate->testingCenter?->name,
                 'source' => $certificate->sourceDescription(),
                 'source_date' => $certificate->sourceDate(),
                 'requested_by' => $certificate->requestedBy?->name ?? 'System',
@@ -68,10 +66,20 @@ class CertificateApprovalController extends Controller
                 'waiting_days' => round($certificate->created_at->diffInDays(now()), 2),
             ]);
 
+        // Drawn from the queue itself rather than the full centre list: even a
+        // field-office approver covers several centres, and offering ones with
+        // nothing waiting only makes the filter emptier to use.
+        $testingCenters = $pending
+            ->whereNotNull('testing_center_id')
+            ->unique('testing_center_id')
+            ->map(fn (array $row) => ['id' => $row['testing_center_id'], 'name' => $row['testing_center']])
+            ->sortBy('name')
+            ->values();
+
         return Inertia::render('Approvals/Index', [
             'pending' => $pending,
             'types' => collect($types)->map(fn (CertificateType $type) => ['value' => $type->value, 'label' => $type->label()])->values(),
-            'fieldOffices' => $regionWide ? FieldOffice::orderBy('name')->get(['id', 'name', 'code']) : null,
+            'testingCenters' => $testingCenters->count() > 1 ? $testingCenters : null,
         ]);
     }
 

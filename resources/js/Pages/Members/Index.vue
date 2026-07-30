@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
+import CreateMemberModal from './Partials/CreateMemberModal.vue';
 import ViewMemberModal from './Partials/ViewMemberModal.vue';
 import DashboardLayout from '@/Layouts/DashboardLayout.vue';
 import BaseBadge from '@/Components/BaseBadge.vue';
@@ -20,17 +21,62 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     fieldOffices: { type: Array, default: null },
     statuses: { type: Array, required: true },
+    /** ?view=<id> — open this member's detail modal on arrival. */
+    viewMemberId: { type: Number, default: null },
+    /** ?register=<user id> — open the create form seeded from that account. */
+    registerAccountId: { type: Number, default: null },
     can: { type: Object, required: true },
 });
 
 const { push: pushToast } = useToasts();
 
-const viewingMemberId = ref(null);
-const showMemberModal = ref(false);
+const viewingMemberId = ref(props.viewMemberId);
+const showMemberModal = ref(props.viewMemberId !== null);
 
 const viewMember = (id) => {
     viewingMemberId.value = id;
     showMemberModal.value = true;
+};
+
+/*
+ * Closing drops the deep-link parameter from the address bar, via replaceState
+ * rather than a visit: reloading a page whose modal you have already dismissed
+ * should not reopen it, and re-fetching the whole list to forget one query
+ * parameter would throw away the filters and scroll position the modal was
+ * opened over.
+ */
+const dropQueryParam = (name) => {
+    const url = new URL(window.location.href);
+
+    if (url.searchParams.has(name)) {
+        url.searchParams.delete(name);
+        window.history.replaceState(window.history.state, '', url);
+    }
+};
+
+const closeMemberModal = () => {
+    showMemberModal.value = false;
+    dropQueryParam('view');
+};
+
+/* --- Create --- */
+const registeringAccountId = ref(props.registerAccountId);
+const showCreateModal = ref(props.registerAccountId !== null);
+
+const openCreate = () => {
+    registeringAccountId.value = null;
+    showCreateModal.value = true;
+};
+
+const closeCreateModal = () => {
+    showCreateModal.value = false;
+    dropQueryParam('register');
+};
+
+// No toast here: store() redirects with a flash message, which DashboardLayout
+// already turns into one. Raising a second would double it.
+const onMemberCreated = () => {
+    registeringAccountId.value = null;
 };
 
 const search = ref(props.filters.search ?? '');
@@ -151,6 +197,11 @@ const downloadSelectedIdCards = async () => {
 
     <DashboardLayout>
         <DashboardPageHeader title="PROCTAD Members" subtitle="Master registry of accredited test administrators.">
+            <template v-if="can.create" #actions>
+                <BaseButton variant="primary" size="sm" icon="user-plus" @click="openCreate">
+                    Add Member
+                </BaseButton>
+            </template>
         </DashboardPageHeader>
 
         <!-- Filters -->
@@ -277,10 +328,17 @@ const downloadSelectedIdCards = async () => {
         <div class="mt-6">
             <BasePagination :links="members.links" />
         </div>
+        <CreateMemberModal
+            :show="showCreateModal"
+            :account-id="registeringAccountId"
+            @close="closeCreateModal"
+            @saved="onMemberCreated"
+        />
+
         <ViewMemberModal
             :show="showMemberModal"
             :member-id="viewingMemberId"
-            @close="showMemberModal = false"
+            @close="closeMemberModal"
         />
     </DashboardLayout>
 </template>

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\MemberStatus;
 use App\Enums\UserRole;
 use App\Models\Concerns\Auditable;
+use Database\Factories\MemberFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -21,10 +22,20 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 ])]
 class Member extends Model
 {
-    /** @use HasFactory<\Database\Factories\MemberFactory> */
+    /** @use HasFactory<MemberFactory> */
     use Auditable, HasFactory, SoftDeletes;
 
     public const ID_PREFIX = 'PROCTAD-CSCRO8-';
+
+    /**
+     * `agency` records who a test administrator works for, and for the ones who
+     * are Commission staff that answer is always the same. It is offered as the
+     * prefilled value when registering an existing staff account (see
+     * MemberController::create) rather than left to be typed, because a free
+     * text field produced "CSC RO8", "CSC Region 8" and "csc ro viii" for the
+     * same employer — and agency is what payroll and reports group by.
+     */
+    public const CSC_AGENCY = 'Civil Service Commission Regional Office VIII';
 
     /** Unambiguous charset: A-Z without I/O, digits without 0/1. */
     private const ID_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -110,6 +121,22 @@ class Member extends Model
         return Attribute::set(fn (?string $value) => $value !== null ? mb_strtoupper($value) : null);
     }
 
+    /**
+     * Employer and post, uppercased on the same principle as the name: both are
+     * printed beside it on rosters and designation orders, and a roster mixing
+     * "DepEd Division Office" with "DEPED DIVISION OFFICE" reads as two
+     * different agencies when it is one, typed by two people.
+     */
+    protected function agency(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => $value !== null ? mb_strtoupper($value) : null);
+    }
+
+    protected function position(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => $value !== null ? mb_strtoupper($value) : null);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -172,6 +199,9 @@ class Member extends Model
      * ESD Admins and the directors hold no field office at all — their role is
      * already region-wide, so none was ever needed — while other regional
      * office employees are placed there by office.
+     *
+     * Field office employees are deliberately excluded: they serve the centers
+     * their own office covers. staffJurisdictionRule is where that is enforced.
      */
     public function isRegionWide(): bool
     {

@@ -188,6 +188,17 @@ class PreflightTest extends TestCase
      * the repository, and it signs every signed URL and encrypts members' dates
      * of birth.
      */
+    /** Off by eight hours is not an error anywhere — it just quietly misreports every time the app shows. */
+    public function test_it_fails_on_a_timezone_other_than_manila(): void
+    {
+        $this->productionLikeConfig();
+        config(['app.timezone' => 'UTC']);
+
+        $this->artisan('proctad:preflight')
+            ->expectsOutputToContain('APP_TIMEZONE')
+            ->assertExitCode(1);
+    }
+
     public function test_it_fails_on_the_app_key_that_was_committed(): void
     {
         $this->productionLikeConfig();

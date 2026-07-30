@@ -17,6 +17,7 @@ use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\TestingCenter;
 use App\Models\Training;
 use App\Models\TrainingAssignment;
 use App\Models\User;
@@ -124,7 +125,7 @@ class DashboardController extends Controller
      * SaaS-style analytics for the admin dashboard: a 6-month registration
      * trend, member status breakdown, and a recent-registrations feed.
      * Region-wide roles (Super Admin/ESD Admin) see the whole region plus a
-     * per-Field-Office breakdown and can filter the recent-registrations
+     * per-testing-center breakdown and can filter the recent-registrations
      * feed to one office; Field Office Staff (FO-scoped) see their own
      * office only, with a region-wide total alongside for context.
      */
@@ -156,7 +157,7 @@ class DashboardController extends Controller
             'fieldOffices' => $regionWide ? FieldOffice::orderBy('name')->get(['id', 'name', 'code']) : null,
             'selectedFieldOfficeId' => $filterFieldOfficeId,
             'registrationTrend' => $this->registrationTrend($scopeFieldOfficeId),
-            'registrationsByFieldOffice' => $regionWide ? $this->registrationsByFieldOffice() : null,
+            'registrationsByTestingCenter' => $regionWide ? $this->registrationsByTestingCenter() : null,
             'statusBreakdown' => $this->memberStatusBreakdown($scopeFieldOfficeId),
             'recentRegistrations' => $this->recentRegistrations($filterFieldOfficeId),
             'regionTotalThisMonth' => $regionWide ? null : Member::query()
@@ -316,12 +317,18 @@ class DashboardController extends Controller
             ->all();
     }
 
-    private function registrationsByFieldOffice(): array
+    /**
+     * Members are filed under a testing center, not an office (a center is
+     * handled by several offices in turn — see TestingCenter), so the
+     * all-time breakdown is per center.
+     */
+    private function registrationsByTestingCenter(): array
     {
-        return FieldOffice::withCount('members')
+        return TestingCenter::withCount('members')
             ->orderByDesc('members_count')
+            ->orderBy('name')
             ->get()
-            ->map(fn (FieldOffice $fo) => ['label' => $fo->code ?? $fo->name, 'value' => $fo->members_count])
+            ->map(fn (TestingCenter $center) => ['label' => $center->name, 'value' => $center->members_count])
             ->all();
     }
 

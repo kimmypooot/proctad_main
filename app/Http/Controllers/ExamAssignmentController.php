@@ -20,6 +20,7 @@ use App\Models\Member;
 use App\Models\User;
 use App\Services\AlternateActivator;
 use App\Services\AssignmentConfirmationSender;
+use App\Services\AssignmentResponder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -97,15 +98,29 @@ class ExamAssignmentController extends Controller
             // City may staff a room there whichever Leyte office administers it.
             // Exempt are members who are also region-wide CSC staff, who may be
             // placed at any venue (see Member::isRegionWide).
-            $outOfJurisdiction = Member::whereIn('id', array_filter($memberIds))
-                ->where(fn ($q) => $q
-                    ->where('testing_center_id', '!=', $centerId)
-                    ->orWhereNull('testing_center_id'))
+            $confined = Member::with('user:id,role,field_office_id')
+                ->whereIn('id', array_filter($memberIds))
                 ->notServingRegionWide()
-                ->exists();
+                ->get();
 
-            if ($outOfJurisdiction) {
-                $fail('Proctor, Room Examiner, and Supervising Examiner assignments must stay within the venue\'s testing center.');
+            foreach ($confined as $member) {
+                /*
+                 * A field office employee's centers come from their office, the
+                 * same authority staffJurisdictionRule uses. Their registry
+                 * record often carries no center of its own — nothing about
+                 * their posting decides one — and reading only that column
+                 * grouped them with "wrong center" and refused them every venue
+                 * in the region, their own office's included.
+                 */
+                $ownCenters = $member->testing_center_id !== null
+                    ? [$member->testing_center_id]
+                    : ($member->user?->scopedTestingCenterIds() ?? []);
+
+                if (! in_array($centerId, $ownCenters, true)) {
+                    $fail('Proctor, Room Examiner, and Supervising Examiner assignments must stay within the venue\'s testing center.');
+
+                    return;
+                }
             }
         };
     }
@@ -479,8 +494,12 @@ class ExamAssignmentController extends Controller
      * Admin manually confirms one or more pending assignments — mirrors
      * legacy's bulk "Manual Confirm" action, for members who can't confirm
      * via their own emailed link (e.g. no email on file).
+     *
+     * Goes through AssignmentResponder like every other response, so each one
+     * leaves an audit row naming the staff member who recorded it. Use
+     * recordResponse() to record a decline, or to note how the answer arrived.
      */
-    public function bulkConfirm(Request $request): RedirectResponse
+    public function bulkConfirm(Request $request, AssignmentResponder $responder): RedirectResponse
     {
         Gate::authorize('create', ExamAssignment::class);
 
@@ -497,10 +516,69 @@ class ExamAssignmentController extends Controller
             ->get();
 
         foreach ($assignments as $assignment) {
-            $assignment->update(['status' => AssignmentStatus::Confirmed, 'responded_at' => now()]);
+            $responder->recordOnBehalf($assignment, $user, true, ipAddress: $request->ip());
         }
 
         return back()->with('success', "Confirmed {$assignments->count()} assignment(s).");
+    }
+
+    /**
+     * Record, on a member's behalf, the answer they gave off-system.
+     *
+     * Testing centers are rural and the emailed link expires after seven days,
+     * so members regularly answer by phone or in person instead. Without this
+     * the office's only options were to leave the seat pending or to
+     * bulk-confirm — which could not record a decline at all, and left no
+     * trace of who took the call.
+     *
+     * Not an override of an answer already given: like every other response
+     * path it is one-shot (AssignmentResponder), so a member's own confirm or
+     * decline stands. Correcting one of those is still Force Reassign or
+     * removing the assignment.
+     */
+    public function recordResponse(Request $request, ExamAssignment $assignment, AssignmentResponder $responder): RedirectResponse
+    {
+        Gate::authorize('update', $assignment);
+
+        $assignment->loadMissing('examination', 'member');
+
+        // Deliberately lt(today()), not isPast(): exam_date is a date, so from
+        // 00:01 on the examination's own day isPast() is already true — and
+        // exam-day morning is exactly when a member finally gets through.
+        abort_if(
+            $assignment->examination->exam_date->lt(today()),
+            422,
+            'Cannot record a response: this examination has already concluded.',
+        );
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['confirm', 'decline'])],
+            'channel' => ['required', Rule::in(array_keys(AssignmentResponder::ON_BEHALF_CHANNELS))],
+            'decline_reason' => ['required_if:action,decline', 'nullable', 'string', 'max:500'],
+            // Who was spoken to and when, in the office's own words — this is
+            // the only evidence behind a response the member did not make.
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $confirmed = $validated['action'] === 'confirm';
+
+        $recorded = $responder->recordOnBehalf(
+            $assignment,
+            $request->user(),
+            $confirmed,
+            $validated['decline_reason'] ?? null,
+            $validated['channel'],
+            $validated['note'] ?? null,
+            $request->ip(),
+        );
+
+        if (! $recorded) {
+            return back()->with('error', "{$assignment->member?->name} has already responded to this assignment.");
+        }
+
+        return back()->with('success', $confirmed
+            ? "Confirmation recorded for {$assignment->member?->name}."
+            : "Decline recorded for {$assignment->member?->name}. The seat needs re-staffing.");
     }
 
     /**

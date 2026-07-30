@@ -90,6 +90,7 @@ class TrainingPagesTest extends TestCase
                 'title' => 'Cebu Orientation',
                 'type' => 'briefing',
                 'training_date' => '2026-08-01',
+                'session' => 'am',
                 'exam_id' => $exam->id,
             ])
             ->assertRedirect();
@@ -127,6 +128,87 @@ class TrainingPagesTest extends TestCase
                 ->where('trainings.0.title', 'Office A Training'));
     }
 
+    /**
+     * A training with no field office is regional — organised by the region
+     * rather than owned by an office. Before, the index filtered on
+     * field_office_id alone, so a NULL never matched and a regionally
+     * organised TEA was invisible to every office that had to attend it.
+     */
+    public function test_fo_admin_sees_regional_trainings_alongside_their_own(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $other = FieldOffice::create(['name' => 'Samar Field Office', 'code' => 'SAM']);
+
+        Training::factory()->create(['title' => 'Own Office TEA', 'field_office_id' => $office->id]);
+        Training::factory()->create(['title' => 'Regional TEA', 'field_office_id' => null]);
+        Training::factory()->create(['title' => 'Someone Elses TEA', 'field_office_id' => $other->id]);
+
+        $foAdmin = User::factory()->create([
+            'role' => UserRole::FoAdmin,
+            'field_office_id' => $office->id,
+        ]);
+
+        $this->actingAs($foAdmin)
+            ->get('/trainings')
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Trainings/Index')
+                ->has('trainings', 2)
+                ->where('trainings', fn ($trainings) => collect($trainings)
+                    ->pluck('title')
+                    ->sort()
+                    ->values()
+                    ->all() === ['Own Office TEA', 'Regional TEA']));
+    }
+
+    /**
+     * The index is scoped, so the detail endpoint has to be too — otherwise an
+     * office reads another's training by guessing the id.
+     */
+    public function test_fo_admin_cannot_open_another_offices_training(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $other = FieldOffice::create(['name' => 'Samar Field Office', 'code' => 'SAM']);
+
+        $foAdmin = User::factory()->create([
+            'role' => UserRole::FoAdmin,
+            'field_office_id' => $office->id,
+        ]);
+
+        $theirs = Training::factory()->create(['field_office_id' => $other->id]);
+        $regional = Training::factory()->create(['field_office_id' => null]);
+
+        $this->actingAs($foAdmin)->get("/trainings/{$theirs->id}/modal")->assertForbidden();
+        $this->actingAs($foAdmin)->get("/trainings/{$regional->id}/modal")->assertOk();
+    }
+
+    /**
+     * Visible to every office, owned by none: an office may roster its own
+     * members onto a regional training but not edit or conclude it.
+     */
+    public function test_fo_admin_cannot_edit_a_regional_training(): void
+    {
+        $office = FieldOffice::create(['name' => 'Leyte Field Office', 'code' => 'LEY']);
+        $exam = Examination::factory()->create();
+        $regional = Training::factory()->create(['field_office_id' => null, 'exam_id' => $exam->id]);
+
+        $foAdmin = User::factory()->create([
+            'role' => UserRole::FoAdmin,
+            'field_office_id' => $office->id,
+        ]);
+
+        $this->actingAs($foAdmin)
+            ->put("/trainings/{$regional->id}", [
+                'title' => 'Hijacked',
+                'type' => 'briefing',
+                'training_date' => '2026-09-01',
+                'session' => 'am',
+                'exam_id' => $exam->id,
+            ])
+            ->assertForbidden();
+
+        $this->assertNotSame('Hijacked', $regional->fresh()->title);
+    }
+
     public function test_super_admin_can_manage_all_trainings(): void
     {
         $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
@@ -144,6 +226,7 @@ class TrainingPagesTest extends TestCase
                 'title' => 'Updated Title',
                 'type' => 'briefing',
                 'training_date' => '2026-09-01',
+                'session' => 'pm',
                 'exam_id' => $exam->id,
             ])
             ->assertRedirect();

@@ -33,7 +33,7 @@ class CertificateController extends Controller
 
         $certificates = (clone $baseQuery)
             ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix',
-                'fieldOffice:id,name,code', 'certifiable')
+                'testingCenter:id,name', 'certifiable')
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search')->trim();
                 $q->where(fn ($q) => $q
@@ -57,7 +57,7 @@ class CertificateController extends Controller
                     'name' => $certificate->member->name,
                     'proctad_id' => $certificate->member->proctad_id,
                 ],
-                'field_office' => $certificate->fieldOffice?->name,
+                'testing_center' => $certificate->testingCenter?->name,
                 'source' => $certificate->sourceDescription(),
                 'status' => $certificate->status->value,
                 'status_label' => $certificate->status->label(),

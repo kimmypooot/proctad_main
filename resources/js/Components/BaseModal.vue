@@ -25,6 +25,7 @@ const widths = {
     '2xl': 'sm:max-w-2xl',
     '3xl': 'sm:max-w-3xl',
     '4xl': 'sm:max-w-4xl',
+    '5xl': 'sm:max-w-5xl',
 };
 
 /** Currently focusable, visible children of the panel, in tab order. */

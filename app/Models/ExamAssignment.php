@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\AsDesignation;
 use App\Enums\AssignmentStatus;
+use App\Enums\ConfirmationAction;
 use App\Enums\ExamRole;
 use App\Enums\PerformanceRating;
 use App\Models\Concerns\Auditable;
@@ -153,6 +154,18 @@ class ExamAssignment extends Model
     }
 
     /**
+     * The confirm/decline event that produced the current status, ignoring the
+     * sent/reminder/expired noise around it. Lets a row say who answered —
+     * the member, or an office recording their phoned-in answer for them.
+     */
+    public function latestResponse(): HasOne
+    {
+        return $this->hasOne(AssignmentConfirmation::class)
+            ->whereIn('action', [ConfirmationAction::Confirmed, ConfirmationAction::Declined])
+            ->latestOfMany();
+    }
+
+    /**
      * Schools this REC/LEC/CE-for-Investigation assignment is responsible
      * for monitoring, distinct from examinationSchool() (their one testing
      * center / duty station). Pre-determined, no confirmation workflow —
@@ -200,6 +213,24 @@ class ExamAssignment extends Model
     {
         $query->whereIn('role', array_column(ExamRole::evaluableCases(), 'value'))
             ->whereNotNull('attendance_confirmed_at');
+    }
+
+    /**
+     * Upcoming deployments a member has been sent but not yet answered.
+     *
+     * Single source of truth for the sidebar badge, the sign-in prompt and the
+     * rows "My Assignments" marks `awaiting_response` — if these drift apart,
+     * the badge advertises work the page won't show. Past examinations are
+     * excluded for the same reason: the page only ever lists upcoming ones, so
+     * counting a lapsed assignment would leave a badge nothing can clear.
+     *
+     * @param  Builder<ExamAssignment>  $query
+     */
+    public function scopeAwaitingResponseFrom(Builder $query, int $memberId): void
+    {
+        $query->where('member_id', $memberId)
+            ->where('status', AssignmentStatus::Pending)
+            ->whereHas('examination', fn (Builder $q) => $q->whereDate('exam_date', '>=', today()));
     }
 
     /**

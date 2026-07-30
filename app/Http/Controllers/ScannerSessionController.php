@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\ExaminationSchool;
 use App\Models\ScannerSession;
+use App\Models\Training;
 use App\Support\BrandedQrCode;
+use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -19,6 +21,9 @@ class ScannerSessionController extends Controller
     public function store(Request $request): RedirectResponse
     {
         Gate::authorize('create', ScannerSession::class);
+
+        $training = ($id = $request->integer('training_id')) ? Training::find($id) : null;
+        $cap = $this->expiryCap($training);
 
         $validated = $request->validate([
             'examination_id' => ['required_without:training_id', 'nullable', 'integer', 'exists:examinations,id'],
@@ -37,9 +42,11 @@ class ScannerSessionController extends Controller
             'label' => ['nullable', 'string', 'max:255'],
             // Capped at a week: these links are meant for an examination day,
             // and an unbounded expiry would quietly recreate the open page this
-            // design exists to avoid.
-            'expires_at' => ['required', 'date', 'after:now', 'before:'.now()->addWeek()->toDateTimeString()],
-        ]);
+            // design exists to avoid. A training caps tighter — see expiryCap().
+            'expires_at' => ['required', 'date', 'after:now', 'before:'.$cap->toDateTimeString()],
+        ], $training ? [
+            'expires_at.before' => "A link for this training cannot outlive its sitting ({$cap->format('M d, Y g:i A')}). Attendance is recorded on arrival, so a link left open past the session would write the next batch into this roster.",
+        ] : []);
 
         $user = $request->user();
 
@@ -62,6 +69,28 @@ class ScannerSessionController extends Controller
         ]);
 
         return back()->with('success', 'Scanner link created.');
+    }
+
+    /**
+     * How long a link may live. A week for an examination; for a training, the
+     * end of its sitting, because trainings run as half-day AM and PM batches
+     * and an AM link still live in the afternoon would record PM arrivals into
+     * the AM roster (ScannerController creates the assignment on scan).
+     *
+     * A sitting already past falls back to the week — issuing a link to catch
+     * up attendance after the fact stays possible, as it was before.
+     */
+    private function expiryCap(?Training $training): CarbonInterface
+    {
+        $week = now()->addWeek();
+
+        if ($training === null) {
+            return $week;
+        }
+
+        $sitting = $training->scannerLinkExpiry();
+
+        return $sitting->isFuture() ? $sitting : $week;
     }
 
     public function revoke(Request $request, ScannerSession $scannerSession): RedirectResponse

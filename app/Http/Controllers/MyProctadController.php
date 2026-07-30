@@ -386,7 +386,7 @@ class MyProctadController extends Controller
         return Inertia::render('My/Trainings', [
             'hasRecord' => $member !== null,
             'records' => $member?->trainingAssignments()
-                ->with('training:id,title,type,training_date,end_date,venue,completed_at')
+                ->with('training:id,title,type,training_date,session,venue,completed_at')
                 ->get()
                 ->sortByDesc(fn ($assignment) => $assignment->training?->training_date)
                 ->values()
@@ -395,7 +395,7 @@ class MyProctadController extends Controller
                     'title' => $assignment->training?->title,
                     'type_label' => $assignment->training?->type->label(),
                     'date' => $assignment->training?->training_date?->format('M d, Y'),
-                    'end_date' => $assignment->training?->end_date?->format('M d, Y'),
+                    'session_label' => $assignment->training?->session->label(),
                     'venue' => $assignment->training?->venue,
                     'attended' => (bool) $assignment->attendance_confirmed_at,
                     'attendance_confirmed_at' => $assignment->attendance_confirmed_at?->format('M d, Y g:i A'),

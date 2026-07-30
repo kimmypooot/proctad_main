@@ -85,7 +85,65 @@ class MemberController extends Controller
             'filters' => $request->only('search', 'status', 'field_office_id'),
             'fieldOffices' => $regionWide ? FieldOffice::orderBy('name')->get(['id', 'name', 'code']) : null,
             'statuses' => $this->statusOptions(),
+            // Deep link to one member's detail modal, so another page can send
+            // an administrator straight to the record instead of to a search
+            // that merely narrows the list. The modal loads through
+            // /members/{member}/details, which authorizes on its own, so this
+            // is only a hint about what to open — never a grant to see it.
+            'viewMemberId' => $request->integer('view') ?: null,
+            // Likewise ?register=<user id>, sent from the Users page so a staff
+            // account can be registered as a test administrator without the
+            // admin retyping a name and email that are already on file. The
+            // create endpoint authorizes on its own; this only opens the form.
+            'registerAccountId' => $request->integer('register') ?: null,
             'can' => ['create' => $user->can('create', Member::class)],
+        ]);
+    }
+
+    /**
+     * Options for the create form, optionally seeded from an account that
+     * already exists (?user=<id>).
+     *
+     * That seeding is the whole point for CSC employees who also proctor: they
+     * cannot self-register, because RegisteredUserController::store turns away
+     * any email that already has a login — correctly, since it would otherwise
+     * be a way to attach a registry record to someone else's account. So the
+     * only route to a second hat is a staff member entering them here, against
+     * the login they already hold. resolveAccount() links by email, so the
+     * address has to arrive unchanged; the form locks it for exactly that
+     * reason, and a typo would mint a duplicate account instead.
+     */
+    public function create(Request $request): JsonResponse
+    {
+        Gate::authorize('create', Member::class);
+
+        $account = $request->filled('user')
+            ? User::find($request->integer('user'))
+            : null;
+
+        return response()->json([
+            'account' => $account ? [
+                'id' => $account->id,
+                'first_name' => $account->first_name,
+                'middle_name' => $account->middle_name,
+                'last_name' => $account->last_name,
+                'suffix' => $account->suffix,
+                'email' => $account->email,
+                'mobile_number' => $account->mobile_number,
+                'role_label' => $account->role?->label(),
+                'field_office_id' => $account->field_office_id,
+                // Staff registering as test administrators work for the
+                // Commission, so their agency is known — prefill it instead of
+                // asking someone to retype it in a different form each time.
+                // Still editable: it is a suggestion, not a locked field like
+                // the email, which has to match for the record to link.
+                'agency' => $account->role?->isStaff() ? Member::CSC_AGENCY : null,
+                // Employees serve through their employment record, so the form
+                // stops demanding a testing center for them (StoreMemberRequest).
+                'is_employee' => (bool) $account->role?->isStaff(),
+            ] : null,
+            'fieldOffices' => $this->assignableFieldOffices($request->user()),
+            'testingCenters' => $this->assignableTestingCenters($request->user()),
         ]);
     }
 
@@ -108,9 +166,15 @@ class MemberController extends Controller
             return $member;
         });
 
-        return redirect()
-            ->route('members.index')
-            ->with('success', "Member registered with PROCTAD ID {$member->proctad_id}.");
+        /*
+         * back(), not a redirect to the members list: registration is started
+         * from two places — the Members page and the "Register as test
+         * administrator" action on /users — and sending the second one to
+         * /members threw away the tab, filters and page the admin was working
+         * through. Returning to the caller also preserves the members list's own
+         * filters, which route('members.index') discarded.
+         */
+        return back()->with('success', "Member registered with PROCTAD ID {$member->proctad_id}.");
     }
 
     public function show(Member $member): RedirectResponse
@@ -228,6 +292,8 @@ class MemberController extends Controller
             'fieldOffices' => $this->assignableFieldOffices($request->user(), $member->field_office_id),
             'testingCenters' => $this->assignableTestingCenters($request->user(), $member->testing_center_id),
             'statuses' => $this->statusOptions(),
+            // See create() — optional for employees, required for everyone else.
+            'isEmployee' => (bool) $member->user?->role->isStaff(),
         ]);
     }
 
@@ -243,9 +309,9 @@ class MemberController extends Controller
 
         $member->update($validated);
 
-        return redirect()
-            ->route('members.index')
-            ->with('success', 'Member record updated.');
+        // Editing happens inside the detail modal, which can be open over either
+        // the Members page or /users — see store() above.
+        return back()->with('success', 'Member record updated.');
     }
 
     public function destroy(Member $member): RedirectResponse
@@ -254,9 +320,7 @@ class MemberController extends Controller
 
         $member->delete();
 
-        return redirect()
-            ->route('members.index')
-            ->with('success', "Member {$member->proctad_id} removed. The PROCTAD ID remains reserved.");
+        return back()->with('success', "Member {$member->proctad_id} removed. The PROCTAD ID remains reserved.");
     }
 
     /**
@@ -427,9 +491,15 @@ class MemberController extends Controller
             'testing_center' => $member->testingCenter?->only('id', 'name'),
             // Surfaces the members left unplaced by the testing-center backfill:
             // their office handles several centers, so no center could be
-            // derived and staff have to choose one. Regional-office members
-            // legitimately have none, hence the exclusion.
-            'needs_testing_center' => $member->testing_center_id === null && ! $member->isRegionWide(),
+            // derived and staff have to choose one.
+            //
+            // Employees are excluded — not only the region-wide ones. A field
+            // office employee serves the centers their office covers, so a blank
+            // is the normal state for them too, and the field is optional for
+            // both (StoreMemberRequest). Flagging it asked staff to fix
+            // something that was not broken.
+            'needs_testing_center' => $member->testing_center_id === null
+                && $member->user?->role->isStaff() !== true,
             'status' => $member->status->value,
             'status_label' => $member->status->label(),
             'status_variant' => $member->status->badgeVariant(),

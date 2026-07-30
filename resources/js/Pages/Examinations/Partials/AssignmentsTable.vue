@@ -20,6 +20,7 @@ const props = defineProps({
     venues: { type: Array, required: true },
     roles: { type: Array, required: true },
     ratings: { type: Array, required: true },
+    responseChannels: { type: Array, default: () => [] },
     can: { type: Object, required: true },
 });
 
@@ -224,6 +225,31 @@ const submitAlternate = () => alternateForm.post(`/assignments/${callingIn.value
     onSuccess: () => (callingIn.value = null),
 });
 
+/*
+ * --- Record a response on the member's behalf ---
+ *
+ * Testing centers are rural and the emailed confirmation link expires after
+ * seven days, so members regularly answer by phone or in person instead. The
+ * office records that answer here, under their own name — one-shot server-side
+ * like any other response, so it cannot overwrite one the member already gave.
+ */
+const recordingFor = ref(null);
+const recordForm = useForm({ action: 'confirm', channel: 'phone', decline_reason: '', note: '' });
+
+const openRecordResponse = (assignment) => {
+    recordingFor.value = assignment;
+    recordForm.clearErrors();
+    recordForm.action = 'confirm';
+    recordForm.channel = props.responseChannels[0]?.value ?? 'phone';
+    recordForm.decline_reason = '';
+    recordForm.note = '';
+};
+
+const submitRecordResponse = () => recordForm.post(`/assignments/${recordingFor.value.id}/record-response`, {
+    preserveScroll: true,
+    onSuccess: () => (recordingFor.value = null),
+});
+
 /* --- Force reassign (admin override — preserves confirmation status) --- */
 const reassigning = ref(null);
 const reassignForm = useForm({ role: '', examination_school_id: '' });
@@ -345,7 +371,13 @@ const submitBulkConfirm = () => {
                                 </Link>
                                 <p class="font-mono text-xs text-brand-700">{{ assignment.member.proctad_id }}</p>
                             </div>
-                            <BaseBadge :variant="assignment.status_variant" class="shrink-0">{{ assignment.status_label }}</BaseBadge>
+                            <div class="shrink-0 text-right">
+                                <BaseBadge :variant="assignment.status_variant">{{ assignment.status_label }}</BaseBadge>
+                                <p v-if="assignment.recorded_on_behalf" class="mt-1 text-xs leading-snug text-slate-500">
+                                    Recorded by {{ assignment.recorded_on_behalf.by }}
+                                    <span v-if="assignment.recorded_on_behalf.channel">· {{ assignment.recorded_on_behalf.channel }}</span>
+                                </p>
+                            </div>
                         </div>
 
                         <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
@@ -410,6 +442,12 @@ const submitBulkConfirm = () => {
                                 icon="paper-airplane"
                                 :label="`${assignment.confirmation_sent_at ? 'Resend' : 'Send'} Confirmation`"
                                 @click="sendConfirmation(assignment)"
+                            />
+                            <IconButton
+                                v-if="assignment.status === 'pending' && !examination.concluded"
+                                icon="phone"
+                                label="Record their response (phoned in / in person)"
+                                @click="openRecordResponse(assignment)"
                             />
                             <IconButton
                                 v-if="assignment.is_coverable && !assignment.attended && !assignment.absent && !assignment.is_alternate && !assignment.covering_for"
@@ -500,8 +538,17 @@ const submitBulkConfirm = () => {
                             </span>
                         </div>
                     </td>
-                    <td class="whitespace-nowrap px-3 py-2">
+                    <td class="px-3 py-2">
                         <BaseBadge :variant="assignment.status_variant">{{ assignment.status_label }}</BaseBadge>
+                        <!--
+                            An answer the office took by phone must never read as
+                            one the member gave themselves — the distinction is
+                            the whole audit value of the confirmation trail.
+                        -->
+                        <p v-if="assignment.recorded_on_behalf" class="mt-1 text-xs leading-snug text-slate-500">
+                            Recorded by {{ assignment.recorded_on_behalf.by }}
+                            <span v-if="assignment.recorded_on_behalf.channel">· {{ assignment.recorded_on_behalf.channel }}</span>
+                        </p>
                     </td>
                     <td class="hidden whitespace-nowrap px-3 py-2 md:table-cell">
                         <span v-if="assignment.attended" class="inline-flex items-center gap-1.5 text-emerald-700">
@@ -539,6 +586,18 @@ const submitBulkConfirm = () => {
                                 icon="paper-airplane"
                                 :label="`${assignment.confirmation_sent_at ? 'Resend' : 'Send'} Confirmation`"
                                 @click="sendConfirmation(assignment)"
+                            />
+                            <!--
+                                For a member who cannot answer the emailed link
+                                at all — rural connectivity, no phone signal at
+                                home, link already expired. The office records
+                                the answer they gave by phone or in person.
+                            -->
+                            <IconButton
+                                v-if="assignment.status === 'pending' && !examination.concluded"
+                                icon="phone"
+                                label="Record their response (phoned in / in person)"
+                                @click="openRecordResponse(assignment)"
                             />
                             <!--
                                 Exam-day cover. Only offered for a room-floor
@@ -768,6 +827,78 @@ const submitBulkConfirm = () => {
                 :loading="alternateForm.processing"
             >
                 Call in
+            </BaseButton>
+        </template>
+    </BaseModal>
+
+    <!-- Record a response on the member's behalf -->
+    <BaseModal :show="!!recordingFor" title="Record their response" @close="recordingFor = null">
+        <form id="record-response-form" class="space-y-4" novalidate @submit.prevent="submitRecordResponse">
+            <p class="text-sm text-slate-600">
+                <strong>{{ recordingFor?.member.name }}</strong>
+                <span class="ml-1 font-mono text-xs text-brand-700">{{ recordingFor?.member.proctad_id }}</span>
+                <span class="mt-0.5 block text-xs text-slate-500">{{ recordingFor?.role_label }}</span>
+            </p>
+            <p class="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+                For a member who cannot answer their emailed link — no connection at home, or the
+                seven-day link has lapsed. Record the answer they actually gave you; it is filed under
+                your name and shown on this row as office-recorded.
+            </p>
+
+            <div>
+                <p class="mb-1.5 block text-sm font-medium text-slate-700">Their answer <span class="text-accent-600">*</span></p>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <label
+                        v-for="option in [{ value: 'confirm', label: 'Confirmed — will serve' }, { value: 'decline', label: 'Declined — cannot serve' }]"
+                        :key="option.value"
+                        class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors"
+                        :class="recordForm.action === option.value ? 'border-brand-500 bg-brand-50 text-brand-900' : 'border-slate-300 text-slate-700 hover:bg-slate-50'"
+                    >
+                        <input v-model="recordForm.action" type="radio" :value="option.value" class="h-4 w-4 accent-brand-600">
+                        {{ option.label }}
+                    </label>
+                </div>
+            </div>
+
+            <SelectInput
+                v-model="recordForm.channel"
+                label="How did they answer?"
+                required
+                :options="responseChannels"
+                :error="recordForm.errors.channel"
+            />
+
+            <TextInput
+                v-if="recordForm.action === 'decline'"
+                v-model="recordForm.decline_reason"
+                label="Reason for declining"
+                required
+                :error="recordForm.errors.decline_reason"
+            />
+
+            <TextInput
+                v-model="recordForm.note"
+                label="Note"
+                optional
+                placeholder="e.g. Called 09:15, spoke to the member directly"
+                :error="recordForm.errors.note"
+            />
+
+            <p v-if="recordForm.action === 'decline'" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                Recording a decline frees the seat and notifies this Field Office that it needs re-staffing.
+            </p>
+        </form>
+        <template #footer>
+            <BaseButton variant="outline" size="sm" @click="recordingFor = null">Cancel</BaseButton>
+            <BaseButton
+                type="submit"
+                form="record-response-form"
+                :variant="recordForm.action === 'decline' ? 'accent' : 'primary'"
+                size="sm"
+                :loading="recordForm.processing"
+                :disabled="recordForm.processing"
+            >
+                Record {{ recordForm.action === 'decline' ? 'decline' : 'confirmation' }}
             </BaseButton>
         </template>
     </BaseModal>

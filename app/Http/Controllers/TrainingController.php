@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\BlacklistStatus;
 use App\Enums\CertificateType;
+use App\Enums\TrainingSession;
 use App\Enums\TrainingType;
 use App\Models\Examination;
 use App\Models\Member;
@@ -26,12 +27,11 @@ class TrainingController extends Controller
         Gate::authorize('viewAny', Training::class);
 
         $user = $request->user();
-        $foScoped = $user->role->isFieldOfficeScoped();
 
         return Inertia::render('Trainings/Index', [
             'trainings' => Training::withCount('assignments')
                 ->with('fieldOffice:id,name', 'exam:id,title,exam_date')
-                ->when($foScoped, fn ($q) => $q->whereIn('field_office_id', $user->scopedFieldOfficeIds()))
+                ->visibleTo($user)
                 ->orderByDesc('training_date')
                 ->get()
                 ->map(fn (Training $training) => [
@@ -39,6 +39,8 @@ class TrainingController extends Controller
                     'type' => $training->type->value,
                     'type_label' => $training->type->shortLabel(),
                     'training_date' => $training->training_date->toDateString(),
+                    'session' => $training->session->value,
+                    'session_label' => $training->session->shortLabel(),
                     'completed' => $training->completed_at !== null,
                     'field_office' => $training->relationLoaded('fieldOffice') ? $training->fieldOffice?->only('id', 'name') : null,
                     'exam' => $training->relationLoaded('exam') && $training->exam
@@ -47,6 +49,8 @@ class TrainingController extends Controller
                 ]),
             'types' => collect(TrainingType::cases())
                 ->map(fn ($type) => ['value' => $type->value, 'label' => $type->label()])->all(),
+            'sessions' => collect(TrainingSession::cases())
+                ->map(fn ($session) => ['value' => $session->value, 'label' => $session->label()])->all(),
             'exams' => Examination::where('is_active', true)
                 ->orderByDesc('exam_date')
                 ->get(['id', 'title', 'exam_date'])
@@ -122,7 +126,8 @@ class TrainingController extends Controller
                 // carries a Certificate of Completion.
                 'issues_completion' => $training->type->issuesCompletionCertificate(),
                 'training_date' => $training->training_date->toDateString(),
-                'end_date' => $training->end_date?->toDateString(),
+                'session' => $training->session->value,
+                'session_label' => $training->session->label(),
                 'venue' => $training->venue,
                 'completed' => $training->completed_at !== null,
                 'completed_at' => $training->completed_at?->format('M d, Y'),
@@ -135,6 +140,9 @@ class TrainingController extends Controller
             'assignments' => $assignments,
             'assignableMembers' => $assignable,
             'scannerSessions' => ScannerSessionController::panelData('training_id', $training->id),
+            // Pre-fills the issue form with the end of this sitting instead of
+            // the end of the day — see Training::scannerLinkExpiry().
+            'scannerLinkExpiry' => $training->scannerLinkExpiry()->format('Y-m-d\TH:i'),
             'can' => [
                 'assign' => $user->can('create', TrainingAssignment::class),
                 'manage' => $user->can('update', $training),
@@ -215,7 +223,7 @@ class TrainingController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'type' => ['required', Rule::enum(TrainingType::class)],
             'training_date' => ['required', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:training_date'],
+            'session' => ['required', Rule::enum(TrainingSession::class)],
             'venue' => ['nullable', 'string', 'max:255'],
             'exam_id' => ['required', 'integer', 'exists:examinations,id'],
         ]);

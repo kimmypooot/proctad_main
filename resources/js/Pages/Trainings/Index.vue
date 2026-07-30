@@ -19,6 +19,7 @@ import ViewTrainingModal from './Partials/ViewTrainingModal.vue';
 const props = defineProps({
     trainings: { type: Array, required: true },
     types: { type: Array, required: true },
+    sessions: { type: Array, required: true },
     exams: { type: Array, required: true },
     can: { type: Object, required: true },
 });
@@ -31,7 +32,7 @@ const form = useForm({
     title: '',
     type: '',
     training_date: '',
-    end_date: '',
+    session: 'whole_day',
     venue: '',
     exam_id: '',
 });
@@ -51,7 +52,7 @@ const openEdit = (training) => {
     form.title = training.title;
     form.type = training.type;
     form.training_date = training.training_date;
-    form.end_date = '';
+    form.session = training.session;
     form.venue = training.venue ?? '';
     form.exam_id = training.exam?.id ?? '';
     showForm.value = true;
@@ -100,9 +101,9 @@ const submit = () => {
                     </BaseBadge>
                 </div>
                 <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500">
-                    <div><dt class="font-medium text-slate-400">Date</dt><dd class="text-slate-600">{{ training.training_date }}</dd></div>
+                    <div><dt class="font-medium text-slate-400">Date</dt><dd class="text-slate-600">{{ training.training_date }} · {{ training.session_label }}</dd></div>
                     <div><dt class="font-medium text-slate-400">Participants</dt><dd class="text-slate-600">{{ training.assignments_count }}</dd></div>
-                    <div v-if="training.field_office?.name" class="col-span-2"><dt class="font-medium text-slate-400">Field Office</dt><dd class="text-slate-600">{{ training.field_office.name }}</dd></div>
+                    <div class="col-span-2"><dt class="font-medium text-slate-400">Field Office</dt><dd class="text-slate-600">{{ training.field_office?.name ?? 'Regional' }}</dd></div>
                     <div v-if="training.exam?.title" class="col-span-2"><dt class="font-medium text-slate-400">Connected Exam</dt><dd class="text-slate-600">{{ training.exam.title }}</dd></div>
                     <div v-if="training.venue" class="col-span-2"><dt class="font-medium text-slate-400">Venue</dt><dd class="text-slate-600">{{ training.venue }}</dd></div>
                 </dl>
@@ -133,9 +134,17 @@ const submit = () => {
                             <p class="text-xs text-slate-400 sm:hidden">{{ training.type_label }}</p>
                         </td>
                         <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 sm:table-cell">{{ training.type_label }}</td>
-                        <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 lg:table-cell">{{ training.field_office?.name ?? '—' }}</td>
+                        <!-- No field office means regional: organised by the
+                             region, visible to every office. -->
+                        <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 lg:table-cell">{{ training.field_office?.name ?? 'Regional' }}</td>
                         <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 xl:table-cell">{{ training.exam?.title ?? '—' }}</td>
-                        <td class="whitespace-nowrap px-3 py-2 text-slate-600">{{ training.training_date }}</td>
+                        <!-- An AM and a PM batch of the same course share a
+                             title and a date — the session is what tells the
+                             two rows apart. -->
+                        <td class="whitespace-nowrap px-3 py-2 text-slate-600">
+                            {{ training.training_date }}
+                            <span class="text-xs text-slate-400">· {{ training.session_label }}</span>
+                        </td>
                         <td class="hidden px-3 py-2 text-slate-600 xl:table-cell">{{ training.venue ?? '—' }}</td>
                         <td class="hidden px-3 py-2 text-slate-600 md:table-cell">{{ training.assignments_count }}</td>
                         <td class="px-3 py-2">
@@ -165,7 +174,9 @@ const submit = () => {
                 <TextInput v-model="form.title" name="title" label="Title" required placeholder="e.g. PROCTAD Orientation" :error="form.errors.title" />
                 <SelectInput v-model="form.type" name="type" label="Type" required :options="types" :error="form.errors.type" />
                 <TextInput v-model="form.training_date" name="training_date" label="Training Date" type="date" required :error="form.errors.training_date" />
-                <TextInput v-model="form.end_date" name="end_date" label="End Date" type="date" optional :error="form.errors.end_date" />
+                <!-- A batch too large for one sitting runs as separate AM and
+                     PM trainings, each with its own roster and scanner link. -->
+                <SelectInput v-model="form.session" name="session" label="Session" required :options="sessions" :error="form.errors.session" />
                 <TextInput v-model="form.venue" name="venue" label="Venue" optional :error="form.errors.venue" />
                 <SelectInput v-model="form.exam_id" name="exam_id" label="Connected Exam" required placeholder="Select an exam" :options="exams" :error="form.errors.exam_id" />
             </form>

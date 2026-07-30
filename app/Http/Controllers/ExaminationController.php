@@ -20,6 +20,7 @@ use App\Models\OepAttendance;
 use App\Models\OtherExaminationPersonnel;
 use App\Models\ScannerSession;
 use App\Models\School;
+use App\Services\AssignmentResponder;
 use App\Services\PerformanceRatingCalculator;
 use App\Services\RoomStaffingCalculator;
 use App\Support\DesignationRegistry;
@@ -126,6 +127,9 @@ class ExaminationController extends Controller
                 'room:id,room_number',
                 'coveredSchools.school:id,name',
                 'attendances',
+                // Who answered, and how — a phoned-in response recorded by the
+                // office must not be indistinguishable from the member's own.
+                'latestResponse',
                 // Exam-day cover, eager-loaded: without these the substitution
                 // columns below would fire three queries per assignment row.
                 'markedAbsentBy:id,name',
@@ -141,6 +145,8 @@ class ExaminationController extends Controller
             ->map(function (ExamAssignment $assignment) use ($user, $computedRatings) {
                 $computed = $computedRatings[$assignment->id] ?? null;
                 $rating = $computed['rating'] ?? $assignment->performance_rating;
+                $response = $assignment->latestResponse?->metadata ?? [];
+                $onBehalf = ($response['on_behalf'] ?? false) ? $response : null;
 
                 return [
                     'id' => $assignment->id,
@@ -158,6 +164,14 @@ class ExaminationController extends Controller
                     'status_label' => $assignment->status->label(),
                     'status_variant' => $assignment->status->badgeVariant(),
                     'confirmation_sent_at' => $assignment->confirmation_sent_at?->format('M d, Y H:i'),
+                    'responded_at' => $assignment->responded_at?->format('M d, Y H:i'),
+                    'decline_reason' => $assignment->decline_reason,
+                    // Present only when staff recorded the answer for the member.
+                    'recorded_on_behalf' => $onBehalf === null ? null : [
+                        'by' => $onBehalf['recorded_by_name'] ?? null,
+                        'channel' => $onBehalf['channel_label'] ?? null,
+                        'note' => $onBehalf['note'] ?? null,
+                    ],
                     'venue' => $assignment->examinationSchool?->school?->name,
                     'room' => $assignment->room?->room_number,
                     'examination_school_id' => $assignment->examination_school_id,
@@ -341,6 +355,9 @@ class ExaminationController extends Controller
                 ...$examination->only('id', 'title', 'type'),
                 'exam_date' => $examination->exam_date->toDateString(),
                 'upcoming' => $examination->exam_date->isFuture(),
+                // Distinct from !upcoming, which is already true on exam day
+                // itself — see the guard in ExamAssignmentController::recordResponse.
+                'concluded' => $examination->exam_date->lt(today()),
             ],
             'assignments' => $assignments,
             'assignableMembers' => $assignable,
@@ -381,6 +398,10 @@ class ExaminationController extends Controller
             'roomRoleFields' => DesignationRegistry::roomDesignations(),
             'ratings' => collect(PerformanceRating::cases())
                 ->map(fn ($rating) => ['value' => $rating->value, 'label' => $rating->label()])->all(),
+            // How an off-system answer reached the office, for "Record Response".
+            'responseChannels' => collect(AssignmentResponder::ON_BEHALF_CHANNELS)
+                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()->all(),
         ]);
     }
 

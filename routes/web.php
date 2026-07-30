@@ -99,6 +99,22 @@ Route::middleware(['scanner.session', 'throttle:scanner-link'])->group(function 
         ->name('scan.mark-absent');
     Route::post('/scan/{token}/activate-alternate', [ScannerController::class, 'activateAlternate'])
         ->name('scan.activate-alternate');
+    // Take back a check-in made seconds ago — scoped to the session's own event
+    // and time-boxed server-side (ScannerController::UNDO_WINDOW_SECONDS).
+    Route::post('/scan/{token}/undo-attendance', [ScannerController::class, 'undoAttendance'])
+        ->name('scan.undo-attendance');
+
+    // The scanned person's ID photo, so the gate can check a face and not just
+    // a code. `signed` is the point: these URLs are minted per scan with a few
+    // minutes' life (ScannerController::PHOTO_LINK_TTL_MINUTES), so one copied
+    // out of the page is dead before it travels, and the controller still
+    // refuses anyone outside the session's own roster.
+    Route::get('/scan/{token}/photo/member/{member}', [ScannerController::class, 'memberPhoto'])
+        ->middleware('signed')
+        ->name('scan.member-photo');
+    Route::get('/scan/{token}/photo/personnel/{personnel}', [ScannerController::class, 'personnelPhoto'])
+        ->middleware('signed')
+        ->name('scan.personnel-photo');
 });
 
 // Assignment confirmation: opened from an emailed signed link, no login required.
@@ -210,6 +226,9 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
     // Own-record access is allowed by MemberPolicy::view.
     Route::get('/members/{member}/photo', [MemberController::class, 'photo'])->name('members.photo');
 
+    // Everyone signed in has a bell, so this sits outside every role group.
+    Route::get('/notifications', [NotificationController::class, 'index'])
+        ->name('notifications.index');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])
         ->name('notifications.read');
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])
@@ -223,6 +242,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('scanner.mark-absent');
         Route::post('/scanner/activate-alternate', [ScannerController::class, 'activateAlternate'])
             ->name('scanner.activate-alternate');
+        Route::post('/scanner/undo-attendance', [ScannerController::class, 'undoAttendance'])
+            ->name('scanner.undo-attendance');
 
         // Issue / revoke the public scanner links above.
         Route::post('/scanner-sessions', [ScannerSessionController::class, 'store'])
@@ -345,6 +366,8 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('venues.rooms.clear');
         Route::post('/venues/{venue}/rooms/designations', [ExamRoomController::class, 'overrideDesignation'])
             ->name('venues.rooms.designations');
+        Route::put('/venues/{venue}/rooms/designations', [ExamRoomController::class, 'updateDesignations'])
+            ->name('venues.rooms.designations.update');
         Route::put('/exam-rooms/{room}', [ExamRoomController::class, 'update'])
             ->name('exam-rooms.update');
         Route::delete('/exam-rooms/{room}', [ExamRoomController::class, 'destroy'])
@@ -367,6 +390,10 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
             ->name('assignments.send-confirmation');
         Route::post('/assignments/{assignment}/force-reassign', [ExamAssignmentController::class, 'forceReassign'])
             ->name('assignments.force-reassign');
+        // A member who cannot reach the emailed link answers by phone or in
+        // person instead; this records that answer under the staff who took it.
+        Route::post('/assignments/{assignment}/record-response', [ExamAssignmentController::class, 'recordResponse'])
+            ->name('assignments.record-response');
 
         // Exam-day cover: record a no-show, then call an Alternate Examiner in
         // from the venue's standby pool. The venue scanner reaches the same

@@ -17,6 +17,9 @@ const props = defineProps({
      * email must stay exactly what that account uses so submitting links it, not
      * creates a duplicate (see MemberController::resolveAccount()). */
     emailLocked: { type: Boolean, default: false },
+    /** True when the record belongs to a Commission employee, whose reach comes
+     * from their employment record rather than a testing center. */
+    isEmployee: { type: Boolean, default: false },
 });
 
 const sexOptions = [
@@ -61,11 +64,18 @@ const maxDateOfBirth = (() => {
 <template>
     <div class="space-y-5">
         <div class="grid gap-5 sm:grid-cols-2">
+            <!--
+                Uppercased as typed, matching how the record is stored (see
+                Member's mutators) — otherwise the form shows "Juan" right up
+                until it saves as "JUAN", and the ID card, certificates and
+                this page disagree about what was entered.
+            -->
             <TextInput
                 v-model="form.first_name"
                 name="first_name"
                 label="First Name"
                 required
+                uppercase
                 :error="form.errors.first_name"
             />
             <TextInput
@@ -73,6 +83,7 @@ const maxDateOfBirth = (() => {
                 name="middle_name"
                 label="Middle Name"
                 optional
+                uppercase
                 :error="form.errors.middle_name"
             />
             <TextInput
@@ -80,6 +91,7 @@ const maxDateOfBirth = (() => {
                 name="last_name"
                 label="Last Name"
                 required
+                uppercase
                 :error="form.errors.last_name"
             />
             <div class="grid grid-cols-2 gap-5">
@@ -88,7 +100,8 @@ const maxDateOfBirth = (() => {
                     name="suffix"
                     label="Suffix"
                     optional
-                    placeholder="Jr., III"
+                    uppercase
+                    placeholder="JR., III"
                     :error="form.errors.suffix"
                 />
                 <SelectInput
@@ -108,9 +121,10 @@ const maxDateOfBirth = (() => {
                 name="date_of_birth"
                 label="Date of Birth"
                 type="date"
-                required
+                optional
                 :max="maxDateOfBirth"
                 :error="form.errors.date_of_birth"
+                hint="Used to tell apart members who share a name — add it when you have it."
             />
         </div>
 
@@ -144,7 +158,8 @@ const maxDateOfBirth = (() => {
                 name="agency"
                 label="Agency"
                 required
-                placeholder="e.g. DepEd Division Office"
+                uppercase
+                placeholder="e.g. DEPED DIVISION OFFICE"
                 :error="form.errors.agency"
             />
             <TextInput
@@ -152,6 +167,7 @@ const maxDateOfBirth = (() => {
                 name="position"
                 label="Position"
                 optional
+                uppercase
                 :error="form.errors.position"
             />
         </div>
@@ -161,11 +177,14 @@ const maxDateOfBirth = (() => {
                 v-model="form.testing_center_id"
                 name="testing_center_id"
                 label="Testing Center"
-                required
-                placeholder="Select a Testing Center"
+                :required="!isEmployee"
+                :optional="isEmployee"
+                :placeholder="isEmployee ? 'None — serves through their office' : 'Select a Testing Center'"
                 :options="testingCenters.map((tc) => ({ value: tc.id, label: tc.name }))"
                 :error="form.errors.testing_center_id"
-                hint="The city the member serves — this decides which staff can see and manage them."
+                :hint="isEmployee
+                    ? 'Commission employees serve through their office — regional office staff region-wide, field office staff across the centers their office covers. Leave blank unless this person serves one city only.'
+                    : 'The city the member serves — this decides which staff can see and manage them.'"
             />
 
             <SelectInput

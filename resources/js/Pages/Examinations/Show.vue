@@ -27,6 +27,7 @@ const props = defineProps({
     roles: { type: Array, required: true },
     roomRoleFields: { type: Array, default: () => [] },
     ratings: { type: Array, required: true },
+    responseChannels: { type: Array, default: () => [] },
     can: { type: Object, required: true },
 });
 
@@ -163,6 +164,7 @@ const jumpTo = (key) => (currentStep.value = key);
                 :venues="venues"
                 :roles="roles"
                 :ratings="ratings"
+                :response-channels="responseChannels"
                 :can="can"
             />
         </div>

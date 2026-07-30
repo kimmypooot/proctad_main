@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import ToastContainer from '@/Components/ToastContainer.vue';
@@ -28,11 +28,40 @@ watch(() => page.props.flash, (flash) => {
 /**
  * Warn while there is still time to get a fresh link, rather than at the
  * moment scanning stops working mid-queue.
+ *
+ * The clock has to tick. This was `Date.now()` read inside a computed, which
+ * takes no reactive dependency on time — so it was evaluated once, on first
+ * render, and never again. A link opened at 7am for an examination running to
+ * 5pm never turned gold: precisely the all-day case the warning is for.
  */
-const expiringSoon = computed(() => {
+const now = ref(Date.now());
+let clock = null;
+
+onMounted(() => (clock = setInterval(() => (now.value = Date.now()), 30_000)));
+onBeforeUnmount(() => clearInterval(clock));
+
+const msRemaining = computed(() => {
     const expiry = Date.parse(props.session.expires_at_iso);
 
-    return !Number.isNaN(expiry) && expiry - Date.now() < 60 * 60 * 1000;
+    return Number.isNaN(expiry) ? null : expiry - now.value;
+});
+
+const expired = computed(() => msRemaining.value !== null && msRemaining.value <= 0);
+const expiringSoon = computed(() => msRemaining.value !== null && msRemaining.value > 0 && msRemaining.value < 60 * 60 * 1000);
+
+/**
+ * Inside the last hour the absolute time stops being the useful number — "until
+ * 5:00 PM" needs the operator to work out how long that is while holding a
+ * queue. Both are shown, so there is still something to quote when asking the
+ * office for a fresh link.
+ */
+const expiryLabel = computed(() => {
+    if (expired.value) return 'Link expired';
+    if (! expiringSoon.value) return `Until ${props.session.expires_at}`;
+
+    const minutes = Math.max(1, Math.round(msRemaining.value / 60_000));
+
+    return `Until ${props.session.expires_at} · ${minutes} min left`;
 });
 </script>
 
@@ -47,7 +76,7 @@ const expiringSoon = computed(() => {
                         <img :src="'/images/brand/proctad-logo.png'" alt="" class="h-full w-full object-contain">
                     </span>
                     <div class="min-w-0 flex-1">
-                        <p class="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-white/60">
+                        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-white/90">
                             Attendance Scanner
                         </p>
                         <p class="truncate text-base leading-tight font-bold sm:text-lg">
@@ -73,10 +102,13 @@ const expiringSoon = computed(() => {
                     </span>
                     <span
                         class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold"
-                        :class="expiringSoon ? 'bg-gold-400 text-brand-950' : 'bg-white/10 text-white ring-1 ring-white/15'"
+                        :class="expired
+                            ? 'bg-accent-600 text-white'
+                            : expiringSoon ? 'bg-gold-400 text-brand-950' : 'bg-white/10 text-white ring-1 ring-white/15'"
+                        :role="expiringSoon || expired ? 'status' : undefined"
                     >
-                        <AppIcon name="clock" class="h-3.5 w-3.5" />
-                        Until {{ session.expires_at }}
+                        <AppIcon :name="expired ? 'exclamation-triangle' : 'clock'" class="h-3.5 w-3.5" />
+                        {{ expiryLabel }}
                     </span>
                 </div>
             </div>
@@ -88,14 +120,56 @@ const expiringSoon = computed(() => {
 
         <!-- pb clears the home-indicator bar on gesture-nav phones. -->
         <footer class="mx-auto w-full max-w-3xl px-4 pb-[calc(1.5rem_+_env(safe-area-inset-bottom))] sm:px-6">
-            <p class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-500">
-                <AppIcon name="lock-closed" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+            <p class="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-600">
+                <AppIcon name="lock-closed" class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
                 <span>
-                    Temporary scanning link issued by <strong class="font-semibold text-slate-700">{{ session.issued_by }}</strong>.
+                    Temporary scanning link issued by <strong class="font-semibold text-slate-800">{{ session.issued_by }}</strong>.
                     Keep it within your venue — anyone who opens it can record attendance for this event.
                 </span>
             </p>
-            <p class="mt-3 text-center text-[0.7rem] text-slate-400">
+
+            <!--
+                Data Privacy Act notice (RA 10173). This page displays a named
+                individual's personal data to whoever is holding the link, which
+                makes a purpose-and-controller statement an obligation, not a
+                courtesy. The two sentences that matter stay visible; the detail
+                sits behind a disclosure so it does not crowd out the operator's
+                actual work.
+            -->
+            <div class="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-600">
+                <p>
+                    <strong class="font-semibold text-slate-800">Privacy notice.</strong>
+                    Personal data shown here is processed by the
+                    <strong class="font-semibold text-slate-800">Civil Service Commission Regional Office VIII</strong>
+                    for the sole purpose of verifying identity and recording examination-day attendance.
+                </p>
+                <details class="group mt-2">
+                    <summary class="cursor-pointer font-semibold text-brand-700 marker:content-none hover:underline">
+                        <span class="group-open:hidden">Read the full notice</span>
+                        <span class="hidden group-open:inline">Hide the full notice</span>
+                    </summary>
+                    <div class="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                        <p>
+                            <strong class="font-semibold text-slate-800">What is shown:</strong>
+                            the name, PROCTAD or OEP identification number, and examination assignment of the
+                            person whose code is scanned. Nothing else about them is retrievable from this page.
+                        </p>
+                        <p>
+                            <strong class="font-semibold text-slate-800">Who may use this link:</strong>
+                            examination personnel at this venue only, for the duration shown above. It stops
+                            working when it expires, and the office that issued it can revoke it at any time.
+                        </p>
+                        <p>
+                            <strong class="font-semibold text-slate-800">Your rights:</strong>
+                            under the Data Privacy Act of 2012 (RA 10173) you may ask what personal data is held
+                            about you and request its correction. Address requests to the Civil Service Commission
+                            Regional Office VIII.
+                        </p>
+                    </div>
+                </details>
+            </div>
+
+            <p class="mt-3 text-center text-xs text-slate-500">
                 Civil Service Commission Regional Office VIII — PROCTAD Management System
             </p>
         </footer>

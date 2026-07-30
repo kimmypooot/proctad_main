@@ -178,6 +178,10 @@ const perRoomDesignations = ref({});
 const initPerRoomDesignations = () => {
     perRoomDesignations.value = Object.fromEntries(props.rooms.map((r) => [r.id, r.designation ?? '']));
 };
+// A bulk apply (or any other edit) rewrites the rooms out from under this grid.
+// Without a re-sync its selects keep showing the pre-apply designations, which
+// reads as "the override didn't work" and makes every row look unsaved.
+watch(() => props.rooms, initPerRoomDesignations, { deep: true });
 const changedPerRoomDesignations = computed(() => props.rooms.filter(
     (r) => (perRoomDesignations.value[r.id] ?? '') !== (r.designation ?? ''),
 ));
@@ -193,25 +197,20 @@ const savePerRoomDesignations = () => {
     }
 
     savingPerRoom.value = true;
-    let remaining = changedPerRoomDesignations.value.length;
-    changedPerRoomDesignations.value.forEach((room) => {
-        perRoomForm
-            .transform(() => ({
-                room_number: room.room_number,
-                capacity: room.capacity,
+    perRoomForm
+        .transform(() => ({
+            designations: changedPerRoomDesignations.value.map((room) => ({
+                id: room.id,
                 designation: perRoomDesignations.value[room.id] || null,
-            }))
-            .put(`/exam-rooms/${room.id}`, {
-                preserveScroll: true,
-                onFinish: () => {
-                    remaining -= 1;
-                    if (remaining <= 0) {
-                        savingPerRoom.value = false;
-                        confirmingSaveAll.value = false;
-                    }
-                },
-            });
-    });
+            })),
+        }))
+        .put(`/venues/${props.venue.id}/rooms/designations`, {
+            preserveScroll: true,
+            onFinish: () => {
+                savingPerRoom.value = false;
+                confirmingSaveAll.value = false;
+            },
+        });
 };
 
 /* ---------------------------------------------------------------------- */
@@ -783,7 +782,7 @@ const exportSupervisingExaminers = () => exportCsv(
         </BaseModal>
 
         <!-- Manual Room Assignment -->
-        <BaseModal :show="showManualAssign" title="Manual Room Assignment" max-width="xl" @close="showManualAssign = false">
+        <BaseModal :show="showManualAssign" title="Manual Room Assignment" max-width="5xl" @close="showManualAssign = false">
             <div class="space-y-4">
                 <div class="flex gap-2 border-b border-slate-200">
                     <button
@@ -813,12 +812,12 @@ const exportSupervisingExaminers = () => exportCsv(
                     <div class="mt-2 max-h-80 overflow-y-auto">
                         <table class="w-full table-fixed divide-y divide-slate-200 text-sm">
                             <colgroup>
-                                <col class="w-20">
-                                <col>
-                                <col>
+                                <col class="w-1/5">
+                                <col class="w-2/5">
+                                <col class="w-2/5">
                             </colgroup>
                             <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                <tr><th class="py-1.5 pr-3">Room</th><th class="py-1.5 pr-3">Proctor</th><th class="py-1.5">Room Examiner</th></tr>
+                                <tr><th class="py-1.5 pr-3">Room</th><th class="py-1.5 pr-3">Proctor</th><th class="py-1.5 pr-3">Room Examiner</th></tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 <tr v-for="room in rooms" :key="room.id">
@@ -870,16 +869,16 @@ const exportSupervisingExaminers = () => exportCsv(
                     <div class="mt-2 max-h-80 overflow-y-auto">
                         <table class="w-full table-fixed divide-y divide-slate-200 text-sm">
                             <colgroup>
-                                <col class="w-40">
-                                <col>
+                                <col class="w-1/5">
+                                <col class="w-4/5">
                             </colgroup>
                             <thead class="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                <tr><th class="py-1.5 pr-3">Room Group (anchor room)</th><th class="py-1.5">Supervising Examiner</th></tr>
+                                <tr><th class="py-1.5 pr-3">Room Group (anchor room)</th><th class="py-1.5 pr-3">Supervising Examiner</th></tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 <tr v-for="room in anchorRooms" :key="room.id">
                                     <td class="truncate py-1.5 pr-3 font-medium text-slate-700">{{ room.room_number }}</td>
-                                    <td class="py-1.5">
+                                    <td class="py-1.5 pr-3">
                                         <div v-if="occupant(room, 'supervising_examiner')" class="flex items-center gap-1.5" :class="{ 'opacity-60': pendingCells[`${room.id}:supervising_examiner`] }">
                                             <BaseBadge variant="success" size="xs" class="min-w-0 max-w-full truncate" :title="occupant(room, 'supervising_examiner').member.name">
                                                 {{ occupant(room, 'supervising_examiner').member.name }}

@@ -178,9 +178,9 @@ const submitResign = () => {
                         <p class="font-mono text-xs text-brand-700">{{ certificate.member.proctad_id }}</p>
 
                         <dl class="mt-2 space-y-1 text-xs text-slate-500">
-                            <div v-if="certificate.field_office" class="flex gap-1">
-                                <dt class="font-medium text-slate-400">Field Office:</dt>
-                                <dd class="text-slate-600">{{ certificate.field_office }}</dd>
+                            <div v-if="certificate.testing_center" class="flex gap-1">
+                                <dt class="font-medium text-slate-400">Testing Center:</dt>
+                                <dd class="text-slate-600">{{ certificate.testing_center }}</dd>
                             </div>
                             <div v-if="certificate.source" class="flex gap-1">
                                 <dt class="font-medium text-slate-400">Source:</dt>
@@ -227,7 +227,7 @@ const submitResign = () => {
                         <th class="px-3 py-2">Certificate No.</th>
                         <th class="hidden px-3 py-2 sm:table-cell">Type</th>
                         <th class="px-3 py-2">Member</th>
-                        <th class="hidden px-3 py-2 xl:table-cell">Field Office</th>
+                        <th class="hidden px-3 py-2 xl:table-cell">Testing Center</th>
                         <th class="hidden px-3 py-2 xl:table-cell">Source</th>
                         <th class="hidden px-3 py-2 lg:table-cell">Released</th>
                         <th class="px-3 py-2">Status</th>
@@ -254,7 +254,7 @@ const submitResign = () => {
                             <p class="truncate font-medium text-slate-900" :title="certificate.member.name">{{ certificate.member.name }}</p>
                             <p class="font-mono text-xs text-brand-700">{{ certificate.member.proctad_id }}</p>
                         </td>
-                        <td class="hidden max-w-[10rem] truncate px-3 py-2 text-slate-600 xl:table-cell" :title="certificate.field_office ?? ''">{{ certificate.field_office ?? '—' }}</td>
+                        <td class="hidden max-w-[10rem] truncate px-3 py-2 text-slate-600 xl:table-cell" :title="certificate.testing_center ?? ''">{{ certificate.testing_center ?? '—' }}</td>
                         <td class="hidden px-3 py-2 text-slate-600 xl:table-cell">{{ certificate.source }}</td>
                         <td class="hidden px-3 py-2 text-slate-500 lg:table-cell">{{ certificate.released_at ?? '—' }}</td>
                         <td class="px-3 py-2">

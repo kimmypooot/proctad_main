@@ -13,9 +13,21 @@ class TrainingPolicy
         return $user->hasPermission(Permission::TrainingsView);
     }
 
+    /**
+     * Mirrors Training::scopeVisibleTo(): the list is filtered, so the detail
+     * endpoint has to be too, or an office could open another's training by
+     * guessing its id. A regional training (no field office) is visible to
+     * everyone by design — that is what the null means.
+     */
     public function view(User $user, Training $training): bool
     {
-        return $this->viewAny($user);
+        if (! $this->viewAny($user)) {
+            return false;
+        }
+
+        return $user->role->isRegionWide()
+            || $training->isRegional()
+            || in_array($training->field_office_id, $user->scopedFieldOfficeIds(), true);
     }
 
     public function create(User $user): bool
@@ -42,6 +54,12 @@ class TrainingPolicy
         return $this->manage($user, $training);
     }
 
+    /**
+     * Deliberately narrower than view(): a regional training is visible to
+     * every office but owned by none, so editing and completing it stay with
+     * the region. An office still rosters its own members onto it — that is
+     * guarded per-member in TrainingAssignmentController.
+     */
     private function manage(User $user, Training $training): bool
     {
         if (! $user->hasPermission(Permission::TrainingsManage)) {

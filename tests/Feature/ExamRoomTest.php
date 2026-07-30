@@ -126,6 +126,30 @@ class ExamRoomTest extends TestCase
         $this->assertSame('Professional', $undesignated->fresh()->designation);
     }
 
+    /** The per-room grid saves every edit in one request — a PUT per room would be interrupted down to just the last one. */
+    public function test_update_designations_saves_every_changed_room_in_one_request(): void
+    {
+        $venue = ExaminationSchool::factory()->create();
+        $first = ExamRoom::factory()->create(['examination_school_id' => $venue->id, 'designation' => null]);
+        $second = ExamRoom::factory()->create(['examination_school_id' => $venue->id, 'designation' => 'BCLTE']);
+        $untouched = ExamRoom::factory()->create(['examination_school_id' => $venue->id, 'designation' => 'ICLTE']);
+        $otherVenue = ExamRoom::factory()->create(['designation' => 'Professional']);
+
+        $this->actingAs($this->admin())
+            ->put("/venues/{$venue->id}/rooms/designations", ['designations' => [
+                ['id' => $first->id, 'designation' => 'Professional'],
+                ['id' => $second->id, 'designation' => null],
+                ['id' => $otherVenue->id, 'designation' => 'Special Needs'],
+            ]])
+            ->assertRedirect();
+
+        $this->assertSame('Professional', $first->fresh()->designation);
+        $this->assertNull($second->fresh()->designation);
+        $this->assertSame('ICLTE', $untouched->fresh()->designation);
+        // Ids are read back through the venue, so another venue's room is skipped.
+        $this->assertSame('Professional', $otherVenue->fresh()->designation);
+    }
+
     /**
      * The staffing map assigns optimistically and re-requests only the three
      * props an assignment can change (see Rooms.vue's `only:`). That only pays

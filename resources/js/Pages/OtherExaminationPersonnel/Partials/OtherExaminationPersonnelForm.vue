@@ -60,11 +60,17 @@ watch([centersForSelectedOffice, selectedOfficeIsRegional], ([centers, regional]
 <template>
     <div class="space-y-5">
         <div class="grid gap-5 sm:grid-cols-2">
-            <TextInput v-model="form.first_name" name="first_name" label="First Name" required :error="form.errors.first_name" />
-            <TextInput v-model="form.middle_name" name="middle_name" label="Middle Name" optional :error="form.errors.middle_name" />
-            <TextInput v-model="form.last_name" name="last_name" label="Last Name" required :error="form.errors.last_name" />
+            <!--
+                Uppercased as typed, matching how the record is stored (see
+                OtherExaminationPersonnel's mutators) — otherwise the form shows
+                "Juan" right up until it saves as "JUAN", and the ID card,
+                roster and this page disagree about what was entered.
+            -->
+            <TextInput v-model="form.first_name" name="first_name" label="First Name" required uppercase :error="form.errors.first_name" />
+            <TextInput v-model="form.middle_name" name="middle_name" label="Middle Name" optional uppercase :error="form.errors.middle_name" />
+            <TextInput v-model="form.last_name" name="last_name" label="Last Name" required uppercase :error="form.errors.last_name" />
             <div class="grid grid-cols-2 gap-5">
-                <TextInput v-model="form.suffix" name="suffix" label="Suffix" optional placeholder="Jr., III" :error="form.errors.suffix" />
+                <TextInput v-model="form.suffix" name="suffix" label="Suffix" optional uppercase placeholder="JR., III" :error="form.errors.suffix" />
                 <SelectInput v-model="form.sex" name="sex" label="Sex" required :options="sexOptions" :error="form.errors.sex" />
             </div>
         </div>
@@ -83,8 +89,8 @@ watch([centersForSelectedOffice, selectedOfficeIsRegional], ([centers, regional]
         </div>
 
         <div class="grid gap-5 sm:grid-cols-2">
-            <TextInput v-model="form.agency" name="agency" label="Agency" optional :error="form.errors.agency" />
-            <TextInput v-model="form.position" name="position" label="Position" optional :error="form.errors.position" />
+            <TextInput v-model="form.agency" name="agency" label="Agency" optional uppercase :error="form.errors.agency" />
+            <TextInput v-model="form.position" name="position" label="Position" optional uppercase :error="form.errors.position" />
         </div>
 
         <div class="grid gap-5 sm:grid-cols-2">

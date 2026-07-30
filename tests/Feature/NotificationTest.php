@@ -169,6 +169,58 @@ class NotificationTest extends TestCase
         $this->assertSame(0, $user->fresh()->unreadNotifications()->count());
     }
 
+    public function test_notifications_page_lists_the_users_own_history_with_presentation(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        // Not an approver, so this certificate never notifies them.
+        $stranger = User::factory()->create(['role' => UserRole::Member]);
+        $fo = FieldOffice::factory()->create();
+        $requester = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]);
+        $assignment = ExamAssignment::factory()->create(['field_office_id' => $fo->id]);
+
+        app(CertificateService::class)->generatePending(CertificateType::Appearance, $assignment, $requester);
+
+        $this->actingAs($user)
+            ->get('/notifications')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Notifications/Index')
+                ->where('counts.all', 1)
+                ->where('counts.unread', 1)
+                ->has('notifications.data', 1)
+                // Icon and tone are derived from the notification class, so rows
+                // stored before the page existed present the same as new ones.
+                ->where('notifications.data.0.icon', 'clipboard-check')
+                ->where('notifications.data.0.date_group', 'Today'));
+
+        // Notifications are addressed to a person: nobody else's appear here.
+        $this->actingAs($stranger)
+            ->get('/notifications')
+            ->assertInertia(fn ($page) => $page->where('counts.all', 0)->has('notifications.data', 0));
+    }
+
+    public function test_notifications_page_can_filter_to_unread_only(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $fo = FieldOffice::factory()->create();
+        $requester = User::factory()->create(['role' => UserRole::FoAdmin, 'field_office_id' => $fo->id]);
+
+        foreach (range(1, 2) as $i) {
+            $assignment = ExamAssignment::factory()->create(['field_office_id' => $fo->id]);
+            app(CertificateService::class)->generatePending(CertificateType::Appearance, $assignment, $requester);
+        }
+
+        $user->notifications()->first()->markAsRead();
+
+        $this->actingAs($user)
+            ->get('/notifications?filter=unread')
+            ->assertInertia(fn ($page) => $page
+                ->where('filter', 'unread')
+                ->where('counts.all', 2)
+                ->where('counts.unread', 1)
+                ->has('notifications.data', 1));
+    }
+
     public function test_a_user_cannot_mark_another_users_notification_as_read(): void
     {
         $owner = User::factory()->create(['role' => UserRole::SuperAdmin]);

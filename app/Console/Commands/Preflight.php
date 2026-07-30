@@ -106,6 +106,13 @@ class Preflight extends Command
             ? $this->recordFail('APP_URL', "{$url} — Google OAuth redirects and emailed links derive from this.")
             : $this->recordPass('APP_URL', $url);
 
+        // Wrong here and nothing errors — every timestamp is simply eight hours
+        // out. An attendance scan taken at 8:00 AM reads back as midnight, and
+        // `today()` sits on the previous day right through exam morning.
+        config('app.timezone') === 'Asia/Manila'
+            ? $this->recordPass('APP_TIMEZONE', 'Asia/Manila')
+            : $this->recordFail('APP_TIMEZONE', config('app.timezone').' — Region VIII runs on Philippine Standard Time (Asia/Manila). Every displayed timestamp will be off.');
+
         config('app.key')
             ? $this->recordPass('APP_KEY', 'Set')
             : $this->recordFail('APP_KEY', 'Missing — encrypted columns (including date_of_birth) cannot be read.');

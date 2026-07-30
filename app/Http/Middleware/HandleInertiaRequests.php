@@ -3,10 +3,13 @@
 namespace App\Http\Middleware;
 
 use App\Models\Certificate;
+use App\Models\ExamAssignment;
 use App\Models\Setting;
+use App\Support\NotificationPresenter;
 use App\Support\RoleLabelRegistry;
 use App\Support\Workspace;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -79,17 +82,52 @@ class HandleInertiaRequests extends Middleware
             'pendingApprovalCount' => fn () => $user
                 ? Certificate::query()->pendingApprovalFor($user)->count()
                 : 0,
+            // The member-side counterpart of pendingApprovalCount: deployments
+            // the signed-in member still owes an answer on. Drives the sidebar
+            // badge and the sign-in prompt, so both are computed once, here.
+            'pendingAssignments' => fn () => $user?->member
+                ? $this->pendingAssignments($user->member->id)
+                : null,
+            // The bell's peek at the latest few. The full history lives at
+            // /notifications; both render through the same presenter so an item
+            // cannot look like one thing in the dropdown and another on the page.
             'notifications' => fn () => $request->user() ? [
                 'unread_count' => $request->user()->unreadNotifications()->count(),
+                'total_count' => $request->user()->notifications()->count(),
                 'items' => $request->user()->notifications()->latest()->take(8)->get()
-                    ->map(fn ($n) => [
-                        'id' => $n->id,
-                        'title' => $n->data['title'] ?? '',
-                        'body' => $n->data['body'] ?? '',
-                        'url' => $n->data['url'] ?? null,
-                        'read_at' => $n->read_at,
-                        'created_at' => $n->created_at->diffForHumans(),
-                    ]),
+                    ->map(fn (DatabaseNotification $notification) => NotificationPresenter::present($notification)),
+            ] : null,
+        ];
+    }
+
+    /**
+     * What the member still has to confirm, and enough of the soonest one to
+     * name it in the prompt.
+     *
+     * `signature` is the id list: the prompt is dismissed per set of
+     * assignments, not per session, so answering one or being deployed to
+     * another brings it back while an idle reload does not.
+     *
+     * @return array<string, mixed>
+     */
+    private function pendingAssignments(int $memberId): array
+    {
+        $assignments = ExamAssignment::query()
+            ->awaitingResponseFrom($memberId)
+            ->with('examination:id,title,exam_date')
+            ->get()
+            ->sortBy(fn (ExamAssignment $assignment) => $assignment->examination?->exam_date)
+            ->values();
+
+        $soonest = $assignments->first();
+
+        return [
+            'count' => $assignments->count(),
+            'signature' => $assignments->pluck('id')->sort()->implode('-'),
+            'soonest' => $soonest ? [
+                'exam_title' => $soonest->examination?->title,
+                'exam_date' => $soonest->examination?->exam_date?->format('F j, Y (l)'),
+                'role_label' => $soonest->role->label(),
             ] : null,
         ];
     }

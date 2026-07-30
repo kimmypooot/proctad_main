@@ -23,6 +23,33 @@ const sidebarOpen = ref(false);
 const sidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === 'true');
 const notifications = computed(() => page.props.notifications ?? { unread_count: 0, items: [] });
 
+/*
+ * Deployments the member hasn't answered yet.
+ *
+ * A prompt rather than a toast: the emailed confirmation link expires after
+ * seven days and cannot be resent by the member, so someone who missed the
+ * email has no reason to open "My Assignments" and no way back in once it
+ * lapses. That is worth interrupting for; a toast is gone in seconds and a
+ * banner is scrolled past. Dismissal is keyed to *which* assignments are
+ * outstanding, so answering one — or being deployed to another — brings it
+ * back, while an ordinary reload does not.
+ */
+const pendingAssignments = computed(() => page.props.pendingAssignments ?? { count: 0, signature: '', soonest: null });
+const PROMPT_DISMISSED_KEY = 'assignment_prompt_dismissed';
+const dismissedPromptSignature = ref(sessionStorage.getItem(PROMPT_DISMISSED_KEY) ?? '');
+const showAssignmentPrompt = computed(() => pendingAssignments.value.count > 0
+    && pendingAssignments.value.signature !== dismissedPromptSignature.value
+    // Already looking at the page the prompt would send them to.
+    && !page.url.startsWith('/my/assignments'));
+const dismissAssignmentPrompt = () => {
+    dismissedPromptSignature.value = pendingAssignments.value.signature;
+    sessionStorage.setItem(PROMPT_DISMISSED_KEY, dismissedPromptSignature.value);
+};
+const respondToAssignments = () => {
+    dismissAssignmentPrompt();
+    router.visit('/my/assignments');
+};
+
 /**
  * Sidebar counters, keyed by a nav item's `badge` field. Server-scoped to what
  * the user may actually act on (Certificate::scopePendingApprovalFor), so the
@@ -30,8 +57,14 @@ const notifications = computed(() => page.props.notifications ?? { unread_count:
  */
 const badgeCounts = computed(() => ({
     pendingApprovals: page.props.pendingApprovalCount ?? 0,
+    pendingAssignments: pendingAssignments.value.count,
 }));
 const badgeCount = (item) => (item.badge ? badgeCounts.value[item.badge] ?? 0 : 0);
+/** What the badge counts, so its tooltip and screen-reader text say the right thing. */
+const badgeNoun = (item) => ({
+    pendingApprovals: 'certificates awaiting your approval',
+    pendingAssignments: 'assignments awaiting your confirmation',
+}[item.badge] ?? 'items awaiting you');
 
 const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
 
@@ -69,6 +102,16 @@ watch(sidebarOpen, (open) => {
 onBeforeUnmount(() => {
     document.body.classList.remove('overflow-hidden');
 });
+
+/** Matches the notifications page's chips — written out so Tailwind keeps the classes. */
+const NOTIFICATION_TONES = {
+    brand: 'bg-brand-50 text-brand-600',
+    accent: 'bg-accent-50 text-accent-600',
+    amber: 'bg-amber-50 text-amber-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    slate: 'bg-slate-100 text-slate-500',
+};
+const notificationTone = (item) => NOTIFICATION_TONES[item.tone] ?? NOTIFICATION_TONES.slate;
 
 const openNotification = (notification) => {
     if (notification.read_at) {
@@ -114,7 +157,7 @@ const navByRole = {
         {
             section: 'Records',
             items: [
-                { label: 'My Assignments', icon: 'calendar', href: '/my/assignments' },
+                { label: 'My Assignments', icon: 'calendar', href: '/my/assignments', badge: 'pendingAssignments' },
                 { label: 'Service History', icon: 'clock', href: '/my/service-history' },
                 { label: 'Certificates', icon: 'document-check', href: '/my/certificates' },
                 { label: 'Trainings', icon: 'academic-cap', href: '/my/trainings' },
@@ -557,7 +600,7 @@ const logout = () => {
                                 <Link
                                     v-if="item.href !== '#'"
                                     :href="item.href"
-                                    :title="badgeCount(item) ? `${item.label} — ${badgeCount(item)} awaiting approval` : item.label"
+                                    :title="badgeCount(item) ? `${item.label} — ${badgeCount(item)} ${badgeNoun(item)}` : item.label"
                                     class="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
                                     :class="[
                                         sidebarCollapsed && 'lg:justify-center lg:px-2',
@@ -585,7 +628,7 @@ const logout = () => {
                                         aria-hidden="true"
                                     />
                                     <span v-if="badgeCount(item)" class="sr-only">
-                                        {{ badgeCount(item) }} certificates awaiting your approval
+                                        {{ badgeCount(item) }} {{ badgeNoun(item) }}
                                     </span>
                                 </Link>
                                 <span
@@ -689,7 +732,7 @@ const logout = () => {
                         <AppIcon name="x-mark" class="h-3.5 w-3.5 shrink-0 text-brand-400" />
                     </button>
 
-                    <DropdownMenu align="right" panel-class="mt-2 w-80 rounded-lg" :auto-focus="false">
+                    <DropdownMenu align="right" panel-class="mt-2 w-80 overflow-hidden rounded-lg" :auto-focus="false">
                         <template #trigger="{ toggle, triggerAttrs, setTrigger }">
                             <Tooltip text="Notifications">
                                 <button
@@ -732,15 +775,41 @@ const logout = () => {
                                     :key="item.id"
                                     type="button"
                                     role="menuitem"
-                                    class="block w-full border-b border-slate-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                                    class="flex w-full items-start gap-3 border-b border-slate-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
                                     :class="!item.read_at && 'bg-brand-50/60'"
                                     @click="close(); openNotification(item)"
                                 >
-                                    <p class="text-sm font-medium text-slate-800">{{ item.title }}</p>
-                                    <p class="mt-0.5 text-xs text-slate-500">{{ item.body }}</p>
-                                    <p class="mt-1 text-[11px] text-slate-400">{{ item.created_at }}</p>
+                                    <span
+                                        class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                                        :class="notificationTone(item)"
+                                    >
+                                        <AppIcon :name="item.icon ?? 'bell'" class="h-4 w-4" />
+                                    </span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="flex items-start justify-between gap-2">
+                                            <span class="text-sm font-medium text-slate-800">{{ item.title }}</span>
+                                            <span v-if="!item.read_at" class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-hidden="true" />
+                                        </span>
+                                        <span class="mt-0.5 block text-xs text-slate-500">{{ item.body }}</span>
+                                        <span class="mt-1 block text-[11px] text-slate-400">{{ item.created_at }}</span>
+                                    </span>
                                 </button>
                             </div>
+
+                            <!--
+                                The bell only ever holds the latest eight, so
+                                without this the older ones are unreachable —
+                                and there is no other way into the full history.
+                            -->
+                            <Link
+                                href="/notifications"
+                                role="menuitem"
+                                class="flex items-center justify-center gap-1.5 border-t border-slate-100 px-4 py-2.5 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 focus:bg-brand-50 focus:outline-none"
+                                @click="close()"
+                            >
+                                Show all notifications
+                                <AppIcon name="arrow-right" class="h-3.5 w-3.5" />
+                            </Link>
                         </template>
                     </DropdownMenu>
 
@@ -820,6 +889,40 @@ const logout = () => {
                     <BaseButton class="flex-1" variant="outline" size="sm" @click="confirmingLogout = false">Cancel</BaseButton>
                     <BaseButton class="flex-1" variant="accent" size="sm" :loading="loggingOut" :disabled="loggingOut" @click="logout">
                         Log out
+                    </BaseButton>
+                </template>
+            </BaseModal>
+
+            <!-- Unanswered deployment(s) — see the note on showAssignmentPrompt. -->
+            <BaseModal
+                :show="showAssignmentPrompt"
+                max-width="sm"
+                title="Please confirm your assignment"
+                @close="dismissAssignmentPrompt"
+            >
+                <div class="text-center">
+                    <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50">
+                        <AppIcon name="calendar" class="h-6 w-6 text-amber-500" />
+                    </span>
+                    <p class="mt-4 text-sm text-slate-600">
+                        You have
+                        <strong>{{ pendingAssignments.count }}</strong>
+                        {{ pendingAssignments.count === 1 ? 'assignment' : 'assignments' }}
+                        awaiting your response.
+                    </p>
+                    <div v-if="pendingAssignments.soonest" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-left">
+                        <p class="text-sm font-semibold text-amber-900">{{ pendingAssignments.soonest.exam_title }}</p>
+                        <p class="mt-0.5 text-xs text-amber-800">{{ pendingAssignments.soonest.exam_date }}</p>
+                        <p class="mt-0.5 text-xs text-amber-800">As {{ pendingAssignments.soonest.role_label }}</p>
+                    </div>
+                    <p class="mt-4 text-xs text-slate-500">
+                        Your Field Office cannot finalise room staffing until you confirm or decline.
+                    </p>
+                </div>
+                <template #footer>
+                    <BaseButton class="flex-1" variant="outline" size="sm" @click="dismissAssignmentPrompt">Later</BaseButton>
+                    <BaseButton class="flex-1" variant="primary" size="sm" @click="respondToAssignments">
+                        Review now
                     </BaseButton>
                 </template>
             </BaseModal>

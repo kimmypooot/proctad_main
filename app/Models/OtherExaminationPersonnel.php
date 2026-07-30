@@ -92,6 +92,17 @@ class OtherExaminationPersonnel extends Model
         return Attribute::set(fn (?string $value) => $value !== null ? mb_strtoupper($value) : null);
     }
 
+    /** Employer and post, uppercased for the same reason as Member's. */
+    protected function agency(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => $value !== null ? mb_strtoupper($value) : null);
+    }
+
+    protected function position(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => $value !== null ? mb_strtoupper($value) : null);
+    }
+
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);

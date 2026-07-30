@@ -2,14 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Enums\TrainingSession;
 use App\Enums\UserRole;
 use App\Models\ExamAssignment;
 use App\Models\Examination;
 use App\Models\ExaminationSchool;
 use App\Models\FieldOffice;
 use App\Models\Member;
+use App\Models\OtherExaminationPersonnel;
 use App\Models\ScannerSession;
 use App\Models\School;
+use App\Models\Training;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -173,6 +176,81 @@ class PublicScannerSessionTest extends TestCase
         $this->assertNull($otherAssignment->fresh()->attendance_confirmed_at);
     }
 
+    /**
+     * The reach of a public link belongs to its issuer, so an FO-issued link
+     * at a regional sitting legitimately meets members it cannot record. That
+     * used to render as "No record found" — identical to a mistyped ID, and
+     * read by venue staff as a broken QR rather than a scoping rule.
+     */
+    public function test_a_member_outside_the_links_reach_is_distinguished_from_a_bad_code(): void
+    {
+        $samar = FieldOffice::create(['name' => 'Samar Field Office', 'code' => 'SAM']);
+        $outsider = Member::factory()->create(['field_office_id' => $samar->id]);
+
+        $training = Training::factory()->create([
+            'training_date' => now()->toDateString(),
+            'session' => TrainingSession::WholeDay,
+            'field_office_id' => null,
+        ]);
+
+        $session = $this->link([
+            'examination_id' => null,
+            'examination_school_id' => null,
+            'training_id' => $training->id,
+        ]);
+
+        $this->get("/scan/{$session->token}?code={$outsider->proctad_id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('outOfReach', true)
+                ->where('notFound', false)
+                // Out of reach means out of reach: no name, no photo.
+                ->where('result', null));
+
+        $this->assertDatabaseMissing('training_assignments', [
+            'training_id' => $training->id,
+            'member_id' => $outsider->id,
+        ]);
+
+        // A code matching nobody still reads as not found.
+        $this->get("/scan/{$session->token}?code=NOPE-0000")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('notFound', true)
+                ->where('outOfReach', false));
+    }
+
+    /**
+     * Training attendance hangs off a TrainingAssignment, which only a member
+     * can have. Scanning other examination personnel at a training recorded
+     * nothing and said nothing — indistinguishable from a successful check-in.
+     */
+    public function test_personnel_scanned_at_a_training_are_told_nothing_was_recorded(): void
+    {
+        $oep = OtherExaminationPersonnel::factory()->create([
+            'field_office_id' => $this->office->id,
+        ]);
+
+        $training = Training::factory()->create([
+            'training_date' => now()->toDateString(),
+            'session' => TrainingSession::WholeDay,
+            'field_office_id' => $this->office->id,
+        ]);
+
+        $session = $this->link([
+            'examination_id' => null,
+            'examination_school_id' => null,
+            'training_id' => $training->id,
+        ]);
+
+        $this->get("/scan/{$session->token}?code={$oep->oep_id}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                // Identity still resolves — the door still needs the face check.
+                ->where('oepResult.oep_id', $oep->oep_id)
+                ->where('attendance.outcome', 'members_only'));
+    }
+
     public function test_staff_can_issue_and_revoke_a_link(): void
     {
         $this->actingAs($this->issuer)
@@ -234,6 +312,60 @@ class PublicScannerSessionTest extends TestCase
     }
 
     /**
+     * Trainings run as half-day AM and PM batches, and attendance is time-in
+     * only: a scan creates the assignment. An AM link still live in the
+     * afternoon would therefore write PM arrivals into the AM roster, so the
+     * link is capped at the end of its own sitting rather than at a week.
+     */
+    public function test_a_training_link_cannot_outlive_its_sitting(): void
+    {
+        $training = Training::factory()->create([
+            'training_date' => now()->addDay()->toDateString(),
+            'session' => TrainingSession::Am,
+            'field_office_id' => $this->office->id,
+        ]);
+
+        $this->actingAs($this->issuer)
+            ->post('/scanner-sessions', [
+                'training_id' => $training->id,
+                // Past noon — inside the week an examination link would allow.
+                'expires_at' => now()->addDay()->setTime(15, 0)->toDateTimeString(),
+            ])->assertSessionHasErrors('expires_at');
+
+        $this->assertSame(0, ScannerSession::count());
+
+        $this->actingAs($this->issuer)
+            ->post('/scanner-sessions', [
+                'training_id' => $training->id,
+                'expires_at' => now()->addDay()->setTime(11, 30)->toDateTimeString(),
+            ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(1, ScannerSession::count());
+    }
+
+    /**
+     * A sitting already past falls back to the week-long cap, so attendance
+     * can still be caught up after the fact — as it could before sittings
+     * existed.
+     */
+    public function test_a_link_for_a_past_training_falls_back_to_the_week_cap(): void
+    {
+        $training = Training::factory()->create([
+            'training_date' => now()->subWeek()->toDateString(),
+            'session' => TrainingSession::Am,
+            'field_office_id' => $this->office->id,
+        ]);
+
+        $this->actingAs($this->issuer)
+            ->post('/scanner-sessions', [
+                'training_id' => $training->id,
+                'expires_at' => now()->addHours(8)->toDateTimeString(),
+            ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(1, ScannerSession::count());
+    }
+
+    /**
      * OEP and covered-school attendance are both keyed to a venue, so a
      * venue-less examination link could only ever confirm directly-assigned
      * members — a silent half-scanner. Refuse to issue one.
@@ -276,7 +408,9 @@ class PublicScannerSessionTest extends TestCase
         $this->get("/scan/{$session->token}?code={$outsideMember->proctad_id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
+                // Still withheld — the scan now names why rather than passing
+                // the member off as nonexistent, but exposes no more than before.
                 ->where('result', null)
-                ->where('notFound', true));
+                ->where('outOfReach', true));
     }
 }

@@ -41,8 +41,11 @@ class ScannerTest extends TestCase
             ->get("/scanner?code={$member->proctad_id}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
+                // Withheld as before; the scan now says the record is outside
+                // this office rather than claiming it does not exist.
                 ->where('result', null)
-                ->where('notFound', true));
+                ->where('outOfReach', true)
+                ->where('notFound', false));
     }
 
     public function test_scan_with_examination_confirms_attendance_once(): void

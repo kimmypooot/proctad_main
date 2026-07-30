@@ -171,7 +171,8 @@ const closeViewer = () => (viewing.value = null);
                     <div>
                         <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Date</p>
                         <p class="mt-0.5 text-sm text-slate-800">
-                            {{ viewing.date }}<template v-if="viewing.end_date"> – {{ viewing.end_date }}</template>
+                            {{ viewing.date }}
+                            <span v-if="viewing.session_label" class="text-slate-500">· {{ viewing.session_label }}</span>
                         </p>
                     </div>
                     <div>

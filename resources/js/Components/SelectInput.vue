@@ -59,7 +59,11 @@ const grouped = computed(() => {
                     ? 'border-accent-400 focus:border-accent-500 focus:ring-accent-200'
                     : 'border-slate-300 focus:border-brand-500 focus:ring-brand-100'"
             >
-                <option value="" disabled>{{ placeholder }}</option>
+                <!-- Selectable on an optional field, so a value can be taken
+                     back out again. Disabled elsewhere, where the placeholder is
+                     a prompt rather than a choice: on a required field picking
+                     it would only produce a validation error. -->
+                <option value="" :disabled="!optional">{{ placeholder }}</option>
                 <template v-if="grouped">
                     <optgroup v-for="group in grouped" :key="group.label" :label="group.label">
                         <option v-for="opt in group.options" :key="opt.value" :value="opt.value">

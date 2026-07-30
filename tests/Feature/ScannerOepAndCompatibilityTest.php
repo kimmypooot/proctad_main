@@ -96,7 +96,12 @@ class ScannerOepAndCompatibilityTest extends TestCase
 
         $this->actingAs($foAdmin)
             ->get('/scanner?code='.urlencode("OEP:{$oep->oep_id}"))
-            ->assertInertia(fn (Assert $page) => $page->where('oepResult', null)->where('notFound', true));
+            // Withheld as before, but named: out of this office's reach rather
+            // than a code matching nobody.
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('oepResult', null)
+                ->where('outOfReach', true)
+                ->where('notFound', false));
     }
 
     public function test_legacy_pipe_suffixed_member_code_is_stripped_and_resolved(): void

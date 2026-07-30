@@ -60,12 +60,18 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | will be used by the PHP date and date-time functions.
+    |
+    | Asia/Manila (UTC+8), not Laravel's default UTC: every user, examination
+    | and venue is in Region VIII, and every timestamp the app renders is a
+    | local wall-clock time someone is expected to recognise — an attendance
+    | scan at 8:00 AM read back as "00:00" on the scan page, and `today()`
+    | landed on the previous day for the whole 00:00–08:00 window, which is
+    | exam-morning.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Asia/Manila'),
 
     /*
     |--------------------------------------------------------------------------

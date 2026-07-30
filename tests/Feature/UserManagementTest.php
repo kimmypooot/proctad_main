@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\FieldOffice;
+use App\Models\Member;
 use App\Models\TestingCenter;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -306,5 +307,130 @@ class UserManagementTest extends TestCase
         $this->assertTrue(
             AuditLog::where('user_id', $target->id)->where('action', 'password_reset_sent')->exists(),
         );
+    }
+
+    /**
+     * A staff account with no accreditation and a member account are each on
+     * exactly one tab: the member must not appear among the staff or the Field
+     * Office column would read "—" for every one of them, which is what the
+     * split exists to fix.
+     */
+    public function test_tabs_separate_staff_accounts_from_test_administrators(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin, 'name' => 'Zoe Admin']);
+        $member = User::factory()->create(['role' => UserRole::Member, 'name' => 'Ana Administrator']);
+
+        $this->actingAs($admin)
+            ->get('/users')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'staff')
+                ->where('counts.staff', 1)
+                ->where('counts.members', 1)
+                ->has('users.data', 1)
+                ->where('users.data.0.id', $admin->id));
+
+        $this->actingAs($admin)
+            ->get('/users?tab=members')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'members')
+                ->has('users.data', 1)
+                ->where('users.data.0.id', $member->id));
+    }
+
+    /**
+     * Commission staff can hold an accreditation as well — that is what the
+     * workspace switcher is for (App\Support\Workspace) — so a Field Office
+     * Staff who proctors is administered under both hats and must be reachable
+     * on both tabs, carrying their registry details on either one.
+     */
+    public function test_staff_who_hold_an_accreditation_appear_on_both_tabs(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $center = TestingCenter::factory()->create(['name' => 'Tacloban City']);
+        $dualHat = User::factory()->create(['role' => UserRole::FoAdmin, 'name' => 'Rosa Proctor']);
+        Member::factory()->create([
+            'user_id' => $dualHat->id,
+            'email' => $dualHat->email,
+            'testing_center_id' => $center->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get('/users?tab=members')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('counts.members', 1)
+                ->has('users.data', 1)
+                ->where('users.data.0.id', $dualHat->id)
+                ->where('users.data.0.member.testing_center.name', 'Tacloban City'));
+
+        $this->actingAs($admin)
+            ->get('/users?search=Rosa')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'staff')
+                ->has('users.data', 1)
+                ->where('users.data.0.id', $dualHat->id)
+                // The staff tab carries the accreditation too, so the row can
+                // say so and link through to the registry record.
+                ->where('users.data.0.member.testing_center.name', 'Tacloban City'));
+    }
+
+    /**
+     * Regression: the filter compared `$request->string('linked')` — a
+     * Stringable object — with `===` against a string, which is never true in
+     * PHP. The condition was always false, so clicking "Awaiting PROCTAD
+     * Registration" reloaded the page with the full list and no explanation.
+     */
+    public function test_awaiting_registration_filter_returns_only_unlinked_member_accounts(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $unlinked = User::factory()->create(['role' => UserRole::Member]);
+        $linked = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $linked->id, 'email' => $linked->email]);
+
+        $this->actingAs($admin)
+            ->get('/users?tab=members&linked=unlinked')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('counts.unlinked', 1)
+                ->has('users.data', 1)
+                ->where('users.data.0.id', $unlinked->id)
+                ->where('users.data.0.has_member_record', false));
+    }
+
+    /** The members tab is scoped by testing center, which staff accounts do not have. */
+    public function test_test_administrators_can_be_filtered_by_testing_center(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        $tacloban = TestingCenter::factory()->create(['name' => 'Tacloban City']);
+        $ormoc = TestingCenter::factory()->create(['name' => 'Ormoc City']);
+
+        $here = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $here->id, 'testing_center_id' => $tacloban->id]);
+        $elsewhere = User::factory()->create(['role' => UserRole::Member]);
+        Member::factory()->create(['user_id' => $elsewhere->id, 'testing_center_id' => $ormoc->id]);
+
+        $this->actingAs($admin)
+            ->get("/users?tab=members&testing_center_id={$tacloban->id}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('users.data', 1)
+                ->where('users.data.0.id', $here->id)
+                ->where('users.data.0.member.testing_center.name', 'Tacloban City'));
+    }
+
+    /**
+     * Creating a member account here would produce a login with no registry
+     * record — the exact state the "no linked PROCTAD record" queue exists to
+     * drain. Test administrators self-register, which creates both at once.
+     */
+    public function test_member_accounts_cannot_be_created_from_the_users_page(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+
+        $this->actingAs($admin)->post('/users', [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'email' => 'juan@example.com',
+            'role' => 'member',
+        ])->assertSessionHasErrors('role');
+
+        $this->assertDatabaseMissing('users', ['email' => 'juan@example.com']);
     }
 }

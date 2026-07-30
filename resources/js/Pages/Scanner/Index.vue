@@ -15,6 +15,8 @@ import TextInput from '@/Components/TextInput.vue';
 import ViewMemberModal from '@/Pages/Members/Partials/ViewMemberModal.vue';
 import ViewOepModal from '@/Pages/Scanner/Partials/ViewOepModal.vue';
 import ScanResultHero from '@/Pages/Scanner/Partials/ScanResultHero.vue';
+import ScanVerdictOverlay from '@/Pages/Scanner/Partials/ScanVerdictOverlay.vue';
+import { outcomeOf } from '@/Pages/Scanner/Partials/scanOutcome';
 import { useToasts } from '@/Composables/useToasts';
 import { useScanQueue } from '@/Composables/useScanQueue';
 import Tooltip from '@/Components/Tooltip.vue';
@@ -27,6 +29,9 @@ const props = defineProps({
     result: { type: Object, default: null },
     oepResult: { type: Object, default: null },
     notFound: { type: Boolean, default: false },
+    // A real record this scanner's jurisdiction does not cover — see
+    // ScannerController::isOutOfReach().
+    outOfReach: { type: Boolean, default: false },
     attendance: { type: Object, default: null },
     venues: { type: Array, default: () => [] },
     events: { type: Object, required: true },
@@ -57,6 +62,66 @@ const markAttendanceUrl = computed(
  * has since arrived. These need connectivity, and say so.
  */
 const coverUrl = (action) => `${scanUrl.value}/${action}`;
+
+/*
+ * --- Undo the last check-in ---
+ *
+ * For the error this page actually produces: scanning the person behind the one
+ * at the desk, noticed immediately. The server hands back a handle on anything
+ * it just wrote and enforces its own ten-second window
+ * (ScannerController::UNDO_WINDOW_SECONDS) — the countdown here is only so the
+ * operator can see the offer expiring, never the thing that decides it.
+ */
+const UNDO_WINDOW_MS = 10_000;
+const undoable = ref(null);
+const undoSecondsLeft = ref(0);
+const undoBusy = ref(false);
+let undoTimer = null;
+
+const clearUndo = () => {
+    clearInterval(undoTimer);
+    undoable.value = null;
+    undoSecondsLeft.value = 0;
+};
+
+const offerUndo = (handle, name) => {
+    clearInterval(undoTimer);
+
+    if (! handle) {
+        undoable.value = null;
+
+        return;
+    }
+
+    const expiresAt = Date.now() + UNDO_WINDOW_MS;
+    undoable.value = { ...handle, name };
+    undoSecondsLeft.value = Math.ceil(UNDO_WINDOW_MS / 1000);
+
+    undoTimer = setInterval(() => {
+        undoSecondsLeft.value = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+        if (undoSecondsLeft.value === 0) clearUndo();
+    }, 250);
+};
+
+const submitUndo = () => {
+    if (! undoable.value || undoBusy.value) return;
+
+    undoBusy.value = true;
+    router.post(coverUrl('undo-attendance'), {
+        kind: undoable.value.kind,
+        id: undoable.value.id,
+    }, {
+        preserveScroll: true,
+        preserveState: true,
+        // The roster and tallies have to come back — the point of the undo is
+        // that this person is no longer counted present.
+        onSuccess: () => {
+            clearUndo();
+            dismissVerdict();
+        },
+        onFinish: () => (undoBusy.value = false),
+    });
+};
 
 const cover = computed(() => props.attendanceSummary?.cover ?? null);
 const coveringSeat = ref(null);
@@ -110,8 +175,18 @@ const cameraError = ref(null);
 const scanning = ref(false);
 let scanner = null;
 
-// Continuous-scan duplicate guard: ignore the exact same decoded text
-// scanned again within 1 second (matches legacy's client-side debounce).
+/*
+ * Continuous-scan duplicate guard: ignore the same decoded text seen again
+ * within this window.
+ *
+ * Three seconds, not the one it started at. The camera decodes ~10x a second
+ * and a badge stays in frame while the operator talks to the person holding it,
+ * so a one-second window re-fired the same scan repeatedly — a round trip and a
+ * re-animated verdict each time, which reads as flicker rather than as a
+ * decision. Only camera decodes are debounced; a manual lookup is a deliberate
+ * act and must never be silently swallowed.
+ */
+const CAMERA_RESCAN_COOLDOWN_MS = 3000;
 let lastScan = { text: null, at: 0 };
 
 // In-flight guard: without this, two rapid decodes (or a decode racing a
@@ -134,12 +209,37 @@ watch(muted, (value) => {
     if (typeof window !== 'undefined') window.localStorage.setItem('scanner:muted', value ? '1' : '0');
 });
 
+/*
+ * One AudioContext for the whole session, created lazily and never closed
+ * until unmount.
+ *
+ * It used to be constructed (and closed) per beep. Safari caps concurrent
+ * AudioContexts at a handful, and closing is asynchronous — so a run of quick
+ * scans exhausted the cap, construction threw, and the catch below silently
+ * degraded every later scan to toast-only. Which reads, at the gate, as "the
+ * beep stopped working" halfway through the morning.
+ */
+let audioContext = null;
+
+const audio = () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (! AudioContextClass) return null;
+
+    audioContext ??= new AudioContextClass();
+    // iOS starts a context suspended unless it was created inside a user
+    // gesture; resuming is a no-op once it is already running.
+    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+
+    return audioContext;
+};
+
 /** Short synthesized confirmation tone — no audio asset needed. */
 const beep = (frequency, durationMs = 150) => {
     if (muted.value || typeof window === 'undefined') return;
     try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AudioContextClass();
+        const ctx = audio();
+        if (! ctx) return;
+
         const oscillator = ctx.createOscillator();
         const gain = ctx.createGain();
         oscillator.type = 'sine';
@@ -149,9 +249,36 @@ const beep = (frequency, durationMs = 150) => {
         gain.connect(ctx.destination);
         oscillator.start();
         oscillator.stop(ctx.currentTime + durationMs / 1000);
-        oscillator.onended = () => ctx.close();
+        oscillator.onended = () => {
+            oscillator.disconnect();
+            gain.disconnect();
+        };
     } catch {
         // Web Audio unsupported/blocked — feedback degrades to toast-only.
+    }
+};
+
+/*
+ * Vibration patterns, deliberately distinct per outcome so the phone can be
+ * read from the pocket or through a glove.
+ *
+ * Not gated on `muted`: sound is muted in a quiet examination hall, and that is
+ * exactly when the buzz is the only feedback left. iOS Safari ignores
+ * navigator.vibrate entirely, so this is additive to the tone, never a
+ * replacement for it.
+ */
+const VIBRATION = {
+    confirmed: [45],
+    already: [30, 70, 30],
+    warning: [130],
+    error: [200, 90, 200],
+};
+
+const buzz = (pattern) => {
+    try {
+        navigator.vibrate?.(pattern);
+    } catch {
+        // Unsupported or blocked by a user setting — the tone still fires.
     }
 };
 
@@ -183,14 +310,30 @@ watch([selectedExam, selectedTraining, selectedVenue], () => {
     });
 });
 
-/** Toast + audio feedback for a scan outcome, driven by the response props. */
-const handleScanOutcome = (resultProps) => {
+/** Toast, audio, haptic and viewfinder feedback for a scan, driven by the response props. */
+const handleScanOutcome = (resultProps, code = '') => {
+    showVerdict(resultProps, code);
+    // Present only on a fresh 'confirmed' — an already-checked-in scan wrote
+    // nothing, so there is nothing to take back.
+    offerUndo(
+        resultProps.attendance?.undo,
+        (resultProps.result ?? resultProps.oepResult)?.name ?? 'this person',
+    );
+
+    if (resultProps.outOfReach) {
+        pushToast('warning', 'This record is outside this scanner’s field office.', { duration: 5000 });
+        beep(330, 250);
+        buzz(VIBRATION.error);
+        return;
+    }
+
     if (resultProps.notFound) {
         // Auto-dismiss, unlike errors elsewhere: this station scans one person
         // after another, and a verdict left on screen belongs to whoever is
         // standing there now. The ScanResultHero above carries the lasting state.
         pushToast('error', 'No record found for this code.', { duration: 5000 });
         beep(220, 250);
+        buzz(VIBRATION.error);
         return;
     }
 
@@ -198,22 +341,74 @@ const handleScanOutcome = (resultProps) => {
     if (outcome === 'confirmed') {
         pushToast('success', 'Attendance confirmed.');
         beep(880, 150);
+        buzz(VIBRATION.confirmed);
     } else if (outcome === 'already_confirmed') {
         pushToast('info', 'Already confirmed earlier.');
         beep(660, 150);
+        buzz(VIBRATION.already);
     } else if (outcome === 'venue_required') {
         pushToast('warning', 'Select a venue to record attendance.');
         beep(440, 200);
+        buzz(VIBRATION.warning);
     } else if (outcome === 'wrong_venue') {
         pushToast('warning', 'Deployed to a different venue — nothing recorded.');
         beep(440, 200);
+        buzz(VIBRATION.warning);
     } else if (outcome === 'not_assigned') {
         pushToast('warning', 'Not assigned to this examination or venue.');
         beep(440, 200);
+        buzz(VIBRATION.warning);
+    } else if (outcome === 'members_only') {
+        pushToast('warning', 'Trainings record PROCTAD members only — nothing recorded.');
+        beep(440, 200);
+        buzz(VIBRATION.warning);
     } else if (resultProps.result || resultProps.oepResult) {
         pushToast('success', 'Identity verified.');
         beep(880, 120);
+        buzz(VIBRATION.confirmed);
     }
+};
+
+/*
+ * --- Viewfinder verdict ---
+ *
+ * Shown over the camera for a few seconds after each scan, then cleared so the
+ * next person can be framed. Long enough to read a name and an outcome at
+ * arm's length; short enough that nobody waits on it. A tap clears it early,
+ * and the next scan replaces it outright.
+ */
+const VERDICT_OVERLAY_MS = 2800;
+const verdict = ref(null);
+let verdictTimer = null;
+
+const dismissVerdict = () => {
+    clearTimeout(verdictTimer);
+    verdict.value = null;
+};
+
+/*
+ * Built from the response rather than from this page's own props: a scan is a
+ * partial reload (`only:` below), so props not in that list — `code` among them
+ * — still hold the previous visit's values when this runs.
+ */
+const showVerdict = (resultProps, code) => {
+    // Only while the camera owns the screen. With it stopped the operator is
+    // working in the hero and the manual form, and a panel over a dead
+    // viewfinder would just be in the way.
+    if (! isPublic.value || ! scanning.value) return;
+
+    const outcome = outcomeOf(resultProps);
+    // Nothing to announce — no verdict, so no panel over the viewfinder.
+    if (outcome === 'idle') return;
+
+    verdict.value = {
+        outcome,
+        person: resultProps.result ?? resultProps.oepResult ?? null,
+        code,
+    };
+
+    clearTimeout(verdictTimer);
+    verdictTimer = setTimeout(() => (verdict.value = null), VERDICT_OVERLAY_MS);
 };
 
 /** Replays a scan (fresh or queued) against the same idempotent endpoint. */
@@ -225,7 +420,7 @@ const replayScan = (code, context) => new Promise((resolve, reject) => {
         preserveScroll: true,
         onSuccess: (page) => {
             succeeded = true;
-            handleScanOutcome(page.props);
+            handleScanOutcome(page.props, code);
         },
         // A failed replay is expected while offline and is retried on the next
         // tick — handled, so don't let it escape as an unhandled error.
@@ -312,16 +507,37 @@ const syncTones = {
     'wrap-brand': 'border-brand-200 bg-brand-50 text-brand-800',
 };
 
+/*
+ * Queued scans are stored as raw codes — offline there is no server to resolve
+ * them against. But the roster behind the live-attendance panel is already on
+ * the device, so the name is recoverable locally: "3 waiting" is only
+ * actionable if the operator can answer "did Juan get in?" from it.
+ */
+const nameByCode = computed(() => {
+    const names = new Map();
+
+    for (const entry of props.attendanceSummary?.roster ?? []) {
+        if (entry.code) names.set(entry.code, entry.label);
+    }
+    for (const entry of props.attendanceSummary?.recent ?? []) {
+        if (entry.code) names.set(entry.code, entry.name);
+    }
+
+    return names;
+});
+
+const queuedName = (entry) => nameByCode.value.get(entry.code) ?? null;
+
 const manualRetryPendingScan = (entry) => {
     if (entry.status === 'failed') entry.status = 'pending';
     retryPendingScans();
 };
 
-const lookup = (code) => {
+const lookup = (code, { fromCamera = false } = {}) => {
     if (!code || scanLocked.value) return;
 
     const now = Date.now();
-    if (lastScan.text === code && now - lastScan.at < 1000) return;
+    if (fromCamera && lastScan.text === code && now - lastScan.at < CAMERA_RESCAN_COOLDOWN_MS) return;
     lastScan = { text: code, at: now };
 
     const context = contextParams();
@@ -330,8 +546,8 @@ const lookup = (code) => {
     router.get(scanUrl.value, { code, ...context }, {
         preserveState: true,
         preserveScroll: true,
-        only: ['result', 'oepResult', 'notFound', 'attendance', 'attendanceSummary'],
-        onSuccess: (page) => handleScanOutcome(page.props),
+        only: ['result', 'oepResult', 'notFound', 'outOfReach', 'attendance', 'attendanceSummary'],
+        onSuccess: (page) => handleScanOutcome(page.props, code),
         // onNetworkError, not onError: onError carries server-side validation
         // errors, and never fires when the request fails to reach the server at
         // all — which is precisely the case the offline queue exists for.
@@ -348,6 +564,74 @@ const lookup = (code) => {
     });
 };
 
+/*
+ * --- Screen wake lock ---
+ *
+ * A scanning station is a phone held up for hours with no touch input between
+ * people, so the OS locks the screen every 30 seconds and the operator spends
+ * exam morning unlocking it. Held only while the camera is actually running.
+ *
+ * The lock is dropped by the system whenever the page is hidden — a tab switch,
+ * the power button — and is never restored on its own, so it has to be
+ * re-requested on the way back.
+ */
+let wakeLock = null;
+
+const requestWakeLock = async () => {
+    if (! ('wakeLock' in navigator) || wakeLock) return;
+
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => (wakeLock = null));
+    } catch {
+        // Unsupported, or refused because the page is not visible. The scanner
+        // works exactly as before; the screen just sleeps.
+        wakeLock = null;
+    }
+};
+
+const releaseWakeLock = () => {
+    wakeLock?.release().catch(() => {});
+    wakeLock = null;
+};
+
+const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && scanning.value) requestWakeLock();
+};
+
+/*
+ * --- Torch ---
+ *
+ * Venues open before sunrise and corridors are unlit; a laminated ID in a dim
+ * classroom is the single most common decode failure. Support is per-device
+ * (Android Chrome, mostly) and only knowable once the track is live, so the
+ * control is rendered from what the running camera actually reports.
+ */
+const torchOn = ref(false);
+const torchSupported = ref(false);
+
+const torchFeature = () => {
+    try {
+        return scanner?.getRunningTrackCameraCapabilities?.()?.torchFeature?.() ?? null;
+    } catch {
+        return null;
+    }
+};
+
+const toggleTorch = async () => {
+    const feature = torchFeature();
+    if (! feature?.isSupported()) return;
+
+    try {
+        await feature.apply(! torchOn.value);
+        torchOn.value = ! torchOn.value;
+    } catch {
+        // Some devices advertise the capability and then refuse it — stop
+        // offering a control that does nothing rather than failing silently.
+        torchSupported.value = false;
+    }
+};
+
 const startCamera = async () => {
     cameraError.value = null;
     try {
@@ -356,12 +640,26 @@ const startCamera = async () => {
         scanning.value = true;
         await scanner.start(
             { facingMode: 'environment' },
-            { fps: 10, qrbox: { width: 220, height: 220 } },
+            {
+                fps: 10,
+                // Sized from the live viewfinder rather than a fixed 220px box:
+                // that was a small target held at arm's length on a big phone,
+                // and wider than the feed on a narrow one.
+                qrbox: (viewfinderWidth, viewfinderHeight) => {
+                    const edge = Math.max(180, Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.7));
+
+                    return { width: edge, height: edge };
+                },
+            },
             // Continuous scan: the camera keeps running after every decode —
             // only the result panel/attendance summary refresh in place.
-            (decodedText) => lookup(decodedText),
+            (decodedText) => lookup(decodedText, { fromCamera: true }),
             () => {},
         );
+
+        torchSupported.value = Boolean(torchFeature()?.isSupported());
+        torchOn.value = false;
+        requestWakeLock();
     } catch (error) {
         scanning.value = false;
         cameraError.value = 'Camera unavailable. Check permissions, or use manual entry below.';
@@ -373,6 +671,26 @@ const stopCamera = () => {
         scanner.stop().catch(() => {});
     }
     scanning.value = false;
+    torchSupported.value = false;
+    torchOn.value = false;
+    releaseWakeLock();
+    dismissVerdict();
+};
+
+/**
+ * Whether the camera can be started without prompting.
+ *
+ * The first grant needs a user gesture, so the Start button stays the way in.
+ * Once granted, though, re-opening the link (or an accidental reload mid-queue)
+ * should put the operator straight back to scanning. Firefox and Safari throw on
+ * the 'camera' permission name, which is simply "we can't know" — treat it as no.
+ */
+const cameraAlreadyPermitted = async () => {
+    try {
+        return (await navigator.permissions?.query({ name: 'camera' }))?.state === 'granted';
+    } catch {
+        return false;
+    }
 };
 
 let retryInterval = null;
@@ -383,11 +701,16 @@ const handleOnline = () => {
 };
 const handleOffline = () => (isOnline.value = false);
 
-onMounted(() => {
+onMounted(async () => {
     retryPendingScans();
     retryInterval = setInterval(retryPendingScans, 5000);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Public only: the staff page needs an examination picked first, so opening
+    // the camera there would be presumptuous. At a gate it is the entire point.
+    if (isPublic.value && await cameraAlreadyPermitted()) startCamera();
 });
 
 onBeforeUnmount(() => {
@@ -395,6 +718,11 @@ onBeforeUnmount(() => {
     clearInterval(retryInterval);
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    clearTimeout(verdictTimer);
+    clearInterval(undoTimer);
+    audioContext?.close().catch(() => {});
+    audioContext = null;
 });
 
 /* --- Manual bulk attendance fallback --- */
@@ -509,7 +837,7 @@ const roomStatusMeta = {
 const seatMeta = (seat) => {
     if (seat.present) return { icon: 'check-circle', class: 'bg-emerald-50 text-emerald-700' };
     if (seat.assigned) return { icon: 'clock', class: 'bg-amber-50 text-amber-700' };
-    return { icon: null, class: 'bg-slate-50 text-slate-400' };
+    return { icon: null, class: 'bg-slate-50 text-slate-500' };
 };
 
 // The live-attendance panel splits into two tabs — the running tally + recent
@@ -562,7 +890,11 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
             :oep-result="oepResult"
             :attendance="attendance"
             :not-found="notFound"
+            :out-of-reach="outOfReach"
             :code="code"
+            :undo-seconds="undoSecondsLeft"
+            :undo-busy="undoBusy"
+            @undo="submitUndo"
         />
 
         <div class="grid gap-6" :class="isPublic ? 'mt-6' : 'mt-6 lg:grid-cols-2'">
@@ -591,7 +923,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         wrap
                         text="Examination attendance branches three ways: regular members confirm against the whole exam (no venue needed); REC/LEC/CE-for-Investigation roles need a venue only when scanned away from their home school; Other Examination Personnel always need a venue, since their attendance is tracked per school. Training attendance is a single flat member-only check-in with no venue involved."
                     >
-                        <AppIcon name="information-circle" class="h-4 w-4 cursor-help text-slate-400 hover:text-slate-600" />
+                        <AppIcon name="information-circle" class="h-4 w-4 cursor-help text-slate-500 hover:text-slate-600" />
                     </Tooltip>
                 </div>
 
@@ -616,10 +948,10 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                             wrap
                             text="A venue is required to record Other Examination Personnel attendance (tracked per school), and for REC/LEC/CE-for-Investigation members scanned at a school other than their home venue. Regular Proctor/Examiner roles at their own venue don't need one."
                         >
-                            <AppIcon name="information-circle" class="mb-2.5 h-4 w-4 shrink-0 cursor-help text-slate-400 hover:text-slate-600" />
+                            <AppIcon name="information-circle" class="mb-2.5 h-4 w-4 shrink-0 cursor-help text-slate-500 hover:text-slate-600" />
                         </Tooltip>
                     </div>
-                    <p class="mt-1.5 text-xs text-slate-400">
+                    <p class="mt-1.5 text-xs text-slate-500">
                         Members: attendance records against the whole examination. Other examination personnel: select a venue first.
                     </p>
                 </template>
@@ -631,7 +963,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         class="mt-4"
                         :options="[{ value: '', label: 'Verify identity only' }, ...events.trainings]"
                     />
-                    <p class="mt-1.5 text-xs text-slate-400">
+                    <p class="mt-1.5 text-xs text-slate-500">
                         Training attendance is a flat member check-in — no venue, no certificate-type branching.
                     </p>
                 </template>
@@ -639,23 +971,54 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                 <div class="flex items-center justify-between" :class="isPublic ? '' : 'mt-6'">
                     <div>
                         <h2 class="text-base font-semibold text-slate-900">Camera Scan</h2>
-                        <p class="mt-1 text-xs text-slate-400">The camera keeps scanning continuously — no need to restart it between people.</p>
+                        <p class="mt-1 text-xs text-slate-500">The camera keeps scanning continuously — no need to restart it between people.</p>
                     </div>
-                    <button
-                        type="button"
-                        class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50"
-                        :title="muted ? 'Unmute scan sound' : 'Mute scan sound'"
-                        @click="muted = !muted"
-                    >
-                        <AppIcon name="bell" class="h-4 w-4" :class="muted ? 'opacity-40' : 'text-brand-600'" />
-                        {{ muted ? 'Sound off' : 'Sound on' }}
-                    </button>
+                    <div class="flex shrink-0 items-center gap-1">
+                        <!-- Only once the running camera reports it: torch is an
+                             Android-mostly capability and a dead control at a
+                             dark venue is worse than none. -->
+                        <button
+                            v-if="torchSupported"
+                            type="button"
+                            class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold hover:bg-slate-50"
+                            :class="torchOn ? 'text-amber-600' : 'text-slate-500'"
+                            :aria-pressed="torchOn"
+                            :title="torchOn ? 'Turn the light off' : 'Turn the light on'"
+                            @click="toggleTorch"
+                        >
+                            <AppIcon name="light-bulb" class="h-4 w-4" :class="torchOn ? '' : 'opacity-40'" />
+                            {{ torchOn ? 'Light on' : 'Light off' }}
+                        </button>
+                        <button
+                            type="button"
+                            class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                            :aria-pressed="!muted"
+                            :title="muted ? 'Unmute scan sound' : 'Mute scan sound'"
+                            @click="muted = !muted"
+                        >
+                            <AppIcon name="bell" class="h-4 w-4" :class="muted ? 'opacity-40' : 'text-brand-600'" />
+                            {{ muted ? 'Sound off' : 'Sound on' }}
+                        </button>
+                    </div>
                 </div>
-                <div
-                    id="qr-reader"
-                    class="mt-4 overflow-hidden rounded-xl bg-slate-900/5"
-                    :class="[scanning ? 'min-h-64' : '', isPublic && scanning ? 'ring-2 ring-brand-500/40' : '']"
-                />
+                <div class="relative mt-4">
+                    <div
+                        id="qr-reader"
+                        class="overflow-hidden rounded-xl bg-slate-900/5"
+                        :class="[scanning ? 'min-h-64' : '', isPublic && scanning ? 'ring-2 ring-brand-500/40' : '']"
+                    />
+                    <ScanVerdictOverlay
+                        v-if="verdict"
+                        :key="verdict.code + verdict.outcome"
+                        :outcome="verdict.outcome"
+                        :person="verdict.person"
+                        :code="verdict.code"
+                        :undo-seconds="undoSecondsLeft"
+                        :undo-busy="undoBusy"
+                        @dismiss="dismissVerdict"
+                        @undo="submitUndo"
+                    />
+                </div>
                 <!-- Public: one full-width primary action. It is tapped by
                      someone holding the phone one-handed at a gate. -->
                 <div class="mt-4 flex gap-3">
@@ -691,10 +1054,18 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                             {{ isPublic ? 'Sync now' : 'Retry all' }}
                         </BaseButton>
                     </div>
-                    <ul class="mt-2 space-y-1">
-                        <li v-for="entry in pendingScans" :key="entry.id" class="flex items-center justify-between gap-2 text-xs text-amber-700">
-                            <span class="font-mono">{{ entry.code }}</span>
-                            <span class="flex items-center gap-2">
+                    <ul class="mt-2 space-y-1.5">
+                        <li v-for="entry in pendingScans" :key="entry.id" class="flex items-start justify-between gap-2 text-xs text-amber-700">
+                            <span class="min-w-0">
+                                <!-- Resolved from the roster already on the device;
+                                     falls back to the bare code for anyone scanned
+                                     who is not on this event's roster at all. -->
+                                <span v-if="queuedName(entry)" class="block truncate font-semibold text-amber-900">
+                                    {{ queuedName(entry) }}
+                                </span>
+                                <span class="block truncate font-mono">{{ entry.code }}</span>
+                            </span>
+                            <span class="flex shrink-0 items-center gap-2">
                                 <span v-if="entry.status === 'failed'" class="text-accent-600">Failed, retry manually</span>
                                 <span v-else>{{ entry.status === 'retrying' ? 'Retrying…' : 'Pending' }}</span>
                                 <BaseButton variant="link" @click="manualRetryPendingScan(entry)">Retry</BaseButton>
@@ -725,7 +1096,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                 v-if="manualFocused && manualCode.trim().length >= 2 && (rosterLoading || nameMatches.length || attendanceSummary)"
                                 class="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
                             >
-                                <p v-if="rosterLoading" class="flex items-center gap-2 px-3 py-2 text-sm text-slate-400">
+                                <p v-if="rosterLoading" class="flex items-center gap-2 px-3 py-2 text-sm text-slate-500">
                                     <LoadingSpinner class="h-3.5 w-3.5" />
                                     Loading roster…
                                 </p>
@@ -742,14 +1113,14 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                         <BaseBadge v-if="entry.present" variant="success" size="xs" class="shrink-0">Present</BaseBadge>
                                     </button>
                                 </template>
-                                <p v-else class="px-3 py-2 text-sm text-slate-400">
+                                <p v-else class="px-3 py-2 text-sm text-slate-500">
                                     No name matches in the current roster — press Enter to look up as an exact ID instead.
                                 </p>
                             </div>
                         </div>
                         <BaseButton type="submit" variant="secondary" :size="isPublic ? 'md' : 'sm'">Look up</BaseButton>
                     </form>
-                    <p v-if="!attendanceSummary && !rosterLoading && !isPublic" class="mt-1.5 text-xs text-slate-400">
+                    <p v-if="!attendanceSummary && !rosterLoading && !isPublic" class="mt-1.5 text-xs text-slate-500">
                         Select an examination or training above to search by name — or paste an exact ID here anytime.
                     </p>
 
@@ -771,7 +1142,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
 
                     <div v-if="showManualFallback && attendanceSummary" class="mt-3 rounded-lg border border-slate-200 p-3">
                         <TextInput v-model="manualSearch" label="Search remaining roster" placeholder="Name, PROCTAD ID, or OEP ID" />
-                        <p v-if="mode === 'examination' && !selectedVenue && !isPublic" class="mt-1.5 text-xs text-slate-400">
+                        <p v-if="mode === 'examination' && !selectedVenue && !isPublic" class="mt-1.5 text-xs text-slate-500">
                             Select a venue above to include other examination personnel and REC/LEC covered-school
                             attendance in this roster.
                         </p>
@@ -791,7 +1162,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                 >
                                 <span class="text-slate-700">{{ person.label }}</span>
                             </label>
-                            <p v-if="!manualRoster.length" class="px-3 py-4 text-center text-sm text-slate-400">
+                            <p v-if="!manualRoster.length" class="px-3 py-4 text-center text-sm text-slate-500">
                                 Everyone in this roster has been marked present.
                             </p>
                         </div>
@@ -835,7 +1206,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         >
                             Attendance Map
                             <span
-                                class="rounded-full px-1.5 text-[0.7rem] font-bold"
+                                class="rounded-full px-1.5 text-xs font-bold"
                                 :class="activeTab === 'map' ? 'bg-brand-100 text-brand-700' : 'bg-slate-200 text-slate-500'"
                             >
                                 {{ attendanceSummary.roomMap.filled }}/{{ attendanceSummary.roomMap.total }}
@@ -844,7 +1215,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                     </div>
                     <div v-else class="flex items-baseline justify-between">
                         <h2 class="text-base font-semibold text-slate-900">Live Attendance</h2>
-                        <p v-if="isPublic" class="text-xs font-semibold text-slate-400">
+                        <p v-if="isPublic" class="text-xs font-semibold text-slate-500">
                             {{ Math.round((attendanceSummary.present / Math.max(attendanceSummary.total, 1)) * 100) }}% checked in
                         </p>
                     </div>
@@ -864,7 +1235,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         <div class="mt-3 flex divide-x divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/60 text-center">
                             <div class="flex-1 py-2.5">
                                 <p class="text-xl font-bold text-emerald-600">{{ attendanceSummary.present }}</p>
-                                <p class="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">Present</p>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Present</p>
                             </div>
                             <div class="flex-1 py-2.5">
                                 <!--
@@ -874,12 +1245,12 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                     below, and labelling doors-open as "absent"
                                     would make every venue look abandoned.
                                 -->
-                                <p class="text-xl font-bold text-slate-400">{{ attendanceSummary.awaiting }}</p>
-                                <p class="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">Awaiting</p>
+                                <p class="text-xl font-bold text-slate-500">{{ attendanceSummary.awaiting }}</p>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting</p>
                             </div>
                             <div class="flex-1 py-2.5">
                                 <p class="text-xl font-bold text-slate-700">{{ attendanceSummary.total }}</p>
-                                <p class="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">Total</p>
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total</p>
                             </div>
                         </div>
                     </template>
@@ -890,19 +1261,19 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         <StatCard compact label="Awaiting" :value="attendanceSummary.awaiting" icon="clock" />
                     </div>
 
-                    <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Recent Scans</h3>
+                    <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">Recent Scans</h3>
                     <ul class="mt-2 max-h-56 divide-y divide-slate-100 overflow-y-auto">
                         <li v-for="entry in attendanceSummary.recent" :key="entry.id" class="flex items-center justify-between py-2 text-sm">
                             <div class="min-w-0">
                                 <p class="font-medium text-slate-800">{{ entry.name }}</p>
                                 <p class="font-mono text-xs text-brand-700">{{ entry.code }}</p>
-                                <p v-if="entry.venue" class="mt-0.5 truncate text-xs text-slate-400">
+                                <p v-if="entry.venue" class="mt-0.5 truncate text-xs text-slate-500">
                                     {{ entry.venue }}<template v-if="entry.room"> · {{ entry.room }}</template><template v-if="entry.designation"> ({{ entry.designation }})</template>
                                 </p>
                             </div>
-                            <span class="shrink-0 text-xs text-slate-400">{{ entry.confirmed_at }}</span>
+                            <span class="shrink-0 text-xs text-slate-500">{{ entry.confirmed_at }}</span>
                         </li>
-                        <li v-if="!attendanceSummary.recent.length" class="py-3 text-center text-sm text-slate-400">
+                        <li v-if="!attendanceSummary.recent.length" class="py-3 text-center text-sm text-slate-500">
                             No one marked present yet.
                         </li>
                     </ul>
@@ -912,9 +1283,9 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         is: an alternate covers the venue they are standing in.
                     -->
                     <template v-if="cover">
-                        <h3 class="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">Exam-Day Cover</h3>
+                        <h3 class="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-500">Exam-Day Cover</h3>
 
-                        <p v-if="!cover.seats.length && !cover.deployed.length" class="mt-2 text-sm text-slate-400">
+                        <p v-if="!cover.seats.length && !cover.deployed.length" class="mt-2 text-sm text-slate-500">
                             Everyone assigned to this venue has reported in.
                         </p>
 
@@ -986,7 +1357,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         <p v-if="cover.seats.length && !isOnline" class="mt-2 text-xs text-amber-700">
                             Cover needs a connection — unlike scans, it is not queued offline.
                         </p>
-                        <p v-else-if="cover.seats.length && !cover.alternates.length" class="mt-2 text-xs text-slate-400">
+                        <p v-else-if="cover.seats.length && !cover.alternates.length" class="mt-2 text-xs text-slate-500">
                             No Alternate Examiner is on standby at this venue.
                         </p>
                     </template>
@@ -997,7 +1368,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                          roomMap references safe when the venue has no rooms. -->
                     <div v-if="hasRoomMap" v-show="activeTab === 'map'" class="mt-4">
                         <div class="flex items-baseline justify-between">
-                            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-400">Room Attendance</h3>
+                            <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Room Attendance</h3>
                             <span class="text-xs font-semibold text-slate-500">
                                 {{ attendanceSummary.roomMap.filled }}/{{ attendanceSummary.roomMap.total }} rooms filled
                             </span>
@@ -1014,10 +1385,10 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                             >
                                 <div class="flex items-center justify-between gap-2">
                                     <p class="min-w-0 truncate text-sm font-semibold text-slate-800">
-                                        {{ room.room_number }}<span v-if="room.designation" class="font-normal text-slate-400"> · {{ room.designation }}</span>
+                                        {{ room.room_number }}<span v-if="room.designation" class="font-normal text-slate-500"> · {{ room.designation }}</span>
                                     </p>
                                     <span
-                                        class="shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] font-bold"
+                                        class="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold"
                                         :class="roomStatusMeta[roomStatus(room)].badge"
                                     >
                                         {{ room.present_count }}/{{ room.required_count }} {{ roomStatusMeta[roomStatus(room)].label }}
@@ -1027,7 +1398,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                     <span
                                         v-for="seat in room.seats"
                                         :key="seat.role_label"
-                                        class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.7rem] font-medium"
+                                        class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium"
                                         :class="seatMeta(seat).class"
                                         :title="seat.role_label"
                                     >
@@ -1082,6 +1453,18 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                     Venue/room not yet assigned for this examination.
                                 </p>
                             </template>
+
+                            <!-- Same ten-second take-back as the public scanner. -->
+                            <button
+                                v-if="undoSecondsLeft > 0"
+                                type="button"
+                                class="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white/70 px-3 text-xs font-bold text-slate-800 transition-colors hover:bg-white disabled:opacity-60"
+                                :disabled="undoBusy"
+                                @click="submitUndo"
+                            >
+                                <AppIcon name="arrow-path" class="h-3.5 w-3.5" />
+                                {{ undoBusy ? 'Undoing…' : `Undo (${undoSecondsLeft}s)` }}
+                            </button>
                         </div>
 
                         <div class="rounded-lg border border-emerald-200 bg-emerald-50/60 p-5">
@@ -1092,11 +1475,11 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                     <p class="mt-0.5 text-sm text-slate-600">{{ result.agency }}</p>
                                     <p class="text-sm font-medium text-slate-700">{{ result.field_office }}</p>
                                     <p v-if="result.venue" class="mt-1.5 text-sm text-slate-600">
-                                        <AppIcon name="building-office" class="mr-1 inline h-4 w-4 align-text-bottom text-slate-400" />
+                                        <AppIcon name="building-office" class="mr-1 inline h-4 w-4 align-text-bottom text-slate-500" />
                                         {{ result.venue }}
                                         <template v-if="result.room"> · {{ result.room }}</template><template v-if="result.designation"> ({{ result.designation }})</template>
                                     </p>
-                                    <p v-else-if="attendance && (attendance.outcome === 'confirmed' || attendance.outcome === 'already_confirmed')" class="mt-1.5 text-xs italic text-slate-400">
+                                    <p v-else-if="attendance && (attendance.outcome === 'confirmed' || attendance.outcome === 'already_confirmed')" class="mt-1.5 text-xs italic text-slate-500">
                                         Venue/room not yet assigned.
                                     </p>
                                 </div>
@@ -1119,7 +1502,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         <div v-if="result.service_history" class="rounded-lg border border-slate-200 bg-white p-5">
                             <div class="flex items-center justify-between gap-2">
                                 <h3 class="text-sm font-semibold text-slate-900">Service History</h3>
-                                <span class="shrink-0 text-xs text-slate-400">{{ result.service_history.total_served }} exam(s) served</span>
+                                <span class="shrink-0 text-xs text-slate-500">{{ result.service_history.total_served }} exam(s) served</span>
                             </div>
                             <div v-if="result.service_history.designations.length" class="mt-2 flex flex-wrap gap-1.5">
                                 <BaseBadge v-for="d in result.service_history.designations" :key="d.label" variant="neutral" size="xs">
@@ -1132,7 +1515,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                         <p class="truncate font-medium text-slate-800">{{ record.exam_title }}</p>
                                         <BaseBadge :variant="record.status_variant" size="xs">{{ record.status_label }}</BaseBadge>
                                     </div>
-                                    <p class="text-xs text-slate-400">
+                                    <p class="text-xs text-slate-500">
                                         {{ record.exam_date }} — {{ record.role_label }}
                                         <template v-if="record.testing_center">
                                             · {{ record.testing_center }}<template v-if="record.room"> ({{ record.room }})</template>
@@ -1140,7 +1523,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                     </p>
                                 </div>
                             </div>
-                            <p v-else class="mt-3 text-sm text-slate-400">No prior Test Administrator assignments on record.</p>
+                            <p v-else class="mt-3 text-sm text-slate-500">No prior Test Administrator assignments on record.</p>
                         </div>
                     </div>
 
@@ -1181,7 +1564,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                                     <p class="mt-0.5 text-sm text-slate-600">{{ oepResult.personnel_type_label }}</p>
                                     <p class="text-sm font-medium text-slate-700">{{ oepResult.testing_center ?? oepResult.field_office ?? '—' }}</p>
                                     <p v-if="oepResult.venue" class="mt-1.5 text-sm text-slate-600">
-                                        <AppIcon name="building-office" class="mr-1 inline h-4 w-4 align-text-bottom text-slate-400" />
+                                        <AppIcon name="building-office" class="mr-1 inline h-4 w-4 align-text-bottom text-slate-500" />
                                         {{ oepResult.venue }}
                                     </p>
                                 </div>
@@ -1200,6 +1583,18 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         </div>
                     </div>
 
+                    <!-- The code matched a real record, but not one this
+                         scanner covers — a different answer from a bad code,
+                         and it must not read as one. -->
+                    <div v-else-if="outOfReach" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-5">
+                        <p class="text-sm font-semibold text-amber-900">Outside this scanner</p>
+                        <p class="mt-1 text-sm text-amber-800">
+                            <span class="font-mono">{{ code }}</span> belongs to a record this scanner link does not
+                            cover. The link was issued for one field office's jurisdiction — ask for a link issued by
+                            the office running this session.
+                        </p>
+                    </div>
+
                     <div v-else-if="notFound" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-5">
                         <p class="text-sm font-semibold text-red-800">No record found</p>
                         <p class="mt-1 text-sm text-red-700">
@@ -1207,7 +1602,7 @@ const hasRoomMap = computed(() => Boolean(props.attendanceSummary?.roomMap?.tota
                         </p>
                     </div>
 
-                    <p v-else class="mt-4 text-sm text-slate-400">
+                    <p v-else class="mt-4 text-sm text-slate-500">
                         Scan a QR code or enter an ID to see the record's details here.
                     </p>
                 </div>

@@ -334,6 +334,44 @@ class MyProctadTest extends TestCase
     }
 
     /**
+     * The sidebar badge and the sign-in prompt both read this shared prop, so
+     * it has to count exactly what "My Assignments" would let the member act
+     * on — nothing already answered, nothing already past.
+     */
+    public function test_pending_assignments_prop_counts_only_unanswered_upcoming_deployments(): void
+    {
+        $user = User::factory()->create(['role' => UserRole::Member]);
+        $member = Member::factory()->create(['user_id' => $user->id]);
+
+        $this->upcomingAssignmentFor($member);
+        $this->upcomingAssignmentFor($member);
+        $this->upcomingAssignmentFor($member, AssignmentStatus::Confirmed->value);
+        ExamAssignment::factory()->create([
+            'member_id' => $member->id,
+            'status' => 'pending',
+            'examination_id' => Examination::factory()->create(['exam_date' => now()->subDays(30)])->id,
+        ]);
+        // Another member's deployment must never reach this member's badge.
+        $this->upcomingAssignmentFor(Member::factory()->create());
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('pendingAssignments.count', 2)
+                ->has('pendingAssignments.soonest'));
+    }
+
+    /** No accreditation, nothing to confirm — and no query behind a badge that can never show. */
+    public function test_pending_assignments_prop_is_null_for_a_user_with_no_member_record(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => UserRole::Member]))
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('pendingAssignments', null));
+    }
+
+    /**
      * Room is disclosed in person on exam day. It must be absent from the
      * payload, not merely hidden in the template.
      */

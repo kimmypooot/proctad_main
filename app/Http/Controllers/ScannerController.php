@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AssignmentStatus;
+use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
 use App\Enums\ExamRole;
 use App\Http\Middleware\ResolveScannerSession;
 use App\Models\AuditLog;
+use App\Models\Certificate;
 use App\Models\ExamAssignment;
 use App\Models\ExamAssignmentAttendance;
 use App\Models\Examination;
@@ -24,10 +26,15 @@ use App\Services\AlternateActivator;
 use App\Services\CertificateService;
 use App\Services\RoomStaffingCalculator;
 use App\Services\TestAdministratorServiceHistory;
+use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -64,15 +71,26 @@ class ScannerController extends Controller
         $result = null;
         $oepResult = null;
         $notFound = false;
+        // The record exists but sits outside this scanner's jurisdiction. Held
+        // apart from $notFound because the two need different answers at the
+        // door: one is a bad code, the other is the wrong scanner.
+        $outOfReach = false;
         $attendance = null;
         $venues = [];
 
         if ($raw['type'] === 'oep') {
             $oep = OtherExaminationPersonnel::with(['fieldOffice:id,name,code', 'testingCenter:id,name'])
                 ->where('oep_id', $raw['code'])
-                ->when($user->role->isFieldOfficeScoped(),
-                    fn ($q) => $q->withinJurisdictionOf($user))
                 ->first();
+
+            // Looked up unscoped, then filtered here, so a real record outside
+            // this scanner's reach can say so instead of reading as a bad code.
+            // Dropped to null either way — the verdict names the reason, the
+            // record itself stays out of reach.
+            if ($oep && $this->isOutOfReach($oep, $user)) {
+                $outOfReach = true;
+                $oep = null;
+            }
 
             $oepResult = $oep ? [
                 'id' => $oep->id,
@@ -82,13 +100,20 @@ class ScannerController extends Controller
                 'field_office' => $oep->fieldOffice?->name,
                 'testing_center' => $oep->testingCenter?->name,
                 'is_active' => $oep->is_active,
+                'photo_url' => $this->photoUrlFor($session, $oep),
             ] : null;
-            $notFound = $oep === null;
+            $notFound = $oep === null && ! $outOfReach;
 
             if ($oep && $venueId) {
                 $attendance = $this->confirmOepAttendance($oep, $venueId, $user);
             } elseif ($oep && $examinationId) {
                 $attendance = ['outcome' => 'venue_required'];
+            } elseif ($oep && $trainingId) {
+                // Training attendance is keyed to a TrainingAssignment, which
+                // only a Member can have — OepAttendance hangs off an
+                // examination venue. Say so: silence here looks like a
+                // successful check-in to whoever is running the door.
+                $attendance = ['outcome' => 'members_only'];
             }
 
             if ($oepResult && $attendance) {
@@ -97,10 +122,15 @@ class ScannerController extends Controller
         } elseif ($raw['code'] !== '') {
             $member = Member::with('fieldOffice:id,name,code')
                 ->where('proctad_id', $raw['code'])
-                // FO Admins can only look up members of their own Field Office.
-                ->when($user->role->isFieldOfficeScoped(),
-                    fn ($q) => $q->withinJurisdictionOf($user))
                 ->first();
+
+            // FO Admins can only look up members of their own Field Office —
+            // applied after the lookup rather than inside it, so an out-of-
+            // reach member is distinguishable from a code that matches nobody.
+            if ($member && $this->isOutOfReach($member, $user)) {
+                $outOfReach = true;
+                $member = null;
+            }
 
             // Public sessions get identity only — enough to confirm the right
             // person is standing there. Employment and membership standing are
@@ -115,8 +145,12 @@ class ScannerController extends Controller
                 'status' => $session ? null : $member->status->value,
                 'status_label' => $session ? null : $member->status->label(),
                 'status_variant' => $session ? null : $member->status->badgeVariant(),
+                // The face check the gate is actually there to make. Signed and
+                // short-lived on a public link; staff read the ordinary route
+                // through the member record.
+                'photo_url' => $this->photoUrlFor($session, $member),
             ], fn ($value) => $value !== null) : null;
-            $notFound = $member === null;
+            $notFound = $member === null && ! $outOfReach;
 
             if ($member && $examinationId) {
                 $attendance = $this->confirmExamAttendance($member, $examinationId, $venueId, $user);
@@ -155,6 +189,7 @@ class ScannerController extends Controller
             'result' => $result,
             'oepResult' => $oepResult,
             'notFound' => $notFound,
+            'outOfReach' => $outOfReach,
             'attendance' => $attendance,
             'venues' => $venues,
             // A public session's context is fixed, so the event/venue pickers
@@ -297,6 +332,294 @@ class ScannerController extends Controller
                 ->where('examination_school_id', $session->examination_school_id))
             ->with('member:id,proctad_id,first_name,middle_name,last_name,suffix')
             ->firstOrFail();
+    }
+
+    /**
+     * How long a scanned person's photo stays fetchable.
+     *
+     * Long enough to render on the phone that just scanned them; short enough
+     * that a URL copied out of the page is dead before it is useful anywhere
+     * else. See photoUrlFor().
+     */
+    public const PHOTO_LINK_TTL_MINUTES = 5;
+
+    /**
+     * The ID photo of somebody scanned through a public link.
+     *
+     * A name and an ID number confirm the code, not the person holding it — so
+     * without this the public scanner records attendance but cannot actually
+     * verify identity. It is fenced three ways, because the link it hangs off
+     * is shared around a venue: the URL is signed and expires in minutes, it is
+     * only ever minted for someone the scan just resolved, and it is refused
+     * for anyone outside this session's own event.
+     */
+    public function memberPhoto(Request $request, string $token, Member $member): HttpResponse
+    {
+        $session = $this->session($request);
+
+        abort_unless($session && $this->isOnSessionRoster($session, $member), 404);
+        abort_unless($member->photo_path && Storage::disk('local')->exists($member->photo_path), 404);
+
+        return Storage::disk('local')->response($member->photo_path, headers: MemberController::FILE_HEADERS);
+    }
+
+    public function personnelPhoto(Request $request, string $token, OtherExaminationPersonnel $personnel): HttpResponse
+    {
+        $session = $this->session($request);
+
+        abort_unless(
+            $session?->examination_school_id !== null
+                && $personnel->assignments()->where('examination_school_id', $session->examination_school_id)->exists(),
+            404,
+        );
+        abort_unless($personnel->photo_path && Storage::disk('local')->exists($personnel->photo_path), 404);
+
+        return Storage::disk('local')->response($personnel->photo_path, headers: MemberController::FILE_HEADERS);
+    }
+
+    /** Deployed to the examination or training this link is pinned to. */
+    private function isOnSessionRoster(ScannerSession $session, Member $member): bool
+    {
+        if ($session->examination_id) {
+            return ExamAssignment::where('examination_id', $session->examination_id)
+                ->where('member_id', $member->id)
+                ->exists();
+        }
+
+        return $session->training_id !== null
+            && TrainingAssignment::where('training_id', $session->training_id)
+                ->where('member_id', $member->id)
+                ->exists();
+    }
+
+    /**
+     * A signed, expiring URL for the scanned person's photo — null off a public
+     * link (staff already have the ordinary route) and null when there is no
+     * photo on file, so the card falls back to initials rather than a broken image.
+     */
+    private function photoUrlFor(?ScannerSession $session, Member|OtherExaminationPersonnel $person): ?string
+    {
+        if (! $session || ! $person->photo_path) {
+            return null;
+        }
+
+        return URL::temporarySignedRoute(
+            $person instanceof Member ? 'scan.member-photo' : 'scan.personnel-photo',
+            now()->addMinutes(self::PHOTO_LINK_TTL_MINUTES),
+            ['token' => $session->token, $person instanceof Member ? 'member' : 'personnel' => $person->id],
+        );
+    }
+
+    /**
+     * Reverse the check-in that was just recorded.
+     *
+     * The error this exists for is scanning the person behind the one at the
+     * desk — noticed instantly, and until now unfixable from a public link.
+     *
+     * Deliberately narrow, because the same link is shared around a venue and
+     * anyone holding it can write attendance: it reverses one record, only
+     * within UNDO_WINDOW_SECONDS of it being written, only inside the session's
+     * own examination and venue, and it leaves an audit row behind. That is
+     * enough for a mis-scan and not enough to quietly un-attend somebody an
+     * hour later — which stays an office job, on the staff pages.
+     */
+    public const UNDO_WINDOW_SECONDS = 10;
+
+    public function undoAttendance(Request $request): RedirectResponse
+    {
+        $session = $this->session($request);
+        $user = $this->actor($request);
+
+        $validated = $request->validate([
+            'kind' => ['required', Rule::in(['exam_assignment', 'covered_attendance', 'training_assignment', 'oep_attendance'])],
+            'id' => ['required', 'integer'],
+        ]);
+
+        $undone = match ($validated['kind']) {
+            'exam_assignment' => $this->undoExamAttendance($validated['id'], $session, $user),
+            'covered_attendance' => $this->undoCoveredSchoolAttendance($validated['id'], $session, $user),
+            'training_assignment' => $this->undoTrainingAttendance($validated['id'], $session, $user),
+            'oep_attendance' => $this->undoOepAttendance($validated['id'], $session, $user),
+        };
+
+        if ($undone === null) {
+            return back()->with('error', 'Too late to undo — this check-in is more than '
+                .self::UNDO_WINDOW_SECONDS.' seconds old. Ask your Field Office to correct it.');
+        }
+
+        $this->recordUndo($request, $session, $user, $validated['kind'], $validated['id'], $undone);
+
+        $name = $undone['name'] ?? 'This person';
+        $message = "Check-in undone — {$name} is no longer marked present.";
+
+        if (($undone['certificates']['kept'] ?? 0) > 0) {
+            // A Certificate of Completion needs no approver and releases (and
+            // emails) itself the moment attendance lands, so within ten seconds
+            // it can already be gone. Say so rather than implying a clean undo.
+            $message .= ' A certificate had already been released and was left in place — tell your Field Office.';
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /** Whether a check-in is still young enough to be taken back. */
+    private function withinUndoWindow(?CarbonInterface $recordedAt): bool
+    {
+        return $recordedAt !== null && $recordedAt->greaterThanOrEqualTo(now()->subSeconds(self::UNDO_WINDOW_SECONDS));
+    }
+
+    /**
+     * Public links may only reach inside their own pinned event and venue —
+     * the same rule that stops a leaked link being re-pointed by editing the
+     * URL. Signed-in staff are held to their ordinary testing-center scope.
+     */
+    private function mayUndoFor(?ScannerSession $session, User $user, ?int $examinationId, ?int $trainingId, ?int $testingCenterId): bool
+    {
+        if ($session) {
+            return ($session->examination_id !== null && $session->examination_id === $examinationId)
+                || ($session->training_id !== null && $session->training_id === $trainingId);
+        }
+
+        return ! $user->role->isFieldOfficeScoped()
+            || in_array($testingCenterId, $user->scopedTestingCenterIds(), true);
+    }
+
+    /** @return array<string, mixed>|null null when the record is gone, out of scope, or out of time */
+    private function undoExamAttendance(int $id, ?ScannerSession $session, User $user): ?array
+    {
+        $assignment = ExamAssignment::with('member:id,proctad_id,first_name,middle_name,last_name,suffix')->find($id);
+
+        if (! $assignment
+            || ! $this->withinUndoWindow($assignment->attendance_confirmed_at)
+            || ! $this->mayUndoFor($session, $user, $assignment->examination_id, null, $assignment->testing_center_id)) {
+            return null;
+        }
+
+        $assignment->update(['attendance_confirmed_at' => null, 'attendance_confirmed_by' => null]);
+
+        return [
+            'name' => $assignment->member?->name,
+            'certificates' => $this->withdrawQueuedCertificates($assignment),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function undoTrainingAttendance(int $id, ?ScannerSession $session, User $user): ?array
+    {
+        $assignment = TrainingAssignment::with('member:id,proctad_id,first_name,middle_name,last_name,suffix')->find($id);
+
+        if (! $assignment
+            || ! $this->withinUndoWindow($assignment->attendance_confirmed_at)
+            || ! $this->mayUndoFor($session, $user, null, $assignment->training_id, $assignment->testing_center_id)) {
+            return null;
+        }
+
+        $assignment->update(['attendance_confirmed_at' => null, 'attendance_confirmed_by' => null]);
+
+        return [
+            'name' => $assignment->member?->name,
+            'certificates' => $this->withdrawQueuedCertificates($assignment),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function undoCoveredSchoolAttendance(int $id, ?ScannerSession $session, User $user): ?array
+    {
+        $attendance = ExamAssignmentAttendance::with('assignment.member:id,proctad_id,first_name,middle_name,last_name,suffix')->find($id);
+        $assignment = $attendance?->assignment;
+
+        if (! $attendance || ! $assignment
+            || ! $this->withinUndoWindow($attendance->scanned_at)
+            || ! $this->mayUndoFor($session, $user, $assignment->examination_id, null, $assignment->testing_center_id)) {
+            return null;
+        }
+
+        $name = $assignment->member?->name;
+        $attendance->delete();
+
+        // No certificate is queued for a covered-school visit — it is
+        // pre-determined logistics, not a confirmation event.
+        return ['name' => $name, 'certificates' => ['withdrawn' => 0, 'kept' => 0]];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function undoOepAttendance(int $id, ?ScannerSession $session, User $user): ?array
+    {
+        $attendance = OepAttendance::with('personnel:id,oep_id,first_name,middle_name,last_name,suffix', 'examinationSchool.school:id,testing_center_id')->find($id);
+        $venue = $attendance?->examinationSchool;
+
+        if (! $attendance || ! $venue
+            || ! $this->withinUndoWindow($attendance->scanned_at)
+            // Other examination personnel are tracked per school, so the venue's
+            // own examination is what a public link is checked against — and the
+            // center comes from the school, which is what owns one.
+            || ! $this->mayUndoFor($session, $user, $venue->examination_id, null, $venue->school?->testing_center_id)) {
+            return null;
+        }
+
+        $name = $attendance->personnel?->name;
+        $attendance->delete();
+
+        return ['name' => $name, 'certificates' => ['withdrawn' => 0, 'kept' => 0]];
+    }
+
+    /**
+     * Take back the certificates that check-in queued.
+     *
+     * Only the ones still awaiting approval: a released certificate has a
+     * number and has already been emailed to the member, and deleting the row
+     * would not unsend it. Those are counted and reported instead, so nobody is
+     * told the undo was clean when it was not.
+     *
+     * @return array{withdrawn: int, kept: int}
+     */
+    private function withdrawQueuedCertificates(ExamAssignment|TrainingAssignment $source): array
+    {
+        $certificates = Certificate::where('certifiable_type', $source::class)
+            ->where('certifiable_id', $source->id)
+            ->get();
+
+        [$pending, $issued] = $certificates->partition(
+            fn (Certificate $certificate) => $certificate->status === CertificateStatus::Pending,
+        );
+
+        // One at a time, through the model, so Auditable records each removal.
+        $pending->each(fn (Certificate $certificate) => $certificate->delete());
+
+        return ['withdrawn' => $pending->count(), 'kept' => $issued->count()];
+    }
+
+    /**
+     * The trail. An undone check-in must stay visible to the office afterwards
+     * — otherwise a shared link can erase attendance and leave nothing behind
+     * saying it ever happened.
+     *
+     * @param  array<string, mixed>  $undone
+     */
+    private function recordUndo(Request $request, ?ScannerSession $session, User $user, string $kind, int $id, array $undone): void
+    {
+        AuditLog::create([
+            'user_id' => $session?->created_by ?? $user->id,
+            'action' => 'attendance_undone',
+            'auditable_type' => match ($kind) {
+                'exam_assignment' => ExamAssignment::class,
+                'training_assignment' => TrainingAssignment::class,
+                'covered_attendance' => ExamAssignmentAttendance::class,
+                'oep_attendance' => OepAttendance::class,
+            },
+            'auditable_id' => $id,
+            'field_office_id' => $session?->field_office_id ?? $user->field_office_id,
+            'changes' => array_filter([
+                'person' => $undone['name'] ?? null,
+                // Which shared link did it, so an undo made through a public
+                // scanner is distinguishable from one the issuer made signed in.
+                'scanner_session' => $session?->label,
+                'scanner_token' => $session?->token,
+                'ip_address' => $request->ip(),
+                'certificates_withdrawn' => $undone['certificates']['withdrawn'] ?? 0,
+                'certificates_kept' => $undone['certificates']['kept'] ?? 0,
+            ], fn ($value) => $value !== null),
+        ]);
     }
 
     public function bulkMarkAttendance(Request $request): RedirectResponse
@@ -467,6 +790,20 @@ class ScannerController extends Controller
     private function actor(Request $request): User
     {
         return $this->session($request)?->creator ?? $request->user();
+    }
+
+    /**
+     * Whether a real record sits outside this scanner's jurisdiction.
+     *
+     * On a public link the actor is the issuer, so the reach belongs to
+     * whoever handed the link out — an FO-issued link at a regional sitting
+     * legitimately meets members it cannot record. Naming that case is the
+     * point: it used to be indistinguishable from a code matching nobody.
+     */
+    private function isOutOfReach(Member|OtherExaminationPersonnel $record, User $user): bool
+    {
+        return $user->role->isFieldOfficeScoped()
+            && ! $record->isWithinJurisdictionOf($user);
     }
 
     /**
@@ -872,6 +1209,7 @@ class ScannerController extends Controller
             'venue' => $assignment->examinationSchool?->school?->name,
             'room' => $assignment->room?->room_number,
             'designation' => $assignment->room?->designation,
+            'undo' => ['kind' => 'exam_assignment', 'id' => $assignment->id],
         ];
     }
 
@@ -917,6 +1255,7 @@ class ScannerController extends Controller
             'confirmed_at' => $attendance->scanned_at->format('M d, Y H:i'),
             'role_label' => $assignment->role->label().' — covered school',
             'venue' => $coveredVenueName,
+            'undo' => ['kind' => 'covered_attendance', 'id' => $attendance->id],
         ];
     }
 
@@ -955,6 +1294,7 @@ class ScannerController extends Controller
         return [
             'outcome' => 'confirmed',
             'confirmed_at' => $assignment->attendance_confirmed_at->format('M d, Y H:i'),
+            'undo' => ['kind' => 'training_assignment', 'id' => $assignment->id],
         ];
     }
 
@@ -1013,6 +1353,7 @@ class ScannerController extends Controller
             'outcome' => 'confirmed',
             'confirmed_at' => $attendance->scanned_at->format('M d, Y H:i'),
             'venue' => $venueName,
+            'undo' => ['kind' => 'oep_attendance', 'id' => $attendance->id],
         ];
     }
 

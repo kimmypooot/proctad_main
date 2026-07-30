@@ -6,6 +6,7 @@ use App\Enums\CertificateStatus;
 use App\Enums\CertificateType;
 use App\Enums\ExamRole;
 use App\Enums\PersonnelType;
+use App\Enums\TrainingSession;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\EmailLog;
@@ -360,7 +361,9 @@ class MigrateLegacyData extends Command
                 'title' => $row->training_title,
                 'type' => mb_substr($row->training_type ?? 'TEA', 0, 20),
                 'training_date' => $row->training_date,
-                'end_date' => null,
+                // Legacy recorded no sitting — every training was one entry
+                // for the day, which is what whole_day means here.
+                'session' => TrainingSession::WholeDay->value,
                 'venue' => $row->venue,
                 'completed_at' => $row->training_status === 'completed' ? $row->updated_at : null,
                 'created_at' => $row->created_at,

@@ -22,7 +22,7 @@ class TrainingAttendanceExport implements FromCollection, WithHeadings, WithMapp
     public function collection(): Collection
     {
         return TrainingAssignment::query()
-            ->with(['member:id,proctad_id,first_name,middle_name,last_name,suffix', 'training:id,title,type,training_date', 'fieldOffice:id,name,code'])
+            ->with(['member:id,proctad_id,first_name,middle_name,last_name,suffix', 'training:id,title,type,training_date,session', 'fieldOffice:id,name,code'])
             ->when($this->fieldOfficeId, fn ($q) => $q->where('field_office_id', $this->fieldOfficeId))
             ->when($this->trainingId, fn ($q) => $q->where('training_id', $this->trainingId))
             ->when($this->year, fn ($q) => $q->whereHas('training', fn ($qq) => $qq->whereYear('training_date', $this->year)))
@@ -33,7 +33,10 @@ class TrainingAttendanceExport implements FromCollection, WithHeadings, WithMapp
 
     public function headings(): array
     {
-        return ['PROCTAD ID', 'Member', 'Field Office', 'Training', 'Training Date', 'Attendance Confirmed'];
+        // Session earns a column of its own: an AM and a PM batch of the same
+        // course share a title and a date, so without it the two sittings are
+        // indistinguishable in the sheet.
+        return ['PROCTAD ID', 'Member', 'Field Office', 'Training', 'Training Date', 'Session', 'Attendance Confirmed'];
     }
 
     public function map($assignment): array
@@ -44,6 +47,7 @@ class TrainingAttendanceExport implements FromCollection, WithHeadings, WithMapp
             $assignment->fieldOffice?->name,
             $assignment->training?->title,
             $assignment->training?->training_date?->format('Y-m-d'),
+            $assignment->training?->session?->shortLabel(),
             $assignment->attendance_confirmed_at ? 'Yes' : 'No',
         ]);
     }

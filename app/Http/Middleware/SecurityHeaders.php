@@ -32,10 +32,16 @@ class SecurityHeaders
 
         $response = $next($request);
 
+        // The certificate modals render the PDF in an iframe on this origin, so
+        // a blanket DENY blocks the app's own preview ("refused to connect").
+        // Those two responses are inert PDFs with no controls to hijack, so
+        // same-origin framing costs nothing; every other response stays DENY.
+        $framable = $request->routeIs('certificates.view', 'certificates.preview');
+
         $response->headers->add([
             // The console must never be framed: /approvals and the bulk
             // certificate actions are one click each.
-            'X-Frame-Options' => 'DENY',
+            'X-Frame-Options' => $framable ? 'SAMEORIGIN' : 'DENY',
             // Stops a polyglot upload served inline from members.photo being
             // sniffed as HTML and executed on this origin.
             'X-Content-Type-Options' => 'nosniff',
@@ -51,7 +57,7 @@ class SecurityHeaders
             config('security.csp_report_only')
                 ? 'Content-Security-Policy-Report-Only'
                 : 'Content-Security-Policy',
-            $this->contentSecurityPolicy($nonce),
+            $this->contentSecurityPolicy($nonce, $framable),
         );
 
         // Only meaningful over TLS, and actively harmful if emitted from a
@@ -78,7 +84,7 @@ class SecurityHeaders
      * inline style bindings across the Inertia pages both emit them; tightening
      * that to a nonce is a follow-up, not a blocker.
      */
-    private function contentSecurityPolicy(string $nonce): string
+    private function contentSecurityPolicy(string $nonce, bool $framable = false): string
     {
         $allowed = config('security.csp_allowed');
 
@@ -109,12 +115,15 @@ class SecurityHeaders
             "media-src 'self'",
             $join('connect', "connect-src 'self'"),
             // The PDF previews are rendered into an iframe from this origin.
-            "frame-src 'self' blob:",
+            // Configurable so an embed host (the office map on /contact) can be
+            // added without touching this file.
+            $join('frame', "frame-src 'self' blob:"),
             "worker-src 'self'",
             "manifest-src 'self'",
             // Belt and braces with X-Frame-Options, for browsers that honour
-            // only one of the two.
-            "frame-ancestors 'none'",
+            // only one of the two. 'self' on the PDF responses the app frames
+            // itself; still no cross-origin framing anywhere.
+            $framable ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",
             "object-src 'none'",

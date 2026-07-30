@@ -2,8 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\CertificateStatus;
+use App\Enums\CertificateType;
+use App\Enums\UserRole;
+use App\Models\Certificate;
+use App\Models\ExamAssignment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -131,6 +137,41 @@ class SecurityHeadersTest extends TestCase
             ->get('/dashboard')
             ->assertOk()
             ->assertHeader('X-Frame-Options', 'DENY');
+    }
+
+    /**
+     * The certificate modals render the PDF in an iframe on this origin. A
+     * blanket DENY / frame-ancestors 'none' turned every preview into "refused
+     * to connect", so the two PDF responses — and only those — allow 'self'.
+     */
+    public function test_the_certificate_pdf_responses_may_be_framed_by_the_app_itself(): void
+    {
+        Storage::fake('local');
+
+        $assignment = ExamAssignment::factory()->create();
+
+        $certificate = Certificate::create([
+            'type' => CertificateType::Appearance,
+            'member_id' => $assignment->member_id,
+            'field_office_id' => $assignment->field_office_id,
+            'certifiable_type' => ExamAssignment::class,
+            'certifiable_id' => $assignment->id,
+            'status' => CertificateStatus::Released,
+            'certificate_no' => 'RO8-COA-2026-00001',
+            'pdf_path' => 'certificates/RO8-COA-2026-00001.pdf',
+        ]);
+
+        Storage::disk('local')->put($certificate->pdf_path, '%PDF-1.4');
+
+        $response = $this->actingAs(User::factory()->create(['role' => UserRole::SuperAdmin]))
+            ->get("/certificates/{$certificate->id}/view")
+            ->assertOk()
+            ->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+
+        $this->assertStringContainsString(
+            "frame-ancestors 'self'",
+            $response->headers->get('Content-Security-Policy'),
+        );
     }
 
     /**

@@ -23,4 +23,16 @@ class UpdateMemberRequest extends StoreMemberRequest
     {
         return Rule::unique('members', 'email')->ignore($this->route('member'));
     }
+
+    /**
+     * The record's own account settles it here, ahead of the email lookup the
+     * parent does: the address on the form is editable, and an employee who
+     * corrects theirs must not have the testing center become required again
+     * mid-edit just because the new address has no login yet.
+     */
+    protected function isEmployeeRecord(): bool
+    {
+        return $this->route('member')?->user?->role->isStaff() === true
+            || parent::isEmployeeRecord();
+    }
 }

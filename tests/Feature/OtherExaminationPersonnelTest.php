@@ -62,6 +62,29 @@ class OtherExaminationPersonnelTest extends TestCase
         $this->assertSame($center->id, $oep->testing_center_id);
     }
 
+    /** Matching Member: agency and position print beside the name, so they share its casing. */
+    public function test_agency_and_position_are_stored_uppercase(): void
+    {
+        $admin = User::factory()->create(['role' => UserRole::SuperAdmin]);
+        [$fo, $center] = $this->officeWithCenter();
+
+        $this->actingAs($admin)->post('/other-examination-personnel', [
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'sex' => 'male',
+            'personnel_type' => 'janitor',
+            'agency' => 'DepEd Division Office',
+            'position' => 'Utility Worker I',
+            'field_office_id' => $fo->id,
+            'testing_center_id' => $center->id,
+            'is_active' => true,
+        ])->assertRedirect();
+
+        $oep = OtherExaminationPersonnel::firstOrFail();
+        $this->assertSame('DEPED DIVISION OFFICE', $oep->agency);
+        $this->assertSame('UTILITY WORKER I', $oep->position);
+    }
+
     public function test_fo_admin_cannot_register_personnel_for_another_office(): void
     {
         [$fo, $center] = $this->officeWithCenter();

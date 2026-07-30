@@ -190,8 +190,13 @@ const applyFeedFilter = () => {
                 />
             </div>
 
-            <div v-if="analytics.registrationsByFieldOffice" class="mt-4">
-                <BarChart title="Registrations by Field Office (All-Time)" :items="analytics.registrationsByFieldOffice" />
+            <div v-if="analytics.registrationsByTestingCenter" class="mt-4">
+                <BarChart
+                    title="Registrations by Testing Center (All-Time)"
+                    :items="analytics.registrationsByTestingCenter"
+                    category-label="Testing Center"
+                    value-label="Members"
+                />
             </div>
 
             <!-- Recent registrations -->

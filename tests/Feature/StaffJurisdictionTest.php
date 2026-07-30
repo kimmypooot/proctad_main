@@ -66,7 +66,7 @@ class StaffJurisdictionTest extends TestCase
     }
 
     /** An accredited member who also holds a staff post at $office. */
-    private function staffMember(UserRole $role, ?FieldOffice $office): Member
+    private function staffMember(UserRole $role, ?FieldOffice $office, array $overrides = []): Member
     {
         $user = User::factory()->create(['role' => $role, 'field_office_id' => $office?->id, 'is_active' => true]);
 
@@ -74,6 +74,7 @@ class StaffJurisdictionTest extends TestCase
             'user_id' => $user->id,
             'field_office_id' => $office?->id ?? $this->leyte->id,
             'status' => 'active',
+            ...$overrides,
         ]);
     }
 
@@ -145,6 +146,31 @@ class StaffJurisdictionTest extends TestCase
     {
         $this->assign($this->staffMember(UserRole::EsdAdmin, null), ExamRole::RecMember, null)
             ->assertSessionHasNoErrors();
+    }
+
+    /**
+     * A blank testing center is the normal state for an employee — nothing
+     * about their posting decides one — so their office's centers are the
+     * authority. Reading only the registry column grouped them with "wrong
+     * center" and refused them every venue in the region, their own included.
+     */
+    public function test_an_employee_with_no_testing_center_serves_their_own_offices_centers(): void
+    {
+        $employee = $this->staffMember(UserRole::FoAdmin, $this->leyte, ['testing_center_id' => null]);
+
+        $this->assign($employee, ExamRole::Proctor, $this->leyteVenue)
+            ->assertSessionHasNoErrors();
+    }
+
+    /** And still no further than that. */
+    public function test_an_employee_with_no_testing_center_stays_out_of_another_office(): void
+    {
+        $employee = $this->staffMember(UserRole::FoAdmin, $this->leyte, ['testing_center_id' => null]);
+
+        $this->assign($employee, ExamRole::Proctor, $this->samarVenue)
+            ->assertSessionHasErrors();
+
+        $this->assertDatabaseCount('exam_assignments', 0);
     }
 
     /** Ordinary members are untouched by this rule. */

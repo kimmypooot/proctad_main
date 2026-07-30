@@ -19,17 +19,17 @@ import TextInput from '@/Components/TextInput.vue';
 const props = defineProps({
     pending: { type: Array, required: true },
     types: { type: Array, required: true },
-    fieldOffices: { type: Array, default: null },
+    testingCenters: { type: Array, default: null },
 });
 
 /* --- Filters (client-side; the queue is a bounded work list, not paginated) --- */
 const search = ref('');
 const typeFilter = ref('');
-const fieldOfficeFilter = ref('');
+const testingCenterFilter = ref('');
 
 const filtered = computed(() => props.pending.filter((c) => {
     if (typeFilter.value && c.type !== typeFilter.value) return false;
-    if (fieldOfficeFilter.value && String(c.field_office_id) !== fieldOfficeFilter.value) return false;
+    if (testingCenterFilter.value && String(c.testing_center_id) !== testingCenterFilter.value) return false;
     if (search.value) {
         const needle = search.value.toLowerCase();
         const haystack = `${c.member.name} ${c.member.proctad_id}`.toLowerCase();
@@ -38,11 +38,11 @@ const filtered = computed(() => props.pending.filter((c) => {
     return true;
 }));
 
-const hasActiveFilters = computed(() => !!(search.value || typeFilter.value || fieldOfficeFilter.value));
+const hasActiveFilters = computed(() => !!(search.value || typeFilter.value || testingCenterFilter.value));
 const resetFilters = () => {
     search.value = '';
     typeFilter.value = '';
-    fieldOfficeFilter.value = '';
+    testingCenterFilter.value = '';
 };
 
 /* --- Stats --- */
@@ -188,11 +188,11 @@ const confirmBulkDisapprove = () => {
                     :options="[{ value: '', label: 'All types' }, ...types]"
                 />
                 <SelectInput
-                    v-if="fieldOffices"
-                    v-model="fieldOfficeFilter"
-                    label="Field Office"
-                    placeholder="All field offices"
-                    :options="[{ value: '', label: 'All field offices' }, ...fieldOffices.map((fo) => ({ value: String(fo.id), label: fo.name }))]"
+                    v-if="testingCenters"
+                    v-model="testingCenterFilter"
+                    label="Testing Center"
+                    placeholder="All testing centers"
+                    :options="[{ value: '', label: 'All testing centers' }, ...testingCenters.map((tc) => ({ value: String(tc.id), label: tc.name }))]"
                 />
             </BaseCard>
             <div v-if="hasActiveFilters" class="mt-2 flex items-center justify-between text-sm text-slate-500">
@@ -229,7 +229,7 @@ const confirmBulkDisapprove = () => {
                             </th>
                             <th class="px-3 py-2">Member</th>
                             <th class="hidden px-3 py-2 sm:table-cell">Type</th>
-                            <th class="hidden px-3 py-2 lg:table-cell">Field Office</th>
+                            <th class="hidden px-3 py-2 lg:table-cell">Testing Center</th>
                             <th class="hidden px-3 py-2 xl:table-cell">Source</th>
                             <th class="px-3 py-2">Waiting</th>
                             <th class="px-3 py-2 text-center">Actions</th>
@@ -251,8 +251,8 @@ const confirmBulkDisapprove = () => {
                                 <p class="mt-0.5 text-xs text-slate-400 sm:hidden">{{ certificate.type_label }}</p>
                             </td>
                             <td class="hidden whitespace-nowrap px-3 py-2 text-slate-600 sm:table-cell">{{ certificate.type_label }}</td>
-                            <td class="hidden max-w-[10rem] truncate px-3 py-2 text-slate-600 lg:table-cell" :title="certificate.field_office ?? ''">
-                                {{ certificate.field_office ?? '—' }}
+                            <td class="hidden max-w-[10rem] truncate px-3 py-2 text-slate-600 lg:table-cell" :title="certificate.testing_center ?? ''">
+                                {{ certificate.testing_center ?? '—' }}
                             </td>
                             <td class="hidden max-w-[12rem] truncate px-3 py-2 text-slate-600 xl:table-cell" :title="certificate.source">
                                 {{ certificate.source }}

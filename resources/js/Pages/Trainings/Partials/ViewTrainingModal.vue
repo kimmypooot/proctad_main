@@ -146,16 +146,18 @@ watch(() => props.show, (open) => {
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <p class="text-xs font-medium uppercase tracking-wide text-brand-700">
-                            {{ training().type_label }} · {{ training().training_date }}
+                            {{ training().type_label }} · {{ training().training_date }} · {{ training().session_label }}
                         </p>
                         <h3 class="text-xl font-semibold text-slate-900">{{ training().title }}</h3>
                         <div class="mt-1 flex flex-wrap items-center gap-2">
                             <BaseBadge :variant="training().completed ? 'success' : 'warning'">
                                 {{ training().completed ? 'Completed' : 'Scheduled' }}
                             </BaseBadge>
-                            <span v-if="training().field_office" class="text-xs text-slate-500">
+                            <span class="text-xs text-slate-500">
                                 <AppIcon name="building-office" class="inline h-3.5 w-3.5" />
-                                {{ training().field_office.name }}
+                                <!-- Regional trainings carry no field office —
+                                     every office sees them, none owns them. -->
+                                {{ training().field_office?.name ?? 'Regional' }}
                             </span>
                             <span v-if="training().exam" class="text-xs text-slate-500">
                                 <AppIcon name="briefcase" class="inline h-3.5 w-3.5" />
@@ -164,10 +166,6 @@ watch(() => props.show, (open) => {
                             <span v-if="training().venue" class="text-xs text-slate-500">
                                 <AppIcon name="map-pin" class="inline h-3.5 w-3.5" />
                                 {{ training().venue }}
-                            </span>
-                            <span v-if="training().end_date" class="text-xs text-slate-500">
-                                <AppIcon name="calendar" class="inline h-3.5 w-3.5" />
-                                until {{ training().end_date }}
                             </span>
                         </div>
                     </div>
@@ -263,6 +261,7 @@ watch(() => props.show, (open) => {
                 <ScannerLinksPanel
                     :sessions="raw?.scannerSessions ?? []"
                     :training-id="training().id"
+                    :default-expiry="raw?.scannerLinkExpiry"
                     :can="can().manageScannerLinks"
                     @changed="load"
                 />

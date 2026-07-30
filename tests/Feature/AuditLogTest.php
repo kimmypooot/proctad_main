@@ -31,8 +31,10 @@ class AuditLogTest extends TestCase
 
         $this->assertSame($admin->id, $log->user_id);
         $this->assertSame($office->id, $log->field_office_id);
-        $this->assertSame('Old Agency', $log->changes['old']['agency']);
-        $this->assertSame('New Agency', $log->changes['new']['agency']);
+        // Uppercase on both sides: agency is normalized on write, and the trail
+        // records the values as stored rather than as typed.
+        $this->assertSame('OLD AGENCY', $log->changes['old']['agency']);
+        $this->assertSame('NEW AGENCY', $log->changes['new']['agency']);
 
         // Creation was audited too.
         $this->assertTrue(AuditLog::where('auditable_type', Member::class)

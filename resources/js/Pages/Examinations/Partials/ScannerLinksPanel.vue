@@ -20,6 +20,9 @@ const props = defineProps({
     examinationId: { type: Number, default: null },
     trainingId: { type: Number, default: null },
     venues: { type: Array, default: () => [] },
+    // Trainings pass the end of their sitting here, which is also the server's
+    // cap for the link — see ScannerSessionController::expiryCap().
+    defaultExpiry: { type: String, default: null },
     can: { type: Boolean, default: false },
 });
 
@@ -33,7 +36,8 @@ const { push: pushToast } = useToasts();
 /* --- Issue --- */
 const showIssue = ref(false);
 
-// Defaults to the end of today, which is what an examination-day link wants.
+// The end of today, which is what an examination-day link wants. A training
+// overrides this with the end of its half-day sitting.
 const endOfToday = () => {
     const date = new Date();
     date.setHours(23, 59, 0, 0);
@@ -41,18 +45,20 @@ const endOfToday = () => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+const defaultExpiresAt = () => props.defaultExpiry ?? endOfToday();
+
 const form = useForm({
     examination_id: props.examinationId,
     training_id: props.trainingId,
     examination_school_id: '',
     label: '',
-    expires_at: endOfToday(),
+    expires_at: defaultExpiresAt(),
 });
 
 const openIssue = () => {
     form.reset();
     form.clearErrors();
-    form.expires_at = endOfToday();
+    form.expires_at = defaultExpiresAt();
     showIssue.value = true;
 };
 
@@ -166,7 +172,12 @@ const copy = async (url) => {
                     label="Expires"
                     :error="form.errors.expires_at"
                 />
-                <p class="text-xs text-slate-400">
+                <p v-if="trainingId" class="text-xs text-slate-400">
+                    A training link cannot outlive its session — attendance is recorded on arrival, so a link still
+                    open afterwards would write the next batch into this roster. Run an AM and a PM batch as separate
+                    trainings, each with its own link.
+                </p>
+                <p v-else class="text-xs text-slate-400">
                     Links last a maximum of one week. A link scans everyone at its venue — assigned members, other
                     examination personnel, and members covering that school for monitoring.
                 </p>

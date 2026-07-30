@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\TrainingSession;
 use App\Enums\TrainingType;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -16,6 +17,7 @@ class TrainingFactory extends Factory
             'title' => fake()->monthName().' '.fake()->year().' '.fake()->randomElement(['TEA Batch 1', 'Pre-Exam Briefing']),
             'type' => fake()->randomElement(TrainingType::cases()),
             'training_date' => fake()->dateTimeBetween('-6 months', '+3 months')->format('Y-m-d'),
+            'session' => fake()->randomElement(TrainingSession::cases()),
             'venue' => fake()->randomElement(['CSC RO VIII Training Hall', 'Leyte Field Office', null]),
         ];
     }

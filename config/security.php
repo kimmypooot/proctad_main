@@ -87,6 +87,8 @@ return [
         'font' => ['https://fonts.bunny.net'],
         // Google profile pictures, stored on users.google_avatar by Socialite.
         'img' => ['https://lh3.googleusercontent.com'],
+        // The office map embedded on /contact.
+        'frame' => ['https://www.google.com'],
     ],
 
 ];
