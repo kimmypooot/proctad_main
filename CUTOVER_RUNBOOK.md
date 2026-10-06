@@ -407,6 +407,10 @@ Before enabling:
    `esd_admin`, `director_iv`, `director_iii`, `field_director`,
    `fo_admin`), and grant them to staff.
 
+5. In PROCTAD `.env`: `IMIS_ASSET_ORIGIN=<the origin that serves IMIS photos,
+   e.g. https://imis.cscro8.com>`, so the header can show staff photos from
+   IMIS (the Content-Security-Policy `img-src` allows it).
+
 Once `IMIS_SSO_URL` is set, staff other than Super Administrator can no
 longer use a PROCTAD password or Google sign-in. Keep one Super
 Administrator password as break-glass.

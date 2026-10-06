@@ -85,8 +85,9 @@ return [
         // Self-hosting the fonts would let both entries below be removed.
         'style' => ['https://fonts.bunny.net'],
         'font' => ['https://fonts.bunny.net'],
-        // Google profile pictures, stored on users.google_avatar by Socialite.
-        'img' => ['https://lh3.googleusercontent.com'],
+        // Google profile pictures, stored on users.google_avatar by Socialite,
+        // and the IMIS photos of staff signed in from IMIS (the same column).
+        'img' => array_values(array_filter(['https://lh3.googleusercontent.com', env('IMIS_ASSET_ORIGIN')])),
         // The office map embedded on /contact.
         'frame' => ['https://www.google.com'],
     ],

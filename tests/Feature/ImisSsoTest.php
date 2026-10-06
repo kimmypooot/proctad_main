@@ -65,6 +65,26 @@ class ImisSsoTest extends TestCase
         $this->assertTrue(AuditLog::where('user_id', $user->id)->where('action', 'login')->exists());
     }
 
+    public function test_the_imis_photo_is_shown_as_the_avatar_and_kept_when_imis_has_none(): void
+    {
+        $this->regionalOffice();
+        $this->imis(['photo_url' => 'https://imis.test/storage/profile-photos/a.jpg']);
+        $this->post('/sso', ['sso_token' => 'abc']);
+
+        $user = User::where('imis_user_id', 7)->firstOrFail();
+        $this->assertSame('https://imis.test/storage/profile-photos/a.jpg', $user->google_avatar);
+
+        $this->post('/logout');
+        $this->imis(['photo_url' => null]);
+        $this->post('/sso', ['sso_token' => 'def']);
+        $this->assertSame('https://imis.test/storage/profile-photos/a.jpg', $user->fresh()->google_avatar);
+
+        $this->post('/logout');
+        $this->imis(['photo_url' => 'javascript:alert(1)']);
+        $this->post('/sso', ['sso_token' => 'ghi']);
+        $this->assertSame('https://imis.test/storage/profile-photos/a.jpg', $user->fresh()->google_avatar);
+    }
+
     public function test_a_field_office_role_gets_the_field_office_mapped_from_the_imis_unit(): void
     {
         $this->regionalOffice();
@@ -214,7 +234,7 @@ class ImisSsoTest extends TestCase
 
     public function test_staff_password_login_is_unchanged_while_imis_sign_in_is_off(): void
     {
-        config(['services.imis.sso_url' => null]);
+        config(['services.imis.sso_url' => '']);
         $staff = User::factory()->create(['role' => UserRole::EsdAdmin]);
 
         $this->post('/login', ['login' => $staff->email, 'password' => 'password'])->assertRedirect(route('dashboard'));

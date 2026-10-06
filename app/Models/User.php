@@ -58,7 +58,7 @@ class User extends Authenticatable
      */
     public function isImisManaged(): bool
     {
-        return config('services.imis.sso_url') !== null
+        return filled(config('services.imis.sso_url'))
             && $this->role !== UserRole::SuperAdmin
             && ($this->role->isStaff() || $this->imis_user_id !== null);
     }
