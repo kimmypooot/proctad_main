@@ -384,3 +384,29 @@ process and worth walking once.
 the venue's assigned roster and are deliberately **not** filtered on confirmed
 attendance, for exactly this reason — filtering them emptied the roster at the
 moment the form was used. Only the respondent's own eligibility requires it.
+
+
+## 10. Staff sign-in through IMIS
+
+Staff accounts are managed in IMIS (the hub). PROCTAD keeps a stub row per
+staff member (it records who did what) and rewrites its name, role and field
+office from IMIS on every sign-in. Members and external users are unchanged
+and keep Google sign-in.
+
+Before enabling:
+
+1. `php artisan migrate` (adds `users.imis_user_id` and
+   `field_offices.imis_code`, pre-filled for the eight field offices; check
+   the codes against IMIS organizational units).
+2. In PROCTAD `.env`: `IMIS_SSO_URL=<IMIS>/api/v1/sso/validate`
+   (and `IMIS_SSO_AUDIENCE` if the app is served on a different host than
+   `APP_URL`).
+3. In IMIS `.env`: `SSO_HUB_HOSTS=<PROCTAD host[:port]>`.
+4. In IMIS admin: add PROCTAD as a system (URL `<PROCTAD>/sso`) with six
+   roles whose **Code** is the PROCTAD role value (`super_admin`,
+   `esd_admin`, `director_iv`, `director_iii`, `field_director`,
+   `fo_admin`), and grant them to staff.
+
+Once `IMIS_SSO_URL` is set, staff other than Super Administrator can no
+longer use a PROCTAD password or Google sign-in. Keep one Super
+Administrator password as break-glass.
