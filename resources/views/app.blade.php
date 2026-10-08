@@ -77,6 +77,7 @@
     <script type="application/ld+json" nonce="{{ Illuminate\Support\Facades\Vite::cspNonce() }}">{{ json_encode($orgSchema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</script>
 </head>
 <body class="font-sans antialiased text-slate-800 bg-white">
+    @include('partials.imis-boot', ['system' => 'ProCTAD', 'office' => 'Regional Office VIII', 'opening' => ($page['component'] ?? null) === 'Auth/ImisSso'])
     @inertia
 </body>
 </html>

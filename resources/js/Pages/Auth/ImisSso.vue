@@ -20,8 +20,5 @@ onMounted(() => {
 <template>
     <Head title="Signing you in" />
 
-    <AuthSplashOverlay :visible="true">
-        <p class="text-xl font-semibold text-brand-600">Opening ProCTAD</p>
-        <p class="text-sm text-slate-500">Signing you in from IMIS…</p>
-    </AuthSplashOverlay>
+    <AuthSplashOverlay :visible="true" instant title="Opening ProCTAD" subtitle="Signing you in from IMIS" />
 </template>

@@ -898,10 +898,7 @@ const logout = () => {
             </BaseModal>
 
             <!-- Sign-out preload overlay -->
-            <AuthSplashOverlay :visible="showSignOutSplash">
-                <p class="text-xl font-semibold text-brand-600">Signing you out</p>
-                <p class="text-sm text-slate-500">See you next time!</p>
-            </AuthSplashOverlay>
+            <AuthSplashOverlay :visible="showSignOutSplash" title="Signing Out" subtitle="See you next time!" note="Redirecting to the sign-in page…" />
 
             <!-- Unanswered deployment(s) — see the note on showAssignmentPrompt. -->
             <BaseModal

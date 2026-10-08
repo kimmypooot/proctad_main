@@ -115,8 +115,5 @@ const submit = () => {
         </p>
     </AuthLayout>
 
-    <AuthSplashOverlay :visible="showPreload">
-        <p class="text-xl font-semibold text-brand-600">Signing you in</p>
-        <p class="text-sm text-slate-500">Please wait a moment…</p>
-    </AuthSplashOverlay>
+    <AuthSplashOverlay :visible="showPreload" title="Signing you in" subtitle="Please wait a moment…" />
 </template>
