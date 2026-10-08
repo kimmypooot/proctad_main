@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLogo from '@/Components/AppLogo.vue';
+import AuthSplashOverlay from '@/Components/AuthSplashOverlay.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import DropdownMenu from '@/Components/DropdownMenu.vue';
@@ -514,8 +515,10 @@ const switchWorkspace = (target) => {
 
 const confirmingLogout = ref(false);
 const loggingOut = ref(false);
+const showSignOutSplash = ref(false);
 const logout = () => {
     loggingOut.value = true;
+    showSignOutSplash.value = true;
     router.post('/logout', {}, {
         onSuccess: () => {
             // Exam-day phones are shared, and the service worker on an older
@@ -523,6 +526,7 @@ const logout = () => {
             // last scanned. Signing out is the point at which that has to go.
             navigator.serviceWorker?.controller?.postMessage('purge-caches');
         },
+        onError: () => { showSignOutSplash.value = false; },
         onFinish: () => {
             loggingOut.value = false;
             confirmingLogout.value = false;
@@ -892,6 +896,12 @@ const logout = () => {
                     </BaseButton>
                 </template>
             </BaseModal>
+
+            <!-- Sign-out preload overlay -->
+            <AuthSplashOverlay :visible="showSignOutSplash">
+                <p class="text-xl font-semibold text-brand-600">Signing you out</p>
+                <p class="text-sm text-slate-500">See you next time!</p>
+            </AuthSplashOverlay>
 
             <!-- Unanswered deployment(s) — see the note on showAssignmentPrompt. -->
             <BaseModal
