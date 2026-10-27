@@ -37,6 +37,8 @@ return [
     // The IMIS portal that signs staff in (ImisSsoController). Unset = off.
     'imis' => [
         'sso_url' => env('IMIS_SSO_URL'),
+        // Where "Back to IMIS" goes; defaults to the root of the SSO host.
+        'portal_url' => env('IMIS_PORTAL_URL'),
         // This app's own host[:port], as registered in IMIS (SSO_HUB_HOSTS).
         'audience' => env('IMIS_SSO_AUDIENCE', parse_url((string) env('APP_URL'), PHP_URL_HOST).(parse_url((string) env('APP_URL'), PHP_URL_PORT) ? ':'.parse_url((string) env('APP_URL'), PHP_URL_PORT) : '')),
     ],
