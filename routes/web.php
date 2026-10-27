@@ -4,6 +4,7 @@ use App\Http\Controllers\AssignmentConfirmationController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\Auth\ImisSsoController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -172,6 +173,10 @@ Route::middleware('guest')->group(function () {
         ->middleware('throttle:5,1')
         ->name('password.store');
 });
+
+// Sign-in from the IMIS portal (one-time token; see ImisSsoController).
+Route::get('/sso', [ImisSsoController::class, 'show'])->middleware('throttle:30,1')->name('sso');
+Route::post('/sso', [ImisSsoController::class, 'store'])->middleware('throttle:30,1')->name('sso.store');
 
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth')

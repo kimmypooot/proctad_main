@@ -1,9 +1,11 @@
 <script setup>
+import { ref } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
 import TextInput from '@/Components/TextInput.vue';
 import CheckboxInput from '@/Components/CheckboxInput.vue';
 import BaseButton from '@/Components/BaseButton.vue';
+import AuthSplashOverlay from '@/Components/AuthSplashOverlay.vue';
 
 const form = useForm({
     login: '',
@@ -11,8 +13,15 @@ const form = useForm({
     remember: false,
 });
 
+// Shown for the moment between submit and the server's redirect — a
+// successful login navigates away and unmounts this page, so the overlay
+// only ever needs to be hidden again on error.
+const showPreload = ref(false);
+
 const submit = () => {
+    showPreload.value = true;
     form.post('/login', {
+        onError: () => { showPreload.value = false; },
         onFinish: () => form.reset('password'),
     });
 };
@@ -105,4 +114,6 @@ const submit = () => {
             </Link>
         </p>
     </AuthLayout>
+
+    <AuthSplashOverlay :visible="showPreload" title="Signing you in" subtitle="Please wait a moment…" />
 </template>

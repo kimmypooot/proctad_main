@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
                     'avatar_url' => $user->google_avatar
                         ?? ($user->member?->photo_path ? route('members.photo', $user->member) : null),
                 ] : null,
+                'imis_url' => $user?->imis_user_id !== null ? $this->imisPortalUrl() : null,
             ],
             // Role display names, resolved server-side so a rename made at
             // Administration → Roles reaches the sidebar and any other client
@@ -98,6 +99,24 @@ class HandleInertiaRequests extends Middleware
                     ->map(fn (DatabaseNotification $notification) => NotificationPresenter::present($notification)),
             ] : null,
         ];
+    }
+
+    /** The IMIS portal, or null while IMIS sign-in is not configured. */
+    private function imisPortalUrl(): ?string
+    {
+        if (! config('services.imis.sso_url')) {
+            return null;
+        }
+
+        if ($portal = config('services.imis.portal_url')) {
+            return $portal;
+        }
+
+        $parts = parse_url((string) config('services.imis.sso_url'));
+
+        return isset($parts['scheme'], $parts['host'])
+            ? $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '')
+            : null;
     }
 
     /**

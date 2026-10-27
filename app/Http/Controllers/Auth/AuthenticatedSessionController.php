@@ -99,6 +99,17 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
+        // Staff are managed in IMIS and sign in through it. A Super Administrator
+        // keeps the password as a break-glass way in if IMIS is unreachable.
+        if ($user->isImisManaged()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw ValidationException::withMessages([
+                'login' => __('Staff sign in through the IMIS portal.'),
+            ]);
+        }
         RateLimiter::clear($throttleKey);
         $user->forceFill([
             'failed_login_attempts' => 0,

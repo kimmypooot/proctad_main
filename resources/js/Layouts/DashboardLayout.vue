@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLogo from '@/Components/AppLogo.vue';
+import AuthSplashOverlay from '@/Components/AuthSplashOverlay.vue';
 import BaseButton from '@/Components/BaseButton.vue';
 import BaseModal from '@/Components/BaseModal.vue';
 import DropdownMenu from '@/Components/DropdownMenu.vue';
@@ -514,8 +515,10 @@ const switchWorkspace = (target) => {
 
 const confirmingLogout = ref(false);
 const loggingOut = ref(false);
+const showSignOutSplash = ref(false);
 const logout = () => {
     loggingOut.value = true;
+    showSignOutSplash.value = true;
     router.post('/logout', {}, {
         onSuccess: () => {
             // Exam-day phones are shared, and the service worker on an older
@@ -523,6 +526,7 @@ const logout = () => {
             // last scanned. Signing out is the point at which that has to go.
             navigator.serviceWorker?.controller?.postMessage('purge-caches');
         },
+        onError: () => { showSignOutSplash.value = false; },
         onFinish: () => {
             loggingOut.value = false;
             confirmingLogout.value = false;
@@ -860,6 +864,20 @@ const logout = () => {
                                 <div class="my-1 h-px bg-slate-100" />
                             </template>
 
+                            <!-- Staff and CSC employees arrive from IMIS; give them the way back. -->
+                            <template v-if="page.props.auth?.imis_url">
+                                <a
+                                    :href="page.props.auth.imis_url"
+                                    role="menuitem"
+                                    class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                                    @click="close()"
+                                >
+                                    <AppIcon name="arrow-left" class="h-4 w-4 shrink-0 text-slate-400" />
+                                    Back to IMIS
+                                </a>
+                                <div class="my-1 h-px bg-slate-100" />
+                            </template>
+
                             <button
                                 type="button"
                                 role="menuitem"
@@ -892,6 +910,9 @@ const logout = () => {
                     </BaseButton>
                 </template>
             </BaseModal>
+
+            <!-- Sign-out preload overlay -->
+            <AuthSplashOverlay :visible="showSignOutSplash" title="Signing Out" subtitle="See you next time!" note="Redirecting to the sign-in page…" />
 
             <!-- Unanswered deployment(s) — see the note on showAssignmentPrompt. -->
             <BaseModal

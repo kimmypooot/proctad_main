@@ -50,6 +50,18 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Accounts managed in IMIS, so they have no PROCTAD password or Google
+     * sign-in: every staff account, and any member linked to an IMIS user (a CSC
+     * employee). Off while IMIS sign-in is not configured, and never for a Super
+     * Administrator (the break-glass account). External members are unaffected.
+     */
+    public function isImisManaged(): bool
+    {
+        return filled(config('services.imis.sso_url'))
+            && $this->role !== UserRole::SuperAdmin
+            && ($this->role->isStaff() || $this->imis_user_id !== null);
+    }
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);

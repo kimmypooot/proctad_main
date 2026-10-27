@@ -1,5 +1,6 @@
 import { createApp, h } from 'vue';
 import { createInertiaApp } from '@inertiajs/vue3';
+import { dismissBootPreloader } from './imisBoot';
 
 const appName = 'ProCTAD — CSC Regional Office VIII';
 
@@ -13,6 +14,9 @@ createInertiaApp({
         createApp({ render: () => h(App, props) })
             .use(plugin)
             .mount(el);
+
+        // The IMIS loading screen from app.blade.php.
+        dismissBootPreloader();
     },
     progress: {
         color: '#EC1C2D',

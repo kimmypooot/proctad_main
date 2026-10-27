@@ -84,6 +84,10 @@ class GoogleAuthController extends Controller
             return redirect()->route('register');
         }
 
+        if ($user->isImisManaged()) {
+            return redirect()->route('member.login')
+                ->with('error', 'Staff sign in through the IMIS portal.');
+        }
         if ($user->locked_until?->isFuture()) {
             return redirect()->route('member.login')
                 ->with('error', 'This account is temporarily locked. Please try again later.');

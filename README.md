@@ -50,6 +50,15 @@ mail is sent, with nothing reported in the UI:
 php artisan queue:work
 ```
 
+## PWA / offline scanning
+
+The app is installable (`public/manifest.webmanifest`) and ships a service
+worker (`public/sw.js`) that caches the app shell. Exam-day attendance
+scanning additionally queues offline via `useScanQueue`
+(`resources/js/Composables/useScanQueue.js`), so scans taken with no
+connectivity are held locally and flushed once the network returns; the UI
+shows an offline banner while queued scans are pending.
+
 ## Seeding
 
 ```bash
