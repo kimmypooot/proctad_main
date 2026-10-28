@@ -5,6 +5,7 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\ImisSsoController;
+use App\Http\Controllers\Auth\ImisSsoLogoutController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -26,10 +27,9 @@ use App\Http\Controllers\ExamRoomController;
 use App\Http\Controllers\ExamTypeController;
 use App\Http\Controllers\ExamVenueController;
 use App\Http\Controllers\FieldOfficeController;
-use App\Http\Controllers\LocationController;
-use App\Http\Controllers\TestingCenterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LetterheadController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberRequirementController;
 use App\Http\Controllers\MyProctadController;
@@ -37,15 +37,16 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OepAssignmentController;
 use App\Http\Controllers\OtherExaminationPersonnelController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\ScannerController;
 use App\Http\Controllers\ScannerSessionController;
 use App\Http\Controllers\SchoolController;
 use App\Http\Controllers\ServiceHistoryController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SignatoryController;
 use App\Http\Controllers\StaffingController;
+use App\Http\Controllers\TestingCenterController;
 use App\Http\Controllers\TrainingAssignmentController;
 use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\UserController;
@@ -177,6 +178,9 @@ Route::middleware('guest')->group(function () {
 // Sign-in from the IMIS portal (one-time token; see ImisSsoController).
 Route::get('/sso', [ImisSsoController::class, 'show'])->middleware('throttle:30,1')->name('sso');
 Route::post('/sso', [ImisSsoController::class, 'store'])->middleware('throttle:30,1')->name('sso.store');
+
+// IMIS signs the person out of PROCTAD when they sign out of IMIS.
+Route::post('/sso/logout', ImisSsoLogoutController::class)->middleware('throttle:60,1')->name('sso.logout');
 
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth')
@@ -473,7 +477,6 @@ Route::middleware(['auth', 'password.changed'])->group(function () {
         Route::post('/field-offices', [FieldOfficeController::class, 'store'])->name('field-offices.store');
         Route::put('/field-offices/{fieldOffice}', [FieldOfficeController::class, 'update'])->name('field-offices.update');
         Route::delete('/field-offices/{fieldOffice}', [FieldOfficeController::class, 'destroy'])->name('field-offices.destroy');
-
 
         Route::get('/email-templates', [EmailTemplateController::class, 'index'])->name('email-templates.index');
         Route::put('/email-templates/{emailTemplate}', [EmailTemplateController::class, 'update'])->name('email-templates.update');

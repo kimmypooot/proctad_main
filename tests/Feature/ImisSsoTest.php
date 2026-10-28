@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
 use App\Models\FieldOffice;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Session;
 use Tests\TestCase;
 
 class ImisSsoTest extends TestCase
@@ -48,6 +51,7 @@ class ImisSsoTest extends TestCase
             ->assertInertia(fn ($page) => $page->component('Auth/ImisSso')->where('token', 'abc'));
         $this->assertGuest();
     }
+
     public function test_a_staff_stub_is_created_on_first_sign_in_with_the_imis_role_and_office(): void
     {
         $regional = $this->regionalOffice();
@@ -206,6 +210,7 @@ class ImisSsoTest extends TestCase
         $this->post('/login', ['login' => $external->email, 'password' => 'password'])->assertRedirect();
         $this->assertAuthenticatedAs($external);
     }
+
     public function test_an_inactive_stub_is_refused(): void
     {
         $this->regionalOffice();
@@ -238,5 +243,51 @@ class ImisSsoTest extends TestCase
         $staff = User::factory()->create(['role' => UserRole::EsdAdmin]);
 
         $this->post('/login', ['login' => $staff->email, 'password' => 'password'])->assertRedirect(route('dashboard'));
+    }
+
+    public function test_imis_signing_out_ends_the_proctad_session_it_started(): void
+    {
+        $this->regionalOffice();
+        $sid = str_repeat('s', 64);
+        $this->imis(['sid' => $sid]);
+        $this->post('/sso', ['sso_token' => 'abc'])->assertRedirect(route('dashboard'));
+
+        $row = DB::table('imis_sessions')->sole();
+        $this->assertSame(hash('sha256', $sid), $row->sid_hash);
+        Session::getHandler()->write($row->session_id, 'payload');
+
+        $this->postJson('/sso/logout', ['sid' => $sid])->assertOk()->assertJson(['success' => true]);
+
+        $this->assertSame(0, DB::table('imis_sessions')->count());
+        $this->assertSame('', Session::getHandler()->read($row->session_id));
+    }
+
+    public function test_an_unknown_sid_signs_nobody_out_and_is_not_an_error(): void
+    {
+        $this->regionalOffice();
+        $this->imis(['sid' => str_repeat('s', 64)]);
+        $this->post('/sso', ['sso_token' => 'abc']);
+
+        $this->postJson('/sso/logout', ['sid' => str_repeat('x', 64)])->assertOk();
+        $this->postJson('/sso/logout', ['sid' => 'short'])->assertOk();
+        $this->postJson('/sso/logout')->assertOk();
+
+        $this->assertSame(1, DB::table('imis_sessions')->count());
+    }
+
+    public function test_the_logout_call_works_during_maintenance(): void
+    {
+        Setting::set('site_maintenance_mode', true, 'boolean');
+
+        $this->postJson('/sso/logout', ['sid' => str_repeat('x', 64)])->assertOk();
+    }
+
+    public function test_no_sid_from_imis_records_nothing(): void
+    {
+        $this->regionalOffice();
+        $this->imis();
+        $this->post('/sso', ['sso_token' => 'abc'])->assertRedirect(route('dashboard'));
+
+        $this->assertSame(0, DB::table('imis_sessions')->count());
     }
 }
