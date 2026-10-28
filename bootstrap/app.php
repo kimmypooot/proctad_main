@@ -49,6 +49,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // no such affordance and are set in AppServiceProvider::boot() instead.
         $middleware->trustHosts(at: fn () => config('security.trusted_hosts', []));
 
+        // Called by IMIS server-to-server; the `sid` is its credential.
+        $middleware->validateCsrfTokens(except: ['sso/logout']);
+
         $middleware->redirectGuestsTo('/login');
         $middleware->redirectUsersTo('/dashboard');
     })

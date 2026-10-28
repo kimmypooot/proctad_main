@@ -35,6 +35,10 @@ class CheckMaintenanceMode
         // through Google directly can still authenticate and will then meet the
         // notice — with a sign-out control on it.
         'login', 'login.store', 'logout',
+
+        // IMIS signing someone out of PROCTAD: a server-to-server call that
+        // has to work however the site is set.
+        'sso.logout',
         'google.redirect', 'google.callback', 'google.cancel',
         'password.request', 'password.email', 'password.reset', 'password.store',
 
