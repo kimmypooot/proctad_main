@@ -20,5 +20,6 @@ onMounted(() => {
 <template>
     <Head title="Signing you in" />
 
-    <AuthSplashOverlay :visible="true" instant title="Opening ProCTAD" subtitle="Signing you in from IMIS" />
+    <!-- The IMIS logo, as on IMIS's own "Opening <system>" card it continues. -->
+    <AuthSplashOverlay :visible="true" instant logo="/images/imis/imis-logo.png" title="Opening ProCTAD" subtitle="Signing you in from IMIS" />
 </template>
