@@ -12,9 +12,10 @@ defineProps({
     instant: { type: Boolean, default: false },
     // Left unset, the splash's own logo (the CSC seal).
     logo: { type: String, default: undefined },
+    lead: { type: String, default: '' },
 });
 </script>
 
 <template>
-    <ImisSplash :visible="visible" :title="title" :subtitle="subtitle" :note="note" :instant="instant" :logo="logo" />
+    <ImisSplash :visible="visible" :title="title" :subtitle="subtitle" :note="note" :instant="instant" :logo="logo" :lead="lead" />
 </template>
