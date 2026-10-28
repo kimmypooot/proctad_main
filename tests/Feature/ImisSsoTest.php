@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
 use Tests\TestCase;
 
@@ -289,5 +290,16 @@ class ImisSsoTest extends TestCase
         $this->post('/sso', ['sso_token' => 'abc'])->assertRedirect(route('dashboard'));
 
         $this->assertSame(0, DB::table('imis_sessions')->count());
+    }
+
+    public function test_a_failure_recording_the_imis_session_does_not_block_sign_in(): void
+    {
+        $this->regionalOffice();
+        Schema::drop('imis_sessions');
+        $this->imis(['sid' => str_repeat('s', 64)]);
+
+        $this->post('/sso', ['sso_token' => 'abc'])->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticated();
     }
 }
